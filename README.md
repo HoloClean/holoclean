@@ -145,8 +145,8 @@ pip install holoclean
 
 You can manually clone this repository
 ```sh
-git clone https://github.com/HoloClean/holoclean-1.gi://github.com/HoloClean/holoclean-1.git
-cd holoclean-1
+git clone https://github.com/HoloClean/holoclean.gi://github.com/HoloClean/holoclean.git
+cd holoclean
 ```
 
 It is recommended you still create a conda or Virtualenv environment before
@@ -220,7 +220,7 @@ instructions above for conda).
 4. Verify that you've installed it
     ```sh
     > conda list | grep holoclean
-    holoclean                 0.0.0                     <pip>
+    holoclean                 0.2.0                     <pip>
     ```
 
 5. You should be able to import `holoclean` from anywhere now!
