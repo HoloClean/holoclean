@@ -38,9 +38,9 @@ $ psql --user <username>    # you can omit --user <username> to use current user
 We then create a database `holo` and user `holo` (default settings for HoloClean)
 ```
 CREATE DATABASE holo;
-CREATE USER holo;
-ALTER USER holo WITH PASSWORD 'clean';
-GRANT ALL PRIVILEGES ON DATABASE holo TO holo;
+CREATE USER holocleanuser;
+ALTER USER holo WITH PASSWORD 'abcd1234';
+GRANT ALL PRIVILEGES ON DATABASE holo TO holocleanuser;
 \c holo
 ALTER SCHEMA public OWNER TO holo;
 ```
@@ -51,7 +51,7 @@ In general, to connect to the `holo` database from the Postgres psql console
 ```
 
 HoloClean currently populates the database `holo` with auxiliary and meta tables.
-To clear the database simply connect as a root user or as `holo` and run
+To clear the database simply connect as a root user or as `holocleanuser` and run
 ```
 DROP DATABASE holo;
 CREATE DATABASE holo;
