@@ -1,6 +1,6 @@
 # HoloClean: A Machine Learning System for Data Enrichment
 
-[HoloClean](www.holoclean.io) is build ontop of PyTorch and Postgres.
+[HoloClean](www.holoclean.io) is built on top of PyTorch and Postgres.
 
 HoloClean is a statistical inference engine to impute, clean, and enrich data.
 As a weakly supervised machine learning system, HoloClean leverages available
@@ -19,8 +19,8 @@ predictions, and insights form noisy, incomplete, and erroneous data.
 #### Ubuntu
 
 Install Postgres by running
-```sh
-apt-get install postgresql postgresql-contrib
+```bash
+$ apt-get install postgresql postgresql-contrib
 ```
 
 #### MacOS
@@ -31,48 +31,52 @@ Installation instructions can be found at
 ### 2. Setup Postgres for HoloClean
 
 To start the Postgres console from your terminal
-```sh
-psql --user <username>      # or you can omit --user <username> to use current user
+```bash
+$ psql --user <username>    # you can omit --user <username> to use current user
 ```
 
-We then create a database `holo` and user `holocleanuser` (default settings for HoloClean)
+We then create a database `holo` and user `holo` (default settings for HoloClean)
 ```
 CREATE DATABASE holo;
-CREATE USER holocleanuser;
-ALTER USER holocleanuser WITH PASSWORD 'abcd1234';
-GRANT ALL PRIVILEGES ON DATABASE holo TO holocleanuser;
+CREATE USER holo;
+ALTER USER holo WITH PASSWORD 'clean';
+GRANT ALL PRIVILEGES ON DATABASE holo TO holo;
 \c holo
-ALTER SCHEMA public OWNER TO holocleanuser;
+ALTER SCHEMA public OWNER TO holo;
 ```
 
-In general, to connect to the `holo` database from the Postgres console
+In general, to connect to the `holo` database from the Postgres psql console
 ```
 \c holo
 ```
 
 HoloClean currently populates the database `holo` with auxiliary and meta tables.
-To clear the database simply connect as a root user or as `holocleanuser` and run
+To clear the database simply connect as a root user or as `holo` and run
 ```
 DROP DATABASE holo;
 CREATE DATABASE holo;
 ```
 
-### 3. Install HoloClean
+### 3. Set up HoloClean
 
-#### Option 1: pip and conda (recommended)
+#### Virtual Environment
+
+##### Option 1: Set up a conda Virtual Environment
+
+Install Conda using one of the following methods
 
 ##### Ubuntu
 
 For **32-bit machines** run
-```sh
-wget https://repo.continuum.io/archive/Anaconda-2.3.0-Linux-x86.sh
-sh Anaconda-2.3.0-Linux-x86.sh
+```bash
+$ wget https://repo.continuum.io/archive/Anaconda-2.3.0-Linux-x86.sh
+$ sh Anaconda-2.3.0-Linux-x86.sh
 ```
 
 For **64-bit machines** run
-```
-wget https://repo.continuum.io/archive/Anaconda-2.3.0-Linux-x86_64.sh
-sh Anaconda-2.3.0-Linux-x86_64.sh
+```bash
+$ wget https://repo.continuum.io/archive/Anaconda-2.3.0-Linux-x86_64.sh
+$ sh Anaconda-2.3.0-Linux-x86_64.sh
 ```
 
 ##### MacOS
@@ -83,26 +87,20 @@ Anaconda (NOT miniconda).
 ##### Create a conda environment
 
 Create a **Python 3** conda environment by running
-```sh
-conda create -n holo_env python=3
+
+```bash
+$ conda create -n holo_env python=3
 ```
 
 Upon starting/restarting your terminal session, you will need to activate your
 conda environment by running
-```sh
-source activate holo_env
+```bash
+$ source activate holo_env
 ```
 
 **NOTE: ensure your environment is activated throughout the installation process.**
 
-##### Install the holoclean package
-
-Install `holoclean` via `pip`
-```
-pip install holoclean
-```
-
-#### Option 2: pip and Virtualenv
+##### Option 2: Set up a virtual environment using pip and Virtualenv
 
 If you are familiar with Virtualenv, create a new **Python 3** environment
 with your preferred Virtualenv wrapper, for example:
@@ -114,143 +112,43 @@ with your preferred Virtualenv wrapper, for example:
 
 Either follow instructions [here](https://virtualenv.pypa.io/en/stable/installation/) or install via
 `pip`
-```sh
-pip install virtualenv
+```bash
+$ pip install virtualenv
 ```
 
 ##### Create a Virtualenv environment
 
 Create a new directory for a **Python 3** virtualenv environment
-```sh
-mkdir -p holo_env
-virtualenv --python=python holo_env
+```bash
+$ mkdir -p holo_env
+$ virtualenv --python=python holo_env
 ```
 where `python` is a valid reference to a python executable.
 
 Activate the environment
-```
-source bin/activate
+```bash
+$ source bin/activate
 ```
 
 **NOTE: ensure your environment is activated throughout the installation process.**
 
-##### Install the holoclean package
+##### Install the requirements of HoloClean
 
-Install `holoclean` via `pip`
-```
-pip install holoclean
-```
+In the project root directory, run the following to install the required packages.
+Note that this commands installs the packages within the activated virtual environment.
 
-#### Option 3: Manual (from source)
-
-You can manually clone this repository
-```sh
-git clone https://github.com/HoloClean/holoclean-1.gi://github.com/HoloClean/holoclean-1.git
-cd holoclean-1
-```
-
-It is recommended you still create a conda or Virtualenv environment before
-installing the package below (see above for instructions for creating either
-types of environment). Install the `holoclean` package using `setuptools` by running
-```sh
-python setup.py install
+```bash
+$ pip install -r requirements.txt
 ```
 
 ## Usage
 
-After installation, you can use `holoclean` as a standalone Python module
-```python
-import holoclean
+See the code in `tests/test_holoclean.py` for a documented usage of HoloClean.
 
-### 0. Setup holoclean session
-
-hc = holoclean.HoloClean()
-session = hc.session
-
-### 1. Load training data and denial constraints
-
-# 'hospital' is the name of your dataset
-# 'data' is the path to the CSV file
-# 'hospital.csv' is the CSV filename
-session.load_data('hospital', 'data', 'hospital.csv')
-# Denial constraints in a TXT file
-session.load_dcs('data','hospital_constraints_att.txt')
-session.ds.set_constraints(session.get_dcs())
-
-### 2. Detect error cells
-
-detectors = [NullDetector(),ViolationDetector()]
-hc.detect_errors(detectors)
-
-### 3. Repair errors
-
-hc.setup_domain()
-featurizers = [InitFeaturizer(),OccurFeaturizer(), ConstraintFeat()]
-hc.repair_errors(featurizers)
-
-### 4. Evaluate results
-
-# 'hospital_clean.csv' is the ground truth (i.e. test set labels)
-hc.evaluate('data','hospital_clean.csv', get_tid, get_attr, get_value)
+In order to run the test script, run the following:
+```bash
+$ cd tests
+$ ./start_test.sh
 ```
 
-
-## Contributing (advanced)
-
-### Setting up development environment
-
-It is recommended you create a conda environment when developing (see installation
-instructions above for conda).
-
-1. Create a conda environment for developing holoclean
-    ```sh
-    conda create -n holo_dev python=3
-    ```
-
-2. Activate your environment (**must do this every time you start/restart a new terminal session**):
-    ```sh
-    source activate holo_dev
-    ```
-
-3. Install `holoclean` as a local editable package
-    ```sh
-    python setup.py develop
-    ```
-
-4. Verify that you've installed it
-    ```sh
-    > conda list | grep holoclean
-    holoclean                 0.0.0                     <pip>
-    ```
-
-5. You should be able to import `holoclean` from anywhere now!
-    ```sh
-    python -c "import holoclean"
-    ```
-
-### Testing
-
-After setting up your development environment and setting up `holoclean` as a
-development package, you should be able to run any of the tests under
-`tests/`, for example
-```sh
-sh tests/start_test.sh
-```
-
-### Building as a conda package
-
-To build Holoclean as a conda package, first install `conda-build`
-```
-conda install conda-build
-```
-add the `pytorch` and `conda-forge` channels to your conda config
-(`~/.condarc`) if you haven't already done so
-```
-conda config --add channels conda-forge
-conda config --add channels pytorch
-```
-then run the following command in the terminal in this repository:
-```sh
-conda-build .
-```
-
+The script sets up the python path environment for running holoclean.

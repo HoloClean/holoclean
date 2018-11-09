@@ -1,8 +1,0 @@
-psycopg2==2.7.5
-torch==0.4.1
-python-Levenshtein==0.12.0
-sqlalchemy==1.2.12
-tqdm==4.15.0
-scipy==1.1.0
-numpy==1.15.3
-pandas==0.23.4
