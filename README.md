@@ -148,5 +148,5 @@ See the code in `tests/test_holoclean.py` for a documented usage of HoloClean.
 In order to run the test script, run the following:
 ```bash
 $ cd tests
-$ python test_holoclean.py
+$ ./start_test.sh
 ```

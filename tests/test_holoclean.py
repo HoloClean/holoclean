@@ -1,7 +1,3 @@
-import sys
-
-sys.path.insert(0, '..')
-
 import holoclean
 
 from detect import NullDetector, ViolationDetector
@@ -12,18 +8,6 @@ from repair.featurize import FreqFeaturizer
 from repair.featurize import OccurFeaturizer
 from repair.featurize import ConstraintFeat
 from repair.featurize import LangModelFeat
-
-
-def get_tid(row):
-    return row['tid'] - 1
-
-
-def get_attr(row):
-    return row['attribute'].lower()
-
-
-def get_value(row):
-    return row['correct_val'].lower()
 
 
 # 1. Setup a HoloClean session.
@@ -44,4 +28,13 @@ featurizers = [InitAttFeaturizer(), InitSimFeaturizer(), FreqFeaturizer(), Occur
 hc.repair_errors(featurizers)
 
 # 5. Evaluate the correctness of the results.
+def get_tid(row):
+    return row['tid'] - 1
+
+def get_attr(row):
+    return row['attribute'].lower()
+
+def get_value(row):
+    return row['correct_val'].lower()
+
 hc.evaluate('data', 'hospital_clean.csv', get_tid, get_attr, get_value)
