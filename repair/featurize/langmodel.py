@@ -17,7 +17,7 @@ class LangModelFeat(Featurizer):
         raw_data = self.ds.get_raw_data()
         for attr in self.ds.attr_to_idx:
             attr_corpus = list(zip(raw_data[attr].tolist()))
-            model = FastText(attr_corpus,min_count=1,size=self.emb_size)
+            model = FastText(attr_corpus, min_count=1, size=self.emb_size)
             self.attr_language_model[attr] = model
 
     def gen_feat_tensor(self, input, classes):
