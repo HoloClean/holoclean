@@ -1,0 +1,21 @@
+/.idea
+*.log
+__pycache__/
+*.py[cod]
+*$py.class
+_build
+_static
+_templates
+.DS_store
+.venv
+*.swp
+*.pyc
+
+# pip package metadata
+*egg-info/
+
+# conda build metadata
+build/
+dist/
+lib/
+info/
