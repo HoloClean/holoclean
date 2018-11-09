@@ -150,3 +150,5 @@ In order to run the test script, run the following:
 $ cd tests
 $ ./start_test.sh
 ```
+
+The script sets up the python path environment for running holoclean.
