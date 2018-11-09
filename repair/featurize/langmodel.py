@@ -1,8 +1,8 @@
 import torch
-
 from gensim.models import FastText
 
-from ...dataset import AuxTables
+
+from dataset import AuxTables
 from .featurizer import Featurizer
 
 

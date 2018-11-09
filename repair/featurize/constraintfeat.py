@@ -4,8 +4,8 @@ import torch
 import torch.nn.functional as F
 
 from .featurizer import Featurizer
-from ...dataset import AuxTables
-from ...dcparser.constraint import is_symmetric
+from dataset import AuxTables
+from dcparser.constraint import is_symmetric
 
 unary_template = Template('SELECT _vid_, val_id, count(*) violations ' \
                            'FROM $init_table as t1, $pos_values as t2 ' \

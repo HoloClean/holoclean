@@ -1,11 +1,11 @@
 import pandas as pd
-import itertools
 import torch
 from tqdm import tqdm
 
 from .featurizer import Featurizer
-from ...dataset import AuxTables
-from ...dataset.dataset import dictify
+from dataset import AuxTables
+from dataset.dataset import dictify
+
 
 class OccurFeaturizer(Featurizer):
     def __init__(self, name='OccuFeaturizer'):

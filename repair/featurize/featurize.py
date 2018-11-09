@@ -1,7 +1,7 @@
 import torch
 from tqdm import tqdm
 
-from ...dataset import AuxTables
+from dataset import AuxTables
 
 
 class FeaturizedDataset:
@@ -21,7 +21,7 @@ class FeaturizedDataset:
 
     def generate_weak_labels(self):
         if self.env['verbose']:
-            print "Generating weak labels."
+            print("Generating weak labels.")
         query = 'SELECT _vid_, init_index FROM %s AS t1 LEFT JOIN %s AS t2 ' \
                 'ON t1._cid_ = t2._cid_ WHERE t2._cid_ is NULL OR t1.fixed = 1;' % (
         AuxTables.cell_domain.name, AuxTables.dk_cells.name)

@@ -2,8 +2,9 @@ from functools import partial
 import torch
 import Levenshtein
 
-from ...dataset import AuxTables
+from dataset import AuxTables
 from .featurizer import Featurizer
+
 
 def gen_feat_tensor(input, classes, total_attrs):
     vid = int(input[0])
@@ -19,6 +20,7 @@ def gen_feat_tensor(input, classes, total_attrs):
             sim = 2*Levenshtein.ratio(val, init_value) - 1
         tensor[0][idx][attr_idx] = sim
     return tensor
+
 
 class InitSimFeaturizer(Featurizer):
     def __init__(self, name='InitSimFeaturizer'):

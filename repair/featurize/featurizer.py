@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from torch.multiprocessing import Pool
 
+
 class Featurizer:
     __metaclass__ = ABCMeta
 

@@ -95,6 +95,11 @@ source activate holo_env
 
 **NOTE: ensure your environment is activated throughout the installation process.**
 
+#### Install required packages
+```sh
+pip install -r requirements.txt
+```
+
 ##### Install the holoclean package
 
 Install `holoclean` via `pip`
@@ -145,7 +150,7 @@ pip install holoclean
 
 You can manually clone this repository
 ```sh
-git clone https://github.com/HoloClean/holoclean.gi://github.com/HoloClean/holoclean.git
+git clone git@github.com:HoloClean/holoclean.git
 cd holoclean
 ```
 

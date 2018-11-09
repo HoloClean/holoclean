@@ -3,7 +3,8 @@ import time
 
 from .featurize import FeaturizedDataset
 from .learn import RepairModel
-from ..dataset import AuxTables
+from dataset import AuxTables
+
 
 class RepairEngine:
     def __init__(self, env, dataset):

@@ -4,8 +4,8 @@ from tqdm import tqdm
 import itertools
 import random
 
-from ..dataset import AuxTables
-from ..dataset.dataset import dictify
+from dataset import AuxTables
+from dataset.dataset import dictify
 
 
 class DomainEngine:

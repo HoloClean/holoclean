@@ -1,6 +1,7 @@
 import pandas as pd
 import time
-from ..dataset import AuxTables
+from dataset import AuxTables
+
 
 class DetectEngine:
     def __init__(self, env, dataset):

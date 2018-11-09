@@ -3,8 +3,8 @@ import os
 import pandas as pd
 from string import Template
 
-from ..dataset import AuxTables
-from ..dataset.table import Table, Source
+from dataset import AuxTables
+from dataset.table import Table, Source
 
 errors_template = Template('SELECT count(*) '\
                             'FROM $init_table as t1, $grdt_table as t2 '\
