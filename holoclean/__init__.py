@@ -1,6 +1,6 @@
 __author__  = "HoloClean"
 __status__  = "Development"
-__version__ = "0.0.0"
+__version__ = "0.2.0"
 
 # Import internal modules
 from .dataset import Dataset
