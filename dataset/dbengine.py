@@ -74,6 +74,7 @@ class DBengine:
         if self.verbose:
             print('Preparing to execute %d queries.'%len(queries))
         tic = time.clock()
+        # TODO(python3): Modify pool to context manager (with statement)
         results = self.pool.map(partial(execute_query, conn_args=self.conn_args, verbose=self.verbose), [(idx, q) for idx, q in enumerate(queries)])
         toc = time.clock()
         if self.verbose:
@@ -85,6 +86,7 @@ class DBengine:
         if self.verbose:
             print('Preparing to execute %d queries.'%len(queries))
         tic = time.clock()
+        # TODO(python3): Modify pool to context manager (with statement)
         results = self.pool.map(
             partial(execute_query_w_backup, conn_args=self.conn_args, verbose=self.verbose, timeout=self.timeout),
             [(idx, q) for idx, q in enumerate(queries)])
