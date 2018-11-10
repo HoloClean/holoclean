@@ -86,10 +86,10 @@ Anaconda (NOT miniconda).
 
 ##### Create a conda environment
 
-Create a **Python 3** conda environment by running
+Create a **Python 2.7** conda environment by running
 
 ```bash
-$ conda create -n holo_env python=3
+$ conda create -n holo_env python=2.7
 ```
 
 Upon starting/restarting your terminal session, you will need to activate your
@@ -102,7 +102,7 @@ $ source activate holo_env
 
 ##### Option 2: Set up a virtual environment using pip and Virtualenv
 
-If you are familiar with Virtualenv, create a new **Python 3** environment
+If you are familiar with Virtualenv, create a new **Python 2.7** environment
 with your preferred Virtualenv wrapper, for example:
 
 - [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/en/latest/) (Bourne-shells)
@@ -118,7 +118,7 @@ $ pip install virtualenv
 
 ##### Create a Virtualenv environment
 
-Create a new directory for a **Python 3** virtualenv environment
+Create a new directory for a **Python 2.7** virtualenv environment
 ```bash
 $ mkdir -p holo_env
 $ virtualenv --python=python holo_env
