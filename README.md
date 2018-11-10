@@ -141,6 +141,11 @@ Note that this commands installs the packages within the activated virtual envir
 $ pip install -r requirements.txt
 ```
 
+### Note about MacOS
+
+If you are on MacOS, you may need to install XCode developer tools using the command `xcode-select --install`.
+
+
 ## Usage
 
 See the code in `tests/test_holoclean.py` for a documented usage of HoloClean.
