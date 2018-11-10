@@ -86,7 +86,7 @@ Anaconda (NOT miniconda).
 
 ##### Create a conda environment
 
-Create a **Python 3** conda environment by running
+Create a **Python 2.7** conda environment by running
 
 ```bash
 $ conda create -n holo_env python=2.7
