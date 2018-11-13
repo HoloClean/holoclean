@@ -23,7 +23,6 @@ class InitFeaturizer(Featurizer):
     def create_tensor(self):
         query = 'SELECT _vid_, init_index FROM %s ORDER BY _vid_'%AuxTables.cell_domain.name
         results = self.ds.engine.execute_query(query)
-        #tensors = self.pool.map(partial(gen_feat_tensor, classes=self.classes), results)
-        tensors = list(map(partial(gen_feat_tensor, classes=self.classes), results))
+        tensors = self.pool.map(partial(gen_feat_tensor, classes=self.classes), results)
         combined = torch.cat(tensors)
         return combined

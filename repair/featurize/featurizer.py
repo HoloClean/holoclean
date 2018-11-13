@@ -1,10 +1,5 @@
 from abc import ABCMeta, abstractmethod
-import torch.multiprocessing
-from torch.multiprocessing import Pool
-
-# Specify the sharing strategy manually instead of relying on the
-# default one (which is different based on the OS).
-torch.multiprocessing.set_sharing_strategy('file_system')
+from multiprocessing import Pool
 
 
 class Featurizer:
