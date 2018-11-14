@@ -119,8 +119,8 @@ class OccurFeaturizer(Featurizer):
 
                 # iterate through all possible domain values of row['attribute']
                 for rv_val in candidates:
-                    count2 = float(all_vals.get(rv_val,0.0))
-                    prob = count2/attr_freq
+                    cooccur_freq = float(all_vals.get(rv_val,0.0))
+                    prob = cooccur_freq/attr_freq
                     if rv_val in rv_domain_idx:
                         tensor[0][rv_domain_idx[rv_val]][attr_idx] = prob
         return tensor
