@@ -9,6 +9,14 @@ import numpy as np
 
 
 class TiedLinear(torch.nn.Module):
+    """
+    TiedLinear is a linear layer with shared parameters for features between
+    (output) classes that takes as input a tensor X with dimensions
+        (batch size) X (output_dim) X (in_features)
+        where:
+            output_dim is the disired output dimension/# of classes
+            in_features are the features with shared weights across the classes
+    """
 
     def __init__(self, in_features, output_dim, bias=False):
         super(TiedLinear, self).__init__()
@@ -20,6 +28,10 @@ class TiedLinear(torch.nn.Module):
         else:
             self.register_parameter('bias', None)
         self.reset_parameters()
+        # Broadcast parameters to the correct matrix dimensions for matrix
+        # multiplication: this does NOT create new parameters: i.e. each
+        # row of in_features of parameters are connected and will adjust
+        # to the same values.
         self.W = self.weight.expand(output_dim, -1)
         if self.bias is not None:
             self.B = self.bias.expand(output_dim, -1)
@@ -35,6 +47,9 @@ class TiedLinear(torch.nn.Module):
         if self.bias is not None:
             output += self.B
         output = output.sum(2)
+        # Add our mask so that invalid domain classes for a given variable/VID
+        # has a large negative value, resulting in a softmax probability
+        # of de facto 0.
         output.index_add_(0, index, mask)
         return output
 
@@ -87,7 +102,15 @@ class RepairModel:
         index_var = Variable(index, requires_grad=False)
 
         optimizer.zero_grad()
+        # Fully-connected layer with shared parameters between output classes
+        # for linear combination of input features.
+        # Mask makes invalid output classes have a large negative value so
+        # to zero out softmax probability.
         fx = self.model.forward(X_var, index_var, mask_var)
+        # loss is CrossEntropyLoss: combines log softmax + Negative log likelihood loss.
+        # Y_Var is just a single 1D tensor with value (0 - 'class' - 1) i.e.
+        # index of the correct class ('class' = max domain)
+        # fx is a tensor of length 'class' the linear activation going in the softmax.
         output = loss.forward(fx, Y_var.squeeze(1))
         output.backward()
         optimizer.step()
