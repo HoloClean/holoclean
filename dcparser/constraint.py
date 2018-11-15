@@ -1,5 +1,3 @@
-import logging
-
 operationsArr = ['<>', '<=', '>=', '=', '<', '>', ]
 operationSign = ['IQ', 'LTE', 'GTE', 'EQ', 'LT', 'GT']
 
@@ -55,7 +53,7 @@ class DenialConstraint:
             try:
                 self.predicates.append(Predicate(split[i], self.tuple_names, schema, verbose))
             except Exception:
-                logging.error('predicate parsing failed {pred}'.format(pred=split[i]))
+                print('ERROR predicate parsing failed {pred}'.format(pred=split[i]))
                 raise
         for p in self.predicates:
             self.components.append(p.components[0][1])

@@ -41,13 +41,13 @@ class Table:
 
         if src == Source.FILE:
             if fpath is None:
-                raise Exception("ERROR while loading table. File path for CSV file name expected. Please provide <df> param.")
+                raise Exception("ERROR while loading table. File path for CSV file name expected. Please provide <fpath> param.")
             # TODO(richardwu): use COPY FROM instead of loading this into memory
             # TODO(richardwu): No support for numerical values. To be added.
             self.df = pd.read_csv(fpath, dtype=str, na_values=na_values)
             # Normalize to lower strings and strip whitespaces.
             for attr in self.df.columns.values:
-                if attr not in exclude_attr_cols and self.df[attr].dtype == str:
+                if attr not in exclude_attr_cols:
                     self.df[attr] = self.df[attr].str.strip().str.lower()
         elif src == Source.DF:
             if df is None:

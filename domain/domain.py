@@ -1,4 +1,3 @@
-import logging
 import pandas as pd
 import time
 from tqdm import tqdm
@@ -225,7 +224,7 @@ class DomainEngine:
                         vid += 1
             cells.extend(app)
         domain_df = pd.DataFrame(data=cells)
-        logging.info('DONE generating domain')
+        print('DONE generating domain')
         return domain_df
 
     def get_domain_cell(self, attr, row):

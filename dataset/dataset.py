@@ -1,4 +1,3 @@
-import logging
 from enum import Enum
 import os
 import time
@@ -67,8 +66,7 @@ class Dataset:
         self.pair_attr_stats = {}
 
     # TODO(richardwu): load more than just CSV files
-    def load_data(self, name, fpath, na_values=None,
-            entity_col=None, src_col=None):
+    def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None):
         """
         load_data takes a CSV file of the initial data, adds tuple IDs (_tid_)
         to each row to uniquely identify an 'entity', and generates unique
@@ -158,7 +156,7 @@ class Dataset:
             if store and index_attrs:
                 self.aux_table[aux_table].create_db_index(self.engine, index_attrs)
         except Exception:
-            logging.error('generating auxiliary table "{table}" failed'.format(table=aux_table.name))
+            print('ERROR generating auxiliary table "{table}" failed'.format(table=aux_table.name))
             raise
 
     def generate_aux_table_sql(self, aux_table, query, index_attrs=False):
@@ -172,7 +170,7 @@ class Dataset:
                 self.aux_table[aux_table].create_df_index(index_attrs)
                 self.aux_table[aux_table].create_db_index(self.engine, index_attrs)
         except Exception:
-            logging.error('generating auxiliary table via SQL "{table}" failed'.format(table=aux_table.name))
+            print('ERROR generating auxiliary table via SQL "{table}" failed'.format(table=aux_table.name))
             raise
 
     def get_raw_data(self):
