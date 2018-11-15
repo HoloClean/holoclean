@@ -1,5 +1,3 @@
-import logging
-
 operationsArr = ['<>', '<=', '>=', '=', '<', '>', ]
 operationSign = ['IQ', 'LTE', 'GTE', 'EQ', 'LT', 'GT']
 

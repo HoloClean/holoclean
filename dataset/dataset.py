@@ -68,8 +68,7 @@ class Dataset:
         self.pair_attr_stats = {}
 
     # TODO(richardwu): load more than just CSV files
-    def load_data(self, name, fpath, na_values=None,
-            entity_col=None, src_col=None):
+    def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None):
         """
         load_data takes a CSV file of the initial data, adds tuple IDs (_tid_)
         to each row to uniquely identify an 'entity', and generates unique
