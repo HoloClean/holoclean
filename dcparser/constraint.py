@@ -1,3 +1,5 @@
+import logging
+
 operationsArr = ['<>', '<=', '>=', '=', '<', '>', ]
 operationSign = ['IQ', 'LTE', 'GTE', 'EQ', 'LT', 'GT']
 
@@ -52,9 +54,9 @@ class DenialConstraint:
         for i in range(len(self.tuple_names), len(split)):
             try:
                 self.predicates.append(Predicate(split[i], self.tuple_names, schema, verbose))
-            except Exception as e:
-                error = ' '.join(['ERROR with predicate',split[i],str(e)])
-                raise Exception(error)
+            except Exception:
+                logging.error('predicate parsing failed {pred}'.format(pred=split[i]))
+                raise
         for p in self.predicates:
             self.components.append(p.components[0][1])
 
@@ -71,7 +73,8 @@ class Predicate:
 
     def __init__(self, predicate_string, tuple_names, schema, verbose):
         """
-        Constructing predicate object
+        Constructing predicate object by setting self.cnf_form to e.g. t1."Attribute" = t2."Attribute".
+
         :param predicate_string: string shows the predicate
         :param tuple_names: name of tuples in denial constraint
         :param schema: list of attributes
@@ -91,7 +94,10 @@ class Predicate:
             if isinstance(component, str):
                 self.cnf_form += component
             else:
-                self.cnf_form += component[0] + "." + component[1]
+                # Need to wrap column names in quotations for Postgres
+                self.cnf_form += '{alias}."{attr}"'.format(
+                        alias=component[0],
+                        attr=component[1])
             if i < len(self.components) - 1:
                 self.cnf_form += self.operation
         if verbose:
@@ -157,13 +163,14 @@ class Predicate:
                   predicate_string[i + 1] == ')') and \
                     predicate_string[i] != "'":
 
-                if str.lower(str_so_far) in self.schema:
-                    current_component.append(str_so_far)
-                    str_so_far = ""
-                    components.append(current_component)
-                    current_component = []
-                else:
-                    raise Exception('Attribute name ' + str_so_far + ' not in schema: {}'.format(",".join(self.schema)))
+                # Attribute specified in DC not found in schema
+                if str_so_far not in self.schema:
+                    raise Exception('Attribute name {} not in schema: {}'.format(str_so_far, ",".join(self.schema)))
+
+                current_component.append(str_so_far)
+                str_so_far = ""
+                components.append(current_component)
+                current_component = []
             elif str_so_far == ',' or str_so_far == '.':
                 str_so_far = ''
         return components

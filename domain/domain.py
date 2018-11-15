@@ -1,3 +1,4 @@
+import logging
 import pandas as pd
 import time
 from tqdm import tqdm
@@ -42,15 +43,12 @@ class DomainEngine:
         'cell_domain', 'pos_values').
         """
         tic = time.time()
-        try:
-            random.seed(self.env['seed'])
-            self.find_correlations()
-            self.setup_attributes()
-            domain = self.generate_domain()
-            self.store_domains(domain)
-            status = "DONE with domain preparation."
-        except Exception as e:
-            status = "ERROR setting up domain: %s"%str(e)
+        random.seed(self.env['seed'])
+        self.find_correlations()
+        self.setup_attributes()
+        domain = self.generate_domain()
+        self.store_domains(domain)
+        status = "DONE with domain preparation."
         toc = time.time()
         return status, toc - tic
 
@@ -62,14 +60,14 @@ class DomainEngine:
         """
         self.raw_data = self.ds.get_raw_data().copy()
         # convert dataset to numberic categories
-        d = pd.DataFrame()
+        df = pd.DataFrame()
         for attr in self.raw_data.columns.values:
-            d[attr] = self.raw_data[attr].astype('category').cat.codes
+            df[attr] = self.raw_data[attr].astype('category').cat.codes
         # drop columns with only one value and tid column
-        d = d.loc[:, (d != 0).any(axis=0)]
-        d = d.drop(['_tid_'], axis=1)
+        df = df.loc[:, (df != 0).any(axis=0)]
+        df = df.drop(['_tid_'], axis=1)
         # Computer correlation across attributes
-        m_corr = d.corr()
+        m_corr = df.corr()
         self.correlations = m_corr
 
     def store_domains(self, domain):
@@ -102,15 +100,12 @@ class DomainEngine:
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total
         self.single_stats = single_stats
-        try:
-            tic = time.clock()
-            self.pair_stats = self.preproc_pair_stats(pair_stats)
-            toc = time.clock()
-            if self.verbose:
-                prep_time = toc - tic
-                print("DONE with pair stats preparation in %.2f secs"%prep_time)
-        except Exception as e:
-            print("ERROR in pair statistics preprocessing: %s" % str(e))
+        tic = time.clock()
+        self.pair_stats = self.preproc_pair_stats(pair_stats)
+        toc = time.clock()
+        if self.verbose:
+            prep_time = toc - tic
+            print("DONE with pair stats preparation in %.2f secs"%prep_time)
         self.setup_complete = True
 
     def preproc_pair_stats(self, pair_stats):
@@ -153,7 +148,7 @@ class DomainEngine:
         These attributes correspond only to attributes that contain at least
         one potentially erroneous cell.
         """
-        query = 'SELECT DISTINCT lower(attribute) as attribute FROM %s'%AuxTables.dk_cells.name
+        query = 'SELECT DISTINCT attribute as attribute FROM %s'%AuxTables.dk_cells.name
         result = self.ds.engine.execute_query(query)
         if not result:
             raise Exception("No attribute contains erroneous cells.")
@@ -165,12 +160,12 @@ class DomainEngine:
         that are correlated with attr with magnitude at least self.cor_strength
         (init parameter).
         """
-        cor_attrs = []
-        if attr in self.correlations:
-            d_temp = self.correlations[attr]
-            d_temp = d_temp.abs()
-            cor_attrs = [rec[0] for rec in d_temp[d_temp > self.cor_strength].iteritems()]
-            cor_attrs.remove(attr)
+        if attr not in self.correlations:
+            return []
+
+        d_temp = self.correlations[attr]
+        d_temp = d_temp.abs()
+        cor_attrs = [rec[0] for rec in d_temp[d_temp > self.cor_strength].iteritems() if rec[0] != attr]
         return cor_attrs
 
     def generate_domain(self):
@@ -230,6 +225,7 @@ class DomainEngine:
                         vid += 1
             cells.extend(app)
         domain_df = pd.DataFrame(data=cells)
+        logging.info('DONE generating domain')
         return domain_df
 
     def get_domain_cell(self, attr, row):
@@ -298,7 +294,7 @@ class DomainEngine:
         if random.random() > self.sampling_prob:
             return []
         domain_pool = set(self.single_stats[attr].index.astype(str))
-        domain_pool.remove(cur_value)
+        domain_pool.discard(cur_value)
         size = len(domain_pool)
         if size > 0:
             k = min(self.max_sample, size)

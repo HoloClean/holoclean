@@ -11,12 +11,20 @@ class NullDetector(Detector):
         self.df = self.ds.get_raw_data()
 
     def detect_noisy_cells(self):
+        """
+        detech_noisy_cells returns a pandas.DataFrame containing all cells with
+        NULL values.
+
+        :return: pandas.DataFrame with columns:
+            _tid_: entity ID
+            attribute: attribute with NULL value for this entity
+        """
         attributes = self.ds.get_attributes()
         errors = []
         for attr in attributes:
-            tmp_df = self.df[self.df[attr].str.match('_nan_')]['_tid_'].to_frame()
+            tmp_df = self.df[self.df[attr].isnull()]['_tid_'].to_frame()
             tmp_df.insert(1, "attribute", attr)
             errors.append(tmp_df)
-        errors_df = pd.concat(errors, ignore_index=True).drop_duplicates().reset_index(drop=True)
+        errors_df = pd.concat(errors, ignore_index=True)
         return errors_df
 

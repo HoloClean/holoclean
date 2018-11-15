@@ -164,14 +164,35 @@ class Session:
         self.repair_engine = RepairEngine(env, self.ds)
         self.eval_engine = EvalEngine(env, self.ds)
 
-    def load_data(self, name, f_path, f_name, na_values=None):
-        status, load_time = self.ds.load_data(name, f_path,f_name, na_values=na_values)
+    def load_data(self, name, fpath, na_values=None,
+            entity_col=None, src_col=None):
+        """
+        load_data takes the filepath to a CSV file to load as the initial dataset.
+
+        :param name: (str) name to initialize dataset with.
+        :param fpath: (str) filepath to CSV file.
+        :param na_values: (str) value that identifies a NULL value
+        :param entity_col: (st) column containing the unique
+            identifier/ID of an entity.  For fusion tasks, rows with
+            the same ID will be fused together in the output.
+            If None, assumes every row is a unique entity.
+        :param src_col: (str) if not None, for fusion tasks
+            specifies the column containing the source for each "mention" of an
+            entity.
+        """
+        status, load_time = self.ds.load_data(name, fpath, na_values=na_values,
+                entity_col=entity_col, src_col=src_col)
         print(status)
         if self.env['verbose']:
             print('Time to load dataset: %.2f secs'%load_time)
 
-    def load_dcs(self, f_path, f_name):
-        status, load_time = self.dc_parser.load_denial_constraints(f_path, f_name)
+    def load_dcs(self, fpath):
+        """
+        load_dcs ingests the Denial Constraints for initialized dataset.
+
+        :param fpath: filepath to TXT file where each line contains one denial constraint.
+        """
+        status, load_time = self.dc_parser.load_denial_constraints(fpath)
         print(status)
         if self.env['verbose']:
             print('Time to load dirty data: %.2f secs'%load_time)
@@ -217,9 +238,19 @@ class Session:
         if self.env['verbose']:
             print('Time to store repaired dataset: %.2f secs' % time)
 
-    def evaluate(self, f_path, f_name, get_tid, get_attr, get_value, na_values=None):
+    def evaluate(self, fpath, tid_col, attr_col, val_col, na_values=None):
+        """
+        evaluate generates an evaluation report with metrics (e.g. precision,
+        recall) given a test set.
+
+        :param fpath: (str) filepath to test set (ground truth) CSV file.
+        :param tid_col: (str) column in CSV that corresponds to the TID.
+        :param attr_col: (str) column in CSV that corresponds to the attribute.
+        :param val_col: (str) column in CSV that corresponds to correct value
+            for the current TID and attribute (i.e. cell).
+        """
         name = self.ds.raw_data.name + '_clean'
-        status, load_time = self.eval_engine.load_data(name, f_path, f_name, get_tid, get_attr, get_value, na_values=na_values)
+        status, load_time = self.eval_engine.load_data(name, fpath, tid_col, attr_col, val_col, na_values=na_values)
         print(status)
         if self.env['verbose']:
             print('Time to evaluate repairs: %.2f secs'%load_time)

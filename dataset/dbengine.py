@@ -122,7 +122,18 @@ class DBengine:
         return True
 
     def create_db_index(self, name, table, attr_list):
-        stmt = index_template.substitute(idx_title=name, table=table, attr=','.join(attr_list))
+        """
+        create_db_index creates a (multi-column) index on the columns/attributes
+        specified in :param attr_list: with the given :param name: on
+        :param table:.
+
+        :param name: (str) name of index
+        :param table: (str) name of table
+        :param attr: (list[str]) list of attributes/columns to create index on
+        """
+        # We need to quote each attribute since Postgres auto-downcases unquoted column references
+        quoted_attrs = map(lambda attr: '"{}"'.format(attr), attr_list)
+        stmt = index_template.substitute(idx_title=name, table=table, attr=','.join(quoted_attrs))
         tic = time.clock()
         conn = self.engine.connect()
         result = conn.execute(stmt)
