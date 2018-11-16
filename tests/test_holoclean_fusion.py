@@ -10,5 +10,7 @@ class TestHolocleanFusion(unittest.TestCase):
         # 2. Load training data and denial constraints.
         hc.load_data('flight', 'data/flight.csv', entity_col='flight', src_col='src')
 
+        hc.setup_domain()
+
 if __name__ == '__main__':
     unitttest.main()

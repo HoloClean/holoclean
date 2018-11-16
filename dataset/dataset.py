@@ -47,15 +47,17 @@ class Dataset:
         self.raw_data = None
         self.repaired_data = None
         self.constraints = None
-        self.aux_table = {}
-        for tab in AuxTables:
-            self.aux_table[tab] = None
+        # Maps AuxTables (Enum) --> initialized Table object
+        self.aux_tables = {}
         # start dbengine
         self.engine = DBengine(env['db_user'], env['db_pwd'], env['db_name'], env['db_host'], pool_size=env['threads'],
                                verbose=env['verbose'], timeout=env['timeout'])
+
         # members to convert (tuple_id, attribute) to cell_id
         self.attr_to_idx = {}
+        self.tid_to_idx = {}
         self.attr_count = 0
+
         # dataset statistics
         self.stats_ready = False
         # Total tuples
@@ -109,6 +111,10 @@ class Dataset:
         # Use '_nan_' to represent NULL values
         df.fillna('_nan_', inplace=True)
 
+        # Create tid_to_idx dictionary (for calculating cell id)
+        temp_df = df.assign(tid_idx=df['_tid_'].astype('category').cat.codes)
+        self.tid_to_idx = {row['_tid_']: row['tid_idx'] for _, row in temp_df.iterrows()}
+
         # Call to store to database
 
         self.raw_data.store_to_db(self.engine.engine)
@@ -127,6 +133,14 @@ class Dataset:
         toc = time.clock()
         load_time = toc - tic
         return status, load_time
+
+    def aux_table_exists(self, aux_table):
+        """
+        aux_table_exists returns True if the auxiliary table has been initialized.
+
+        :param aux_table: (AuxTables) auxiliary table to check
+        """
+        return aux_table in self.aux_tables
 
     def set_constraints(self, constraints):
         self.constraints = constraints
@@ -148,13 +162,13 @@ class Dataset:
         also creates indexes on Postgres table.
         """
         try:
-            self.aux_table[aux_table] = Table(aux_table.name, Source.DF, df=df)
+            self.aux_tables[aux_table] = Table(aux_table.name, Source.DF, df=df)
             if store:
-                self.aux_table[aux_table].store_to_db(self.engine.engine)
+                self.aux_tables[aux_table].store_to_db(self.engine.engine)
             if index_attrs:
-                self.aux_table[aux_table].create_df_index(index_attrs)
+                self.aux_tables[aux_table].create_df_index(index_attrs)
             if store and index_attrs:
-                self.aux_table[aux_table].create_db_index(self.engine, index_attrs)
+                self.aux_tables[aux_table].create_db_index(self.engine, index_attrs)
         except Exception:
             print('ERROR generating auxiliary table "{table}" failed'.format(table=aux_table.name))
             raise
@@ -165,22 +179,22 @@ class Dataset:
         :param query: (str) SQL query whose result is used for generating the auxiliary table.
         """
         try:
-            self.aux_table[aux_table] = Table(aux_table.name, Source.SQL, table_query=query, db_engine=self.engine)
+            self.aux_tables[aux_table] = Table(aux_table.name, Source.SQL, table_query=query, db_engine=self.engine)
             if index_attrs:
-                self.aux_table[aux_table].create_df_index(index_attrs)
-                self.aux_table[aux_table].create_db_index(self.engine, index_attrs)
+                self.aux_tables[aux_table].create_df_index(index_attrs)
+                self.aux_tables[aux_table].create_db_index(self.engine, index_attrs)
         except Exception:
             print('ERROR generating auxiliary table via SQL "{table}" failed'.format(table=aux_table.name))
             raise
 
     def get_raw_data(self):
         """
-        get_raw_data returns a pandas.DataFrame containing the raw data as it was initially loaded.
+        get_raw_data returns a pandas.DataFrame containing the raw data as it
+        was initially loaded.
         """
         if self.raw_data:
             return self.raw_data.df
-        else:
-            raise Exception('ERROR No dataset loaded')
+        raise Exception('ERROR No dataset loaded')
 
     def get_attributes(self):
         """
@@ -197,7 +211,7 @@ class Dataset:
 
         Cell ID: _tid_ * (# of attributes) + attr_idx
         """
-        vid = tuple_id*self.attr_count + self.attr_to_idx[attr_name]
+        vid = self.tid_to_idx[tuple_id]*self.attr_count + self.attr_to_idx[attr_name]
 
         return vid
 
@@ -269,7 +283,7 @@ class Dataset:
                 "FROM %s) as t1, %s as t2 " \
                 "WHERE t1._vid_ = t2._vid_"%(AuxTables.cell_domain.name, AuxTables.inf_values_idx.name)
         self.generate_aux_table_sql(AuxTables.inf_values_dom, query, index_attrs=['_tid_'])
-        self.aux_table[AuxTables.inf_values_dom].create_db_index(self.engine, ['attribute'])
+        self.aux_tables[AuxTables.inf_values_dom].create_db_index(self.engine, ['attribute'])
         status = "DONE colleting the inferred values."
         toc = time.clock()
         total_time = toc - tic
@@ -278,7 +292,7 @@ class Dataset:
     def get_repaired_dataset(self):
         tic = time.clock()
         init_records = self.raw_data.df.sort_values(['_tid_']).to_records(index=False)
-        t = self.aux_table[AuxTables.inf_values_dom]
+        t = self.aux_tables[AuxTables.inf_values_dom]
         repaired_vals = dictify(t.df.reset_index())
         for tid in repaired_vals:
             for attr in repaired_vals[tid]:

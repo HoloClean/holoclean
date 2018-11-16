@@ -10,7 +10,7 @@ class DetectEngine:
 
     def detect_errors(self, detectors):
         errors = []
-        tic_total = time.clock()
+        tic = time.clock()
         for detector in detectors:
             detector.setup(self.ds, self.env)
         for detector in detectors:
@@ -25,13 +25,12 @@ class DetectEngine:
         errors_df['_cid_'] = errors_df.apply(lambda x: self.ds.get_cell_id(x['_tid_'], x['attribute']), axis=1)
         self.store_detected_errors(errors_df)
         status = "DONE with error detection."
-        toc_total = time.clock()
-        detect_time = toc_total - tic_total
+        toc = time.clock()
+        detect_time = toc - tic
         return status, detect_time
 
     def store_detected_errors(self, errors_df):
         if errors_df.empty:
             raise Exception("ERROR: Detected errors dataframe is empty.")
         self.ds.generate_aux_table(AuxTables.dk_cells, errors_df, store=True)
-        self.ds.aux_table[AuxTables.dk_cells].create_db_index(self.ds.engine, ['_cid_'])
-
+        self.ds.aux_tables[AuxTables.dk_cells].create_db_index(self.ds.engine, ['_cid_'])

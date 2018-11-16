@@ -24,7 +24,7 @@ class DomainEngine:
         self.topk = env["pruning_topk"]
         self.verbose = env['verbose']
         self.setup_complete = False
-        self.active_attributes = None
+        self.active_attributes = []
         self.raw_data = None
         self.domain = None
         self.total = None
@@ -84,18 +84,19 @@ class DomainEngine:
         """
         if domain.empty:
             raise Exception("ERROR: Generated domain is empty.")
-        else:
-            self.ds.generate_aux_table(AuxTables.cell_domain, domain, store=True, index_attrs=['_vid_'])
-            self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_tid_'])
-            self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_cid_'])
-            query = "SELECT _vid_, _cid_, _tid_, attribute, a.rv_val, a.val_id from %s , unnest(string_to_array(regexp_replace(domain,\'[{\"\"}]\',\'\',\'gi\'),\'|||\')) WITH ORDINALITY a(rv_val,val_id)" % AuxTables.cell_domain.name
-            self.ds.generate_aux_table_sql(AuxTables.pos_values, query, index_attrs=['_tid_', 'attribute'])
+
+        self.ds.generate_aux_table(AuxTables.cell_domain, domain, store=True, index_attrs=['_vid_'])
+        self.ds.aux_tables[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_tid_'])
+        self.ds.aux_tables[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_cid_'])
+        query = "SELECT _vid_, _cid_, _tid_, attribute, a.rv_val, a.val_id from %s , unnest(string_to_array(regexp_replace(domain,\'[{\"\"}]\',\'\',\'gi\'),\'|||\')) WITH ORDINALITY a(rv_val,val_id)" % AuxTables.cell_domain.name
+        self.ds.generate_aux_table_sql(AuxTables.pos_values, query, index_attrs=['_tid_', 'attribute'])
 
     def setup_attributes(self):
         try:
             self.active_attributes = self.get_active_attributes()
-        except Exception as e:
-            print("ERROR in domain generation: %s"%str(e))
+        except Exception:
+            print("ERROR in domain generation")
+            raise
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total
         self.single_stats = single_stats
@@ -144,14 +145,23 @@ class DomainEngine:
     def get_active_attributes(self):
         """
         get_active_attributes returns the attributes to be modeled.
+
         These attributes correspond only to attributes that contain at least
-        one potentially erroneous cell.
+        one potentially erroneous cell if error detection was ran.
         """
+
+        # No error detection: fallback to all attributes
+        if not self.ds.aux_table_exists(AuxTables.dk_cells):
+            return self.ds.get_attributes()
+
+        # Error detector was used: only return attributes that have DK cells.
+
         query = 'SELECT DISTINCT attribute as attribute FROM %s'%AuxTables.dk_cells.name
         result = self.ds.engine.execute_query(query)
         if not result:
             raise Exception("No attribute contains erroneous cells.")
-        return set(itertools.chain(*result))
+        # concatenate all lists of lists of attributes
+        return list(itertools.chain(*result))
 
     def get_corr_attributes(self, attr):
         """
@@ -175,7 +185,7 @@ class DomainEngine:
 
         Note that _vid_ has a 1-1 correspondence with _cid_.
 
-        See get_domain_cell for how the domain is generated from co-occurrence
+        See _get_init_domain for how the domain is generated from co-occurrence
         and correlated attributes.
 
         If no values can be found from correlated attributes, return a random
@@ -196,45 +206,67 @@ class DomainEngine:
         if not self.setup_complete:
             raise Exception(
                 "Call <setup_attributes> to setup active attributes. Error detection should be performed before setup.")
-        # Iterate over dataset rows
-        cells = []
+
+        all_cells = []
         vid = 0
-        records = self.ds.get_raw_data().to_records()
-        self.all_attrs = list(records.dtype.names)
-        for row in tqdm(list(records)):
-            tid = row['_tid_']
-            app = []
+        df_raw = self.ds.get_raw_data().set_index('_tid_')
+        self.all_attrs = self.ds.get_attributes()
+        # Iterate through every entity in the raw data and create their
+        # corresponding row in cell_domain.
+        for tid in tqdm(list(df_raw.index.unique())):
             for attr in self.active_attributes:
-                init_value, dom = self.get_domain_cell(attr, row)
+                init_value, dom = self._get_init_domain(df_raw, attr, tid)
                 init_value_idx = dom.index(init_value)
+                cid = self.ds.get_cell_id(tid, attr)
                 if len(dom) > 1:
-                    cid = self.ds.get_cell_id(tid, attr)
-                    app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_":vid, "domain": "|||".join(dom),  "domain_size": len(dom),
+                    all_cells.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_":vid, "domain": "|||".join(dom),  "domain_size": len(dom),
                                 "init_value": init_value, "init_index": init_value_idx, "fixed":0})
                     vid += 1
                 else:
-                    add_domain = self.get_random_domain(attr,init_value)
+                    add_domain = self._get_random_domain(attr,init_value)
                     # Check if attribute has more than one unique values
                     if len(add_domain) > 0:
-                        dom.extend(self.get_random_domain(attr,init_value))
-                        cid = self.ds.get_cell_id(tid, attr)
-                        app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_": vid, "domain": "|||".join(dom),
+                        dom.extend(add_domain)
+                        init_value_idx = dom.index(init_value)
+                        all_cells.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_": vid, "domain": "|||".join(dom),
                                     "domain_size": len(dom),
                                     "init_value": init_value, "init_index": init_value_idx, "fixed": 1})
                         vid += 1
-            cells.extend(app)
-        domain_df = pd.DataFrame(data=cells)
+        domain_df = pd.DataFrame(data=all_cells)
         print('DONE generating domain')
         return domain_df
 
-    def get_domain_cell(self, attr, row):
+    def _get_init_domain(self, df_raw, attr, tid):
         """
-        get_domain_cell returns a list of all domain values for the given
-        entity (row) and attribute.
+        _get_init_domain returns the initial (i.e. assumed to be "correct")
+        value and a list of all domain values for the given entity and
+        attribute.
 
-        We define domain values as values in 'attr' that co-occur with values
-        in attributes ('cond_attr') that are correlated with 'attr' at least in
-        magnitude of self.cor_strength (init parameter).
+        :param df_raw: (pandas.DataFrame) each row corresponds to a mention of values for
+        an entity. Must be indexed on the TID.
+
+        :return: (initial value of entity-attribute, domain values for entity-attribute)
+        """
+        rows = df_raw.loc[tid]
+
+        # Only one row for this entity: assume we need to repair this cell's value
+        # TODO(richardwu): should fusion datasets with only one mention for
+        # a given entity really default to repairing? (i.e. current logic)
+        if isinstance(rows, pd.Series):
+            return self._get_repair_domain(attr, rows)
+
+        # More than one row for this entity: default to fusion task
+        return self._get_fusion_domain(attr, rows)
+
+    def _get_repair_domain(self, attr, row):
+        """
+        _get_repair_domain returns the initial value and a list of all domain
+        values for the given entity and attribute where the primary goal
+        is to repair the entity value for :param attr:.
+
+        We define domain values as values in :param attr: that co-occur with
+        values in attributes ('cond_attr') that are correlated with :param
+        attr: at least in magnitude of self.cor_strength (init parameter).
 
         For example:
 
@@ -246,7 +278,10 @@ class DomainEngine:
 
         This would produce [B,C,E] as domain values.
 
-        :return: (initial value of entity-attribute, domain values for entity-attribute).
+        :param attr: (str) attribute to generate initial value and domain values for.
+        :param row: (pandas.Series) row containing this entity's values indexed on attribute.
+
+        :return: (initial value of entity-attribute, domain values for entity-attribute)
         """
 
         domain = set([])
@@ -284,9 +319,33 @@ class DomainEngine:
             init_value = row[attr]
         return init_value, list(domain)
 
-    def get_random_domain(self, attr, cur_value):
+    def _get_fusion_domain(self, attr, rows):
         """
-        get_random_domain returns a random sample of at most size
+        _get_fusion_domain returns the initial value and a list of all domain
+        values for the given entity and attribute where the primary goal
+        is to fuse the multiple mention of values for :param attr:.
+
+        Domain values are simply the set of values in amongst all mentions for
+        a given entity-attribute pair.
+
+        Initial value is taken as the majority value (randomly sample one
+        for tiebreakers).
+
+        :param attr: (str) attribute to generate initial value and domain values for.
+        :param rows: (pandas.DataFrame) rows each corresponding to a mention of
+            an entity's values. Columns should be attributes. The '_tid_' column
+            must exist.
+
+        :return: (initial value of entity-attribute, domain values for entity-attribute)
+        """
+        # Get the majority value (sample if multiple)
+        init_values = rows[attr].value_counts(sort=True, ascending=False)
+        init_val = init_values[init_values == init_values.max()].sample(random_state=self.env['seed'])
+        return init_val.index[0], list(rows[attr].unique())
+
+    def _get_random_domain(self, attr, cur_value):
+        """
+        _get_random_domain returns a random sample of at most size
         'self.max_sample' of domain values for 'attr' that is NOT 'cur_value'.
         """
 
