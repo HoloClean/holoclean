@@ -7,7 +7,7 @@ do
     echo $name
     for feat in init lang initsim occurattr constraint initattr freq
     do
-        ./../create_db.sh small_adult_1_s${c}
+        ./../../create_db_ubuntu.sh small_adult_1_s${c}
         python hc.py -notes s${c} -dataname small_adult_1 -dcpath $location -dc $name -k 0.1 -w 0.01 -omit $feat occur --wlog &> ../log/small_adult/omit-${feat}.log
         echo $c
         c=$((c+1))
