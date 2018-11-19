@@ -70,11 +70,14 @@ class EvalEngine:
             prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
             report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
                       prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors, self.correct_repairs, self.total_repairs, self.total_repairs_grdt)
+            report_list = [prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
+                           self.correct_repairs, self.total_repairs, self.total_repairs_grdt]
         except Exception as e:
             report = "ERROR generating evaluation report: %s"%str(e)
+            report_list = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         toc = time.clock()
         report_time = toc - tic
-        return report, report_time
+        return report, report_time, report_list
 
     def compute_total_repairs(self):
         query = "SELECT count(*) FROM " \
@@ -148,13 +151,25 @@ class EvalEngine:
         self.correct_repairs = correct_repairs
 
     def compute_recall(self):
-        return self.correct_repairs / self.total_errors
+        try:
+            return self.correct_repairs / self.total_errors
+        except Exception as e:
+            print("ERROR computing recall: %s" % str(e))
+            return -1
 
     def compute_repairing_recall(self):
-        return self.correct_repairs / self.detected_errors
+        try:
+            return self.correct_repairs / self.detected_errors
+        except Exception as e:
+            print("ERROR computing repairing recall: %s" % str(e))
+            return -1
 
     def compute_precision(self):
-        return self.correct_repairs / self.total_repairs_grdt
+        try:
+            return self.correct_repairs / self.total_repairs_grdt
+        except Exception as e:
+                print("ERROR computing precision: %s" % str(e))
+                return -1
 
     def compute_f1(self):
         prec = self.compute_precision()

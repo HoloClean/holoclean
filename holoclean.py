@@ -223,7 +223,8 @@ class Session:
         print(status)
         if self.env['verbose']:
             print('Time to evaluate repairs: %.2f secs'%load_time)
-        status, report_time = self.eval_engine.eval_report()
+        status, report_time, report_list = self.eval_engine.eval_report()
         print(status)
         if self.env['verbose']:
             print('Time to generate report: %.2f secs' % report_time)
+        return report_list
