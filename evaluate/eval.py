@@ -39,7 +39,7 @@ class EvalEngine:
             raw_data = raw_data[['_tid_', '_attribute_', '_value_']]
             # Normalize string to lower-case and strip whitespaces.
             raw_data['_attribute_'] = raw_data['_attribute_'].apply(lambda x: x.lower())
-            raw_data['_value_'] = raw_data['_value_'].apply(lambda x: x.strip())
+            raw_data['_value_'] = raw_data['_value_'].apply(lambda x: x.strip().lower())
             self.clean_data = Table(name, Source.DF, raw_data)
             self.clean_data.store_to_db(self.ds.engine.engine)
             self.clean_data.create_db_index(self.ds.engine, ['_tid_'])
