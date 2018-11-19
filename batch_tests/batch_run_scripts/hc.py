@@ -141,7 +141,7 @@ result.write("{data},{dc},{k},{w},{normalize},{bias},{f},{notes},{stat},{runtime
 result.close()
 
 if args.wlog:
-    weight_log = open("{}_{}_omit{}_weights.csv".format(args.dataname, args.notes, args.omit),'w+')
+    weight_log = open("../analysis/{}_{}_omit{}_weights.csv".format(args.dataname, args.notes, args.omit),'w+')
     weight_log.write(featurizer_weights)
 
 
