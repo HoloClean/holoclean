@@ -66,3 +66,13 @@ class RepairEngine:
         distr_df = pd.DataFrame(data=distr)
         infer_val_df = pd.DataFrame(data=infer_val)
         return distr_df, infer_val_df
+
+    def get_featurizer_weights(self):
+        tic = time.clock()
+        report = self.repair_model.get_featurizer_weights(self.feat_dataset.featurizer_info)
+        toc = time.clock()
+        report_time = toc - tic
+        status = "DONE saving weights of featurizers"
+        if self.env['print_feat_weights']:
+            print(report)
+        return status, report_time

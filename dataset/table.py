@@ -30,9 +30,8 @@ class Table:
                 # Normalize to lower strings and strip whitespaces.
                 # TODO: No support for numerical values. To be added.
                 for attr in self.df.columns.values:
-                    if attr != '_tid_' and self.df[attr].dtype == str:
-                        self.df[attr] = self.df[attr].apply(lambda x: x.lower())
-                        self.df[attr] = self.df[attr].apply(lambda x: x.strip())
+                    if attr != '_tid_':
+                        self.df[attr] = self.df[attr].apply(lambda x: x.lower().strip() if type(x) == str else x)
                 self.df.columns = map(str.lower, self.df.columns)
         elif src == Source.DF:
             if len(args) != 1:
