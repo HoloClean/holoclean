@@ -7,9 +7,9 @@ from dataset import AuxTables
 from dataset.dataset import dictify
 
 
-class OccurFeaturizer(Featurizer):
+class OccurAttrFeaturizer(Featurizer):
     def __init__(self, name='OccuFeaturizer'):
-        super(OccurFeaturizer, self).__init__(name)
+        super(OccurAttrFeaturizer, self).__init__(name)
 
     def specific_setup(self):
         if not self.setup_done:
@@ -59,6 +59,7 @@ class OccurFeaturizer(Featurizer):
         rv_attr = row['attribute']
         domain = row['domain'].split('|||')
         rv_domain_idx = {val: idx for idx, val in enumerate(domain)}
+        rv_attr_idx = self.ds.attr_to_idx[rv_attr]
         for attr in self.all_attrs:
             if attr != rv_attr and (not pd.isnull(tuple[attr])):
                 attr_idx = self.ds.attr_to_idx[attr]
@@ -78,5 +79,6 @@ class OccurFeaturizer(Featurizer):
                         count2 = float(all_vals.get(rv_val,0.0))
                         prob = count2/count1
                         if rv_val in rv_domain_idx:
-                            tensor[0][rv_domain_idx[rv_val]][attr_idx] = prob
+                            index = rv_attr_idx * self.attrs_number + attr_idx
+                            tensor[0][rv_domain_idx[rv_val]][index] = prob
         return tensor
