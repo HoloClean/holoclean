@@ -55,7 +55,7 @@ class OccurFeaturizer(Featurizer):
         return combined
 
     def gen_feat_tensor(self, row, tuple):
-        tensor = torch.zeros(1, self.classes, self.attrs_number*self.attrs_number)
+        tensor = torch.zeros(1, self.classes, self.attrs_number)
         rv_attr = row['attribute']
         domain = row['domain'].split('|||')
         rv_domain_idx = {val: idx for idx, val in enumerate(domain)}
