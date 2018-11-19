@@ -110,7 +110,7 @@ hc = holoclean.HoloClean(pruning_topk=args.k, epochs=30, momentum=0.0, l=0.01, w
 if "adult" in args.dataname.lower():
     hc.load_data(args.dataname, args.datapath, args.data, na_values='?')
 if "census" in args.dataname.lower():
-    hc.load_data(args.dataname, args.datapath, args.data, na_values='empty')
+    hc.load_data(args.dataname, args.datapath, args.data)
 else:
     hc.load_data(args.dataname, args.datapath, args.data)
 
@@ -172,6 +172,6 @@ if args.wlog:
     print("the weights of featurizers are wrote to %s" % wlog_path+name)
     weight_log = open(wlog_path+name,'a+')
     omit_str = "|".join(args.omit)
-    feat_w = [","+token for token in featurizer_weights.split("\n")]
+    feat_w = [","+token for token in featurizer_weights.split("\n") if len(token.strip())!= 0]
     weight_log.write(omit_str + "\n".join(feat_w))
     weight_log.close()

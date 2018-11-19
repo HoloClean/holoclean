@@ -27,6 +27,7 @@ class Table:
                 else:
                     na_values = None
                 self.df = pd.read_csv(os.path.join(file_path,file_name), dtype=str, na_values=na_values)
+                print("DEBUGGING: {}".format(self.df.loc[1]))
                 # Normalize to lower strings and strip whitespaces.
                 # TODO: No support for numerical values. To be added.
                 for attr in self.df.columns.values:
