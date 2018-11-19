@@ -52,9 +52,9 @@ class DenialConstraint:
         for i in range(len(self.tuple_names), len(split)):
             try:
                 self.predicates.append(Predicate(split[i], self.tuple_names, schema, verbose))
-            except Exception as e:
-                error = ' '.join(['ERROR with predicate',split[i],str(e)])
-                raise Exception(error)
+            except Exception:
+                print('ERROR with predicate {}'.format(split[i]))
+                raise
         for p in self.predicates:
             self.components.append(p.components[0][1])
 

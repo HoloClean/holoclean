@@ -22,11 +22,8 @@ class DetectEngine:
             errors.append(error_df)
         errors_df = pd.concat(errors, ignore_index=True).drop_duplicates().reset_index(drop=True)
         errors_df['_cid_'] = errors_df.apply(lambda x: self.ds.get_cell_id(x['_tid_'], x['attribute']), axis=1)
-        try:
-            self.store_detected_errors(errors_df)
-            status = "DONE with error detection."
-        except Exception as e:
-            status = "ERROR in detection: "+str(e)
+        self.store_detected_errors(errors_df)
+        status = "DONE with error detection."
         toc_total = time.clock()
         detect_time = toc_total - tic_total
         return status, detect_time

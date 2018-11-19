@@ -41,8 +41,9 @@ class Parser:
                     self.dc_strings.append(line)
                     self.dcs[line] = (DenialConstraint(line,attrs,self.env['verbose']))
             status = 'DONE Loading DCs from ' + f_name
-        except Exception as e:
-            status = ' '.join(['For file:', f_name, str(e)])
+        except Exception:
+            print('ERROR loading constraints for file {}'.format(f_name))
+            raise
         toc = time.clock()
         return status, toc - tic
 

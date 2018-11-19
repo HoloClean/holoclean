@@ -25,7 +25,7 @@ class FreqFeaturizer(Featurizer):
         for idx, val in enumerate(domain):
             try:
                 prob = float(self.single_stats[attribute][val])/float(self.total)
-            except:
+            except Exception:
                 prob = 0.0
             tensor[0][idx][attr_idx] = prob
         return tensor
