@@ -1,149 +1,149 @@
-dom_idx [0],	,	,	,	
-	, idx [50], input -0.007248, weight -0.000000, product 0.0000
-	, idx [51], input 0.024645, weight -0.000000, product -0.0000
-	, idx [52], input 0.002113, weight 0.000000, product 0.0000
-	, idx [53], input -0.013286, weight 0.000000, product -0.0000
-	, idx [54], input -0.011919, weight -0.000000, product 0.0000
-	, idx [55], input 0.001851, weight -0.000000, product -0.0000
-	, idx [56], input -0.014295, weight 0.000000, product -0.0000
-	, idx [57], input 0.012970, weight 0.000000, product 0.0000
-	, idx [58], input 0.019879, weight -0.000000, product -0.0000
-	, idx [59], input 0.019787, weight -0.000000, product -0.0000
-dom_idx [1],	,	,	,	
-	, idx [50], input 0.005969, weight -0.000000, product -0.0000
-	, idx [51], input 0.012176, weight -0.000000, product -0.0000
-	, idx [52], input -0.002992, weight 0.000000, product -0.0000
-	, idx [53], input 0.017082, weight 0.000000, product 0.0000
-	, idx [54], input 0.008649, weight -0.000000, product -0.0000
-	, idx [55], input 0.001420, weight -0.000000, product -0.0000
-	, idx [56], input 0.001245, weight 0.000000, product 0.0000
-	, idx [57], input 0.007179, weight 0.000000, product 0.0000
-	, idx [58], input -0.002488, weight -0.000000, product 0.0000
-	, idx [59], input 0.009082, weight -0.000000, product -0.0000
-dom_idx [2],	,	,	,	
-dom_idx [3],	,	,	,	
-dom_idx [4],	,	,	,	
-dom_idx [5],	,	,	,	
-dom_idx [0],	,	,	,	
-	, idx [55], input 0.744699, weight -0.006500, product -0.0048
-	, idx [56], input 0.751347, weight -0.005600, product -0.0042
-	, idx [57], input 0.790937, weight -0.006400, product -0.0051
-	, idx [58], input 0.791824, weight 0.036200, product 0.0287
-	, idx [59], input 0.763804, weight -0.006400, product -0.0049
-	, idx [61], input 0.783201, weight -0.006700, product -0.0052
-	, idx [62], input 0.759373, weight -0.006400, product -0.0049
-	, idx [63], input 0.719064, weight -0.006300, product -0.0045
-	, idx [64], input 0.786094, weight -0.006700, product -0.0053
-	, idx [65], input 0.749066, weight -0.006500, product -0.0049
-dom_idx [1],	,	,	,	
-	, idx [55], input 0.145530, weight -0.006500, product -0.0009
-	, idx [56], input 0.140036, weight -0.005600, product -0.0008
-	, idx [57], input 0.143151, weight -0.006400, product -0.0009
-	, idx [58], input 0.124699, weight 0.036200, product 0.0045
-	, idx [59], input 0.156442, weight -0.006400, product -0.0010
-	, idx [61], input 0.126750, weight -0.006700, product -0.0008
-	, idx [62], input 0.139741, weight -0.006400, product -0.0009
-	, idx [63], input 0.170569, weight -0.006300, product -0.0011
-	, idx [64], input 0.121674, weight -0.006700, product -0.0008
-	, idx [65], input 0.138910, weight -0.006500, product -0.0009
-dom_idx [2],	,	,	,	
-dom_idx [3],	,	,	,	
-dom_idx [4],	,	,	,	
-dom_idx [5],	,	,	,	
-dom_idx [0],	,	,	,	
-	, idx [0], input -1.000000, weight 0.219100, product -0.2191
-	, idx [1], input -1.000000, weight 0.976000, product -0.9760
-	, idx [2], input -1.000000, weight -0.000000, product 0.0000
-	, idx [3], input -1.000000, weight 0.594200, product -0.5942
-	, idx [4], input -1.000000, weight -0.000000, product 0.0000
-	, idx [5], input 1.000000, weight 0.080100, product 0.0801
-	, idx [6], input -1.000000, weight 1.092500, product -1.0925
-	, idx [7], input -1.000000, weight 0.501000, product -0.5010
-	, idx [8], input -1.000000, weight -0.000000, product 0.0000
-	, idx [9], input -1.000000, weight 0.863000, product -0.8630
-	, idx [10], input -1.000000, weight 0.983900, product -0.9839
-dom_idx [1],	,	,	,	
-	, idx [0], input -1.000000, weight 0.219100, product -0.2191
-	, idx [1], input -1.000000, weight 0.976000, product -0.9760
-	, idx [2], input -1.000000, weight -0.000000, product 0.0000
-	, idx [3], input -1.000000, weight 0.594200, product -0.5942
-	, idx [4], input -1.000000, weight -0.000000, product 0.0000
-	, idx [5], input -1.000000, weight 0.080100, product -0.0801
-	, idx [6], input -1.000000, weight 1.092500, product -1.0925
-	, idx [7], input -1.000000, weight 0.501000, product -0.5010
-	, idx [8], input -1.000000, weight -0.000000, product 0.0000
-	, idx [9], input -1.000000, weight 0.863000, product -0.8630
-	, idx [10], input -1.000000, weight 0.983900, product -0.9839
-dom_idx [2],	,	,	,	
-	, idx [0], input -1.000000, weight 0.219100, product -0.2191
-	, idx [1], input -1.000000, weight 0.976000, product -0.9760
-	, idx [2], input -1.000000, weight -0.000000, product 0.0000
-	, idx [3], input -1.000000, weight 0.594200, product -0.5942
-	, idx [4], input -1.000000, weight -0.000000, product 0.0000
-	, idx [5], input -1.000000, weight 0.080100, product -0.0801
-	, idx [6], input -1.000000, weight 1.092500, product -1.0925
-	, idx [7], input -1.000000, weight 0.501000, product -0.5010
-	, idx [8], input -1.000000, weight -0.000000, product 0.0000
-	, idx [9], input -1.000000, weight 0.863000, product -0.8630
-	, idx [10], input -1.000000, weight 0.983900, product -0.9839
-dom_idx [3],	,	,	,	
-	, idx [0], input -1.000000, weight 0.219100, product -0.2191
-	, idx [1], input -1.000000, weight 0.976000, product -0.9760
-	, idx [2], input -1.000000, weight -0.000000, product 0.0000
-	, idx [3], input -1.000000, weight 0.594200, product -0.5942
-	, idx [4], input -1.000000, weight -0.000000, product 0.0000
-	, idx [5], input -1.000000, weight 0.080100, product -0.0801
-	, idx [6], input -1.000000, weight 1.092500, product -1.0925
-	, idx [7], input -1.000000, weight 0.501000, product -0.5010
-	, idx [8], input -1.000000, weight -0.000000, product 0.0000
-	, idx [9], input -1.000000, weight 0.863000, product -0.8630
-	, idx [10], input -1.000000, weight 0.983900, product -0.9839
-dom_idx [4],	,	,	,	
-	, idx [0], input -1.000000, weight 0.219100, product -0.2191
-	, idx [1], input -1.000000, weight 0.976000, product -0.9760
-	, idx [2], input -1.000000, weight -0.000000, product 0.0000
-	, idx [3], input -1.000000, weight 0.594200, product -0.5942
-	, idx [4], input -1.000000, weight -0.000000, product 0.0000
-	, idx [5], input -1.000000, weight 0.080100, product -0.0801
-	, idx [6], input -1.000000, weight 1.092500, product -1.0925
-	, idx [7], input -1.000000, weight 0.501000, product -0.5010
-	, idx [8], input -1.000000, weight -0.000000, product 0.0000
-	, idx [9], input -1.000000, weight 0.863000, product -0.8630
-	, idx [10], input -1.000000, weight 0.983900, product -0.9839
-dom_idx [5],	,	,	,	
-	, idx [0], input -1.000000, weight 0.219100, product -0.2191
-	, idx [1], input -1.000000, weight 0.976000, product -0.9760
-	, idx [2], input -1.000000, weight -0.000000, product 0.0000
-	, idx [3], input -1.000000, weight 0.594200, product -0.5942
-	, idx [4], input -1.000000, weight -0.000000, product 0.0000
-	, idx [5], input -1.000000, weight 0.080100, product -0.0801
-	, idx [6], input -1.000000, weight 1.092500, product -1.0925
-	, idx [7], input -1.000000, weight 0.501000, product -0.5010
-	, idx [8], input -1.000000, weight -0.000000, product 0.0000
-	, idx [9], input -1.000000, weight 0.863000, product -0.8630
-	, idx [10], input -1.000000, weight 0.983900, product -0.9839
-dom_idx [0],	,	,	,	
-	, idx [5], input -1.000000, weight -0.036200, product 0.0362
-dom_idx [1],	,	,	,	
-dom_idx [2],	,	,	,	
-dom_idx [3],	,	,	,	
-dom_idx [4],	,	,	,	
-dom_idx [5],	,	,	,	
-dom_idx [0],	,	,	,	
-	, idx [1], input 0.990598, weight -0.000000, product -0.0000
-	, idx [11], input 0.267443, weight -0.018300, product -0.0049
-dom_idx [1],	,	,	,	
-	, idx [1], input 0.136805, weight -0.000000, product -0.0000
-	, idx [11], input 0.963574, weight -0.018300, product -0.0176
-dom_idx [2],	,	,	,	
-dom_idx [3],	,	,	,	
-dom_idx [4],	,	,	,	
-dom_idx [5],	,	,	,	
-dom_idx [0],	,	,	,	
-	, idx [5], input 0.775667, weight -0.006600, product -0.0051
-dom_idx [1],	,	,	,	
-	, idx [5], input 0.124000, weight -0.006600, product -0.0008
-dom_idx [2],	,	,	,	
-dom_idx [3],	,	,	,	
-dom_idx [4],	,	,	,	
-dom_idx [5],	,	,	,	
+feat LangModelFeat, dom_idx [0],	,	,	,	
+feat LangModelFeat, dom_idx [0], idx [50], input -0.007248, weight -0.000000, product 0.0000
+feat LangModelFeat, dom_idx [0], idx [51], input 0.024645, weight -0.000000, product -0.0000
+feat LangModelFeat, dom_idx [0], idx [52], input 0.002113, weight 0.000000, product 0.0000
+feat LangModelFeat, dom_idx [0], idx [53], input -0.013286, weight 0.000000, product -0.0000
+feat LangModelFeat, dom_idx [0], idx [54], input -0.011919, weight -0.000000, product 0.0000
+feat LangModelFeat, dom_idx [0], idx [55], input 0.001851, weight -0.000000, product -0.0000
+feat LangModelFeat, dom_idx [0], idx [56], input -0.014295, weight 0.000000, product -0.0000
+feat LangModelFeat, dom_idx [0], idx [57], input 0.012970, weight 0.000000, product 0.0000
+feat LangModelFeat, dom_idx [0], idx [58], input 0.019879, weight -0.000000, product -0.0000
+feat LangModelFeat, dom_idx [0], idx [59], input 0.019787, weight -0.000000, product -0.0000
+feat LangModelFeat, dom_idx [1],	,	,	,	
+feat LangModelFeat, dom_idx [1], idx [50], input 0.005969, weight -0.000000, product -0.0000
+feat LangModelFeat, dom_idx [1], idx [51], input 0.012176, weight -0.000000, product -0.0000
+feat LangModelFeat, dom_idx [1], idx [52], input -0.002992, weight 0.000000, product -0.0000
+feat LangModelFeat, dom_idx [1], idx [53], input 0.017082, weight 0.000000, product 0.0000
+feat LangModelFeat, dom_idx [1], idx [54], input 0.008649, weight -0.000000, product -0.0000
+feat LangModelFeat, dom_idx [1], idx [55], input 0.001420, weight -0.000000, product -0.0000
+feat LangModelFeat, dom_idx [1], idx [56], input 0.001245, weight 0.000000, product 0.0000
+feat LangModelFeat, dom_idx [1], idx [57], input 0.007179, weight 0.000000, product 0.0000
+feat LangModelFeat, dom_idx [1], idx [58], input -0.002488, weight -0.000000, product 0.0000
+feat LangModelFeat, dom_idx [1], idx [59], input 0.009082, weight -0.000000, product -0.0000
+feat LangModelFeat, dom_idx [2],	,	,	,	
+feat LangModelFeat, dom_idx [3],	,	,	,	
+feat LangModelFeat, dom_idx [4],	,	,	,	
+feat LangModelFeat, dom_idx [5],	,	,	,	
+feat OccurAttrFeaturizer, dom_idx [0],	,	,	,	
+feat OccurAttrFeaturizer, dom_idx [0], idx [55], input 0.744699, weight -0.006500, product -0.0048
+feat OccurAttrFeaturizer, dom_idx [0], idx [56], input 0.751347, weight -0.005600, product -0.0042
+feat OccurAttrFeaturizer, dom_idx [0], idx [57], input 0.790937, weight -0.006400, product -0.0051
+feat OccurAttrFeaturizer, dom_idx [0], idx [58], input 0.791824, weight 0.036200, product 0.0287
+feat OccurAttrFeaturizer, dom_idx [0], idx [59], input 0.763804, weight -0.006400, product -0.0049
+feat OccurAttrFeaturizer, dom_idx [0], idx [61], input 0.783201, weight -0.006700, product -0.0052
+feat OccurAttrFeaturizer, dom_idx [0], idx [62], input 0.759373, weight -0.006400, product -0.0049
+feat OccurAttrFeaturizer, dom_idx [0], idx [63], input 0.719064, weight -0.006300, product -0.0045
+feat OccurAttrFeaturizer, dom_idx [0], idx [64], input 0.786094, weight -0.006700, product -0.0053
+feat OccurAttrFeaturizer, dom_idx [0], idx [65], input 0.749066, weight -0.006500, product -0.0049
+feat OccurAttrFeaturizer, dom_idx [1],	,	,	,	
+feat OccurAttrFeaturizer, dom_idx [1], idx [55], input 0.145530, weight -0.006500, product -0.0009
+feat OccurAttrFeaturizer, dom_idx [1], idx [56], input 0.140036, weight -0.005600, product -0.0008
+feat OccurAttrFeaturizer, dom_idx [1], idx [57], input 0.143151, weight -0.006400, product -0.0009
+feat OccurAttrFeaturizer, dom_idx [1], idx [58], input 0.124699, weight 0.036200, product 0.0045
+feat OccurAttrFeaturizer, dom_idx [1], idx [59], input 0.156442, weight -0.006400, product -0.0010
+feat OccurAttrFeaturizer, dom_idx [1], idx [61], input 0.126750, weight -0.006700, product -0.0008
+feat OccurAttrFeaturizer, dom_idx [1], idx [62], input 0.139741, weight -0.006400, product -0.0009
+feat OccurAttrFeaturizer, dom_idx [1], idx [63], input 0.170569, weight -0.006300, product -0.0011
+feat OccurAttrFeaturizer, dom_idx [1], idx [64], input 0.121674, weight -0.006700, product -0.0008
+feat OccurAttrFeaturizer, dom_idx [1], idx [65], input 0.138910, weight -0.006500, product -0.0009
+feat OccurAttrFeaturizer, dom_idx [2],	,	,	,	
+feat OccurAttrFeaturizer, dom_idx [3],	,	,	,	
+feat OccurAttrFeaturizer, dom_idx [4],	,	,	,	
+feat OccurAttrFeaturizer, dom_idx [5],	,	,	,	
+feat InitAttFeaturizer, dom_idx [0],	,	,	,	
+feat InitAttFeaturizer, dom_idx [0], idx [0], input -1.000000, weight 0.219100, product -0.2191
+feat InitAttFeaturizer, dom_idx [0], idx [1], input -1.000000, weight 0.976000, product -0.9760
+feat InitAttFeaturizer, dom_idx [0], idx [2], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [0], idx [3], input -1.000000, weight 0.594200, product -0.5942
+feat InitAttFeaturizer, dom_idx [0], idx [4], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [0], idx [5], input 1.000000, weight 0.080100, product 0.0801
+feat InitAttFeaturizer, dom_idx [0], idx [6], input -1.000000, weight 1.092500, product -1.0925
+feat InitAttFeaturizer, dom_idx [0], idx [7], input -1.000000, weight 0.501000, product -0.5010
+feat InitAttFeaturizer, dom_idx [0], idx [8], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [0], idx [9], input -1.000000, weight 0.863000, product -0.8630
+feat InitAttFeaturizer, dom_idx [0], idx [10], input -1.000000, weight 0.983900, product -0.9839
+feat InitAttFeaturizer, dom_idx [1],	,	,	,	
+feat InitAttFeaturizer, dom_idx [1], idx [0], input -1.000000, weight 0.219100, product -0.2191
+feat InitAttFeaturizer, dom_idx [1], idx [1], input -1.000000, weight 0.976000, product -0.9760
+feat InitAttFeaturizer, dom_idx [1], idx [2], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [1], idx [3], input -1.000000, weight 0.594200, product -0.5942
+feat InitAttFeaturizer, dom_idx [1], idx [4], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [1], idx [5], input -1.000000, weight 0.080100, product -0.0801
+feat InitAttFeaturizer, dom_idx [1], idx [6], input -1.000000, weight 1.092500, product -1.0925
+feat InitAttFeaturizer, dom_idx [1], idx [7], input -1.000000, weight 0.501000, product -0.5010
+feat InitAttFeaturizer, dom_idx [1], idx [8], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [1], idx [9], input -1.000000, weight 0.863000, product -0.8630
+feat InitAttFeaturizer, dom_idx [1], idx [10], input -1.000000, weight 0.983900, product -0.9839
+feat InitAttFeaturizer, dom_idx [2],	,	,	,	
+feat InitAttFeaturizer, dom_idx [2], idx [0], input -1.000000, weight 0.219100, product -0.2191
+feat InitAttFeaturizer, dom_idx [2], idx [1], input -1.000000, weight 0.976000, product -0.9760
+feat InitAttFeaturizer, dom_idx [2], idx [2], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [2], idx [3], input -1.000000, weight 0.594200, product -0.5942
+feat InitAttFeaturizer, dom_idx [2], idx [4], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [2], idx [5], input -1.000000, weight 0.080100, product -0.0801
+feat InitAttFeaturizer, dom_idx [2], idx [6], input -1.000000, weight 1.092500, product -1.0925
+feat InitAttFeaturizer, dom_idx [2], idx [7], input -1.000000, weight 0.501000, product -0.5010
+feat InitAttFeaturizer, dom_idx [2], idx [8], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [2], idx [9], input -1.000000, weight 0.863000, product -0.8630
+feat InitAttFeaturizer, dom_idx [2], idx [10], input -1.000000, weight 0.983900, product -0.9839
+feat InitAttFeaturizer, dom_idx [3],	,	,	,	
+feat InitAttFeaturizer, dom_idx [3], idx [0], input -1.000000, weight 0.219100, product -0.2191
+feat InitAttFeaturizer, dom_idx [3], idx [1], input -1.000000, weight 0.976000, product -0.9760
+feat InitAttFeaturizer, dom_idx [3], idx [2], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [3], idx [3], input -1.000000, weight 0.594200, product -0.5942
+feat InitAttFeaturizer, dom_idx [3], idx [4], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [3], idx [5], input -1.000000, weight 0.080100, product -0.0801
+feat InitAttFeaturizer, dom_idx [3], idx [6], input -1.000000, weight 1.092500, product -1.0925
+feat InitAttFeaturizer, dom_idx [3], idx [7], input -1.000000, weight 0.501000, product -0.5010
+feat InitAttFeaturizer, dom_idx [3], idx [8], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [3], idx [9], input -1.000000, weight 0.863000, product -0.8630
+feat InitAttFeaturizer, dom_idx [3], idx [10], input -1.000000, weight 0.983900, product -0.9839
+feat InitAttFeaturizer, dom_idx [4],	,	,	,	
+feat InitAttFeaturizer, dom_idx [4], idx [0], input -1.000000, weight 0.219100, product -0.2191
+feat InitAttFeaturizer, dom_idx [4], idx [1], input -1.000000, weight 0.976000, product -0.9760
+feat InitAttFeaturizer, dom_idx [4], idx [2], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [4], idx [3], input -1.000000, weight 0.594200, product -0.5942
+feat InitAttFeaturizer, dom_idx [4], idx [4], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [4], idx [5], input -1.000000, weight 0.080100, product -0.0801
+feat InitAttFeaturizer, dom_idx [4], idx [6], input -1.000000, weight 1.092500, product -1.0925
+feat InitAttFeaturizer, dom_idx [4], idx [7], input -1.000000, weight 0.501000, product -0.5010
+feat InitAttFeaturizer, dom_idx [4], idx [8], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [4], idx [9], input -1.000000, weight 0.863000, product -0.8630
+feat InitAttFeaturizer, dom_idx [4], idx [10], input -1.000000, weight 0.983900, product -0.9839
+feat InitAttFeaturizer, dom_idx [5],	,	,	,	
+feat InitAttFeaturizer, dom_idx [5], idx [0], input -1.000000, weight 0.219100, product -0.2191
+feat InitAttFeaturizer, dom_idx [5], idx [1], input -1.000000, weight 0.976000, product -0.9760
+feat InitAttFeaturizer, dom_idx [5], idx [2], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [5], idx [3], input -1.000000, weight 0.594200, product -0.5942
+feat InitAttFeaturizer, dom_idx [5], idx [4], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [5], idx [5], input -1.000000, weight 0.080100, product -0.0801
+feat InitAttFeaturizer, dom_idx [5], idx [6], input -1.000000, weight 1.092500, product -1.0925
+feat InitAttFeaturizer, dom_idx [5], idx [7], input -1.000000, weight 0.501000, product -0.5010
+feat InitAttFeaturizer, dom_idx [5], idx [8], input -1.000000, weight -0.000000, product 0.0000
+feat InitAttFeaturizer, dom_idx [5], idx [9], input -1.000000, weight 0.863000, product -0.8630
+feat InitAttFeaturizer, dom_idx [5], idx [10], input -1.000000, weight 0.983900, product -0.9839
+feat InitSimFeaturizer, dom_idx [0],	,	,	,	
+feat InitSimFeaturizer, dom_idx [0], idx [5], input -1.000000, weight -0.036200, product 0.0362
+feat InitSimFeaturizer, dom_idx [1],	,	,	,	
+feat InitSimFeaturizer, dom_idx [2],	,	,	,	
+feat InitSimFeaturizer, dom_idx [3],	,	,	,	
+feat InitSimFeaturizer, dom_idx [4],	,	,	,	
+feat InitSimFeaturizer, dom_idx [5],	,	,	,	
+feat ConstraintFeat, dom_idx [0],	,	,	,	
+feat ConstraintFeat, dom_idx [0], idx [1], input 0.990598, weight -0.000000, product -0.0000
+feat ConstraintFeat, dom_idx [0], idx [11], input 0.267443, weight -0.018300, product -0.0049
+feat ConstraintFeat, dom_idx [1],	,	,	,	
+feat ConstraintFeat, dom_idx [1], idx [1], input 0.136805, weight -0.000000, product -0.0000
+feat ConstraintFeat, dom_idx [1], idx [11], input 0.963574, weight -0.018300, product -0.0176
+feat ConstraintFeat, dom_idx [2],	,	,	,	
+feat ConstraintFeat, dom_idx [3],	,	,	,	
+feat ConstraintFeat, dom_idx [4],	,	,	,	
+feat ConstraintFeat, dom_idx [5],	,	,	,	
+feat FreqFeaturizer, dom_idx [0],	,	,	,	
+feat FreqFeaturizer, dom_idx [0], idx [5], input 0.775667, weight -0.006600, product -0.0051
+feat FreqFeaturizer, dom_idx [1],	,	,	,	
+feat FreqFeaturizer, dom_idx [1], idx [5], input 0.124000, weight -0.006600, product -0.0008
+feat FreqFeaturizer, dom_idx [2],	,	,	,	
+feat FreqFeaturizer, dom_idx [3],	,	,	,	
+feat FreqFeaturizer, dom_idx [4],	,	,	,	
+feat FreqFeaturizer, dom_idx [5],	,	,	,	
