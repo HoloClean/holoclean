@@ -104,7 +104,12 @@ flags = [
         {'default': False,
          'dest': 'bias',
          'action': 'store_true',
-         'help': 'Use bias term'})
+         'help': 'Use bias term'}),
+    (tuple(['--printfw']),
+        {'default': False,
+         'dest': 'print_feat_weights',
+         'action': 'store_true',
+         'help': 'print the weights of featurizers'})
 ]
 
 class HoloClean:
@@ -236,7 +241,12 @@ class Session:
         status, time = self.ds.get_repaired_dataset()
         print(status)
         if self.env['verbose']:
+            print('Time to collect inferred values: %.2f secs' % time)
+        status, time, report = self.repair_engine.get_featurizer_weights()
+        print(status)
+        if self.env['verbose']:
             print('Time to store repaired dataset: %.2f secs' % time)
+        return report
 
     def evaluate(self, fpath, tid_col, attr_col, val_col, na_values=None):
         """
@@ -254,7 +264,8 @@ class Session:
         print(status)
         if self.env['verbose']:
             print('Time to evaluate repairs: %.2f secs'%load_time)
-        status, report_time = self.eval_engine.eval_report()
+        status, report_time, report_list = self.eval_engine.eval_report()
         print(status)
         if self.env['verbose']:
             print('Time to generate report: %.2f secs' % report_time)
+        return report_list

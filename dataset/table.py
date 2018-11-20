@@ -49,6 +49,8 @@ class Table:
             for attr in self.df.columns.values:
                 if attr not in exclude_attr_cols:
                     self.df[attr] = self.df[attr].str.strip().str.lower()
+            # have to lower the columns to match with clean data for now
+            self.df.columns = map(str.lower, self.df.columns)
         elif src == Source.DF:
             if df is None:
                 raise Exception("ERROR while loading table. Dataframe expected. Please provide <df> param.")
@@ -82,6 +84,9 @@ class Table:
 
     def create_db_index(self, dbengine, attr_list):
         index_name = '{name}_{idx}'.format(name=self.name, idx=self.index_count)
-        dbengine.create_db_index(index_name, self.name, attr_list)
-        self.index_count += 1
+        try:
+            dbengine.create_db_index(index_name, self.name, attr_list)
+            self.index_count += 1
+        except:
+            raise Exception("ERROR while creating index for table %s on attributes %s"%(self.name, str(attr_list)))
         return
