@@ -119,7 +119,7 @@ class DBengine:
         :param attr: (list[str]) list of attributes/columns to create index on
         """
         # We need to quote each attribute since Postgres auto-downcases unquoted column references
-        quoted_attrs = map(lambda attr: '"{}"'.format(attr), attr_list)
+        quoted_attrs = ['"{}"'.format(attr) for attr in attr_list]
         stmt = index_template.substitute(idx_title=name, table=table, attr=','.join(quoted_attrs))
         tic = time.clock()
         conn = self.engine.connect()
