@@ -17,8 +17,8 @@ class TestHolocleanRepair(unittest.TestCase):
         hc = holoclean.HoloClean(pruning_topk=0.1, epochs=30, weight_decay=0.01, threads=20, batch_size=1, verbose=True, timeout=3*60000).session
 
         # 2. Load training data and denial constraints.
-        hc.load_data('hospital', 'data/hospital.csv')
-        hc.load_dcs('data/hospital_constraints_att.txt')
+        hc.load_data('hospital', '../testdata/hospital.csv')
+        hc.load_dcs('../testdata/hospital_constraints_att.txt')
         hc.ds.set_constraints(hc.get_dcs())
 
         # 3. Detect erroneous cells using these two detectors.
@@ -31,7 +31,7 @@ class TestHolocleanRepair(unittest.TestCase):
         hc.repair_errors(featurizers)
 
         # 5. Evaluate the correctness of the results.
-        hc.evaluate('data/hospital_clean.csv', 'tid', 'attribute', 'correct_val')
+        hc.evaluate('../testdata/hospital_clean.csv', 'tid', 'attribute', 'correct_val')
 
 if __name__ == '__main__':
     unitttest.main()
