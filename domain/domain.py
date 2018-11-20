@@ -1,3 +1,4 @@
+import logging
 import pandas as pd
 import time
 from tqdm import tqdm
@@ -22,7 +23,6 @@ class DomainEngine:
         self.env = env
         self.ds = dataset
         self.topk = env["pruning_topk"]
-        self.verbose = env['verbose']
         self.setup_complete = False
         self.active_attributes = None
         self.raw_data = None
@@ -42,15 +42,12 @@ class DomainEngine:
         'cell_domain', 'pos_values').
         """
         tic = time.time()
-        try:
-            random.seed(self.env['seed'])
-            self.find_correlations()
-            self.setup_attributes()
-            domain = self.generate_domain()
-            self.store_domains(domain)
-            status = "DONE with domain preparation."
-        except Exception as e:
-            status = "ERROR setting up domain: %s"%str(e)
+        random.seed(self.env['seed'])
+        self.find_correlations()
+        self.setup_attributes()
+        domain = self.generate_domain()
+        self.store_domains(domain)
+        status = "DONE with domain preparation."
         toc = time.time()
         return status, toc - tic
 
@@ -95,22 +92,15 @@ class DomainEngine:
             self.ds.generate_aux_table_sql(AuxTables.pos_values, query, index_attrs=['_tid_', 'attribute'])
 
     def setup_attributes(self):
-        try:
-            self.active_attributes = self.get_active_attributes()
-        except Exception as e:
-            print("ERROR in domain generation: %s"%str(e))
+        self.active_attributes = self.get_active_attributes()
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total
         self.single_stats = single_stats
-        try:
-            tic = time.clock()
-            self.pair_stats = self.preproc_pair_stats(pair_stats)
-            toc = time.clock()
-            if self.verbose:
-                prep_time = toc - tic
-                print("DONE with pair stats preparation in %.2f secs"%prep_time)
-        except Exception as e:
-            print("ERROR in pair statistics preprocessing: %s" % str(e))
+        tic = time.clock()
+        self.pair_stats = self.preproc_pair_stats(pair_stats)
+        toc = time.clock()
+        prep_time = toc - tic
+        logging.debug("DONE with pair stats preparation in %.2f secs", prep_time)
         self.setup_complete = True
 
     def preproc_pair_stats(self, pair_stats):

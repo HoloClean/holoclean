@@ -1,3 +1,5 @@
+import logging
+
 operationsArr = ['<>', '<=', '>=', '=', '<', '>', ]
 operationSign = ['IQ', 'LTE', 'GTE', 'EQ', 'LT', 'GT']
 
@@ -23,7 +25,7 @@ class DenialConstraint:
     Class that defines the denial constraints
     """
 
-    def __init__(self, dc_string, schema, verbose=False):
+    def __init__(self, dc_string, schema):
         """
         Constructing denial constraint object
         This class contains a list of predicates and the tuple_names which define a Denial Constraint
@@ -38,23 +40,21 @@ class DenialConstraint:
         self.components = []
 
         # Find all tuple names used in DC
-        if verbose:
-            print('DONE pre-processing constraint: '+dc_string)
+        logging.info('DONE pre-processing constraint: %s', dc_string)
         for component in split:
             if contains_operation(component):
                 break
             else:
                 self.tuple_names.append(component)
-        if verbose:
-            print('DONE extracting tuples from constraint: ' + dc_string)
+        logging.debug('DONE extracting tuples from constraint: %s', dc_string)
 
         # Make a predicate for each component that's not a tuple name
         for i in range(len(self.tuple_names), len(split)):
             try:
-                self.predicates.append(Predicate(split[i], self.tuple_names, schema, verbose))
-            except Exception as e:
-                error = ' '.join(['ERROR with predicate',split[i],str(e)])
-                raise Exception(error)
+                self.predicates.append(Predicate(split[i], self.tuple_names, schema))
+            except Exception:
+                logging.error('predicate %s', split[i])
+                raise
         for p in self.predicates:
             self.components.append(p.components[0][1])
 
@@ -69,7 +69,7 @@ class Predicate:
     This class represents predicates
     """
 
-    def __init__(self, predicate_string, tuple_names, schema, verbose):
+    def __init__(self, predicate_string, tuple_names, schema):
         """
         Constructing predicate object
         :param predicate_string: string shows the predicate
@@ -94,8 +94,7 @@ class Predicate:
                 self.cnf_form += component[0] + "." + component[1]
             if i < len(self.components) - 1:
                 self.cnf_form += self.operation
-        if verbose:
-            print("DONE parsing predicate: "+predicate_string)
+        logging.info("DONE parsing predicate: %s", predicate_string)
         return
 
     def parse_components(self, predicate_string):
