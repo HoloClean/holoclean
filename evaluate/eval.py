@@ -153,20 +153,17 @@ class EvalEngine:
     def compute_recall(self):
         if self.total_errors == 0:
             return 0
-        else:
-            return self.correct_repairs / self.total_errors
+        return self.correct_repairs / self.total_errors
 
     def compute_repairing_recall(self):
         if self.detected_errors == 0:
             return 0
-        else:
-            return self.correct_repairs / self.detected_errors
+        return self.correct_repairs / self.detected_errors
 
     def compute_precision(self):
         if self.total_repairs_grdt == 0:
             return 0
-        else:
-            return self.correct_repairs / self.total_repairs_grdt
+        return self.correct_repairs / self.total_repairs_grdt
 
     def compute_f1(self):
         prec = self.compute_precision()
