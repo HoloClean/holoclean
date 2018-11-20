@@ -220,12 +220,14 @@ class Session:
         status, time = self.ds.get_repaired_dataset()
         print(status)
         if self.env['verbose']:
-            print('Time to collect inferred values: %.2f secs' % time)
-        status, time, report = self.repair_engine.get_featurizer_weights()
-        print(status)
-        if self.env['verbose']:
             print('Time to store repaired dataset: %.2f secs' % time)
-        return report
+        if self.env['print_feat_weights']:
+            status, time = self.repair_engine.get_featurizer_weights()
+            print(status)
+            if self.env['verbose']:
+                print('Time to store featurizer weights: %.2f secs' % time)
+            return status
+        
 
     def evaluate(self, f_path, f_name, get_tid, get_attr, get_value, na_values=None):
         name = self.ds.raw_data.name + '_clean'
