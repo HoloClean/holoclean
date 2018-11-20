@@ -151,25 +151,22 @@ class EvalEngine:
         self.correct_repairs = correct_repairs
 
     def compute_recall(self):
-        try:
+        if self.total_errors == 0:
+            return 0
+        else:
             return self.correct_repairs / self.total_errors
-        except Exception as e:
-            print("ERROR computing recall: %s" % str(e))
-            return -1
 
     def compute_repairing_recall(self):
-        try:
+        if self.detected_errors == 0:
+            return 0
+        else:
             return self.correct_repairs / self.detected_errors
-        except Exception as e:
-            print("ERROR computing repairing recall: %s" % str(e))
-            return -1
 
     def compute_precision(self):
-        try:
+        if self.total_repairs_grdt == 0:
+            return 0
+        else:
             return self.correct_repairs / self.total_repairs_grdt
-        except Exception as e:
-            print("ERROR computing precision: %s" % str(e))
-            return -1
 
     def compute_f1(self):
         prec = self.compute_precision()
