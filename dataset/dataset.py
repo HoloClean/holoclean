@@ -1,6 +1,8 @@
 import logging
 import time
 from enum import Enum
+import os
+import time
 import pandas as pd
 
 from .dbengine import DBengine
@@ -55,7 +57,7 @@ class Dataset:
                                timeout=env['timeout'])
         # members to convert (tuple_id, attribute) to cell_id
         self.attr_to_idx = {}
-        self.attr_number = 0
+        self.attr_count = 0
         # dataset statistics
         self.stats_ready = False
         # Total tuples
@@ -65,44 +67,66 @@ class Dataset:
         # Domain stats for attribute pairs
         self.pair_attr_stats = {}
 
-    # Fixed to load data from a CSV file at the moment.
-    def load_data(self, name, f_path, f_name, na_values=None):
+    # TODO(richardwu): load more than just CSV files
+    def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None):
         """
         load_data takes a CSV file of the initial data, adds tuple IDs (_tid_)
         to each row to uniquely identify an 'entity', and generates unique
         index numbers for each attribute/column.
 
         Creates a table with the user supplied 'name' parameter (e.g. 'hospital').
-        """
 
+        :param name: (str) name to initialize dataset with.
+        :param fpath: (str) filepath to CSV file.
+        :param na_values: (str) value that identifies a NULL value
+        :param entity_col: (str) column containing the unique
+            identifier/ID of an entity.  For fusion tasks, rows with
+            the same ID will be fused together in the output.
+            If None, assumes every row is a unique entity.
+        :param src_col: (str) if not None, for fusion tasks
+            specifies the column containing the source for each "mention" of an
+            entity.
+        """
         tic = time.clock()
         try:
-            # Load raw CSV file/data into the Postgres 'init_X' table.
+            # Do not include TID and source column as trainable attributes
+            exclude_attr_cols = ['_tid_']
+            if src_col is not None:
+                exclude_attr_cols.append(src_col)
 
-            self.raw_data = Table(name, Source.FILE, f_path, f_name, na_values)
-            # Add _tid_ column to dataset
+            # Load raw CSV file/data into a Postgres table 'name' (param).
+            self.raw_data = Table(name, Source.FILE, na_values=na_values,
+                    exclude_attr_cols=exclude_attr_cols, fpath=fpath)
+
             df = self.raw_data.df
-            df.insert(0,'_tid_', range(0,len(df)))
-            df.fillna('_nan_',inplace=True)
+            # Add _tid_ column to dataset that uniquely identifies an entity.
+            # If entity_col is not supplied, use auto-incrementing values.
+            # Otherwise we use the entity values directly as _tid_'s.
+            if entity_col is None:
+                # auto-increment
+                df.insert(0, '_tid_', range(0,len(df)))
+            else:
+                # use entity IDs as _tid_'s directly
+                df.rename({entity_col: '_tid_'}, axis='columns', inplace=True)
+
+            # Use '_nan_' to represent NULL values
+            df.fillna('_nan_', inplace=True)
+
             # Call to store to database
+
             self.raw_data.store_to_db(self.engine.engine)
-            status = 'DONE Loading '+f_name
+            status = 'DONE Loading {fname}'.format(fname=os.path.basename(fpath))
 
             # Generate indexes on attribute columns for faster queries
-
             for attr in self.raw_data.get_attributes():
                 # Generate index on attribute
                 self.raw_data.create_db_index(self.engine,[attr])
 
             # Create attr_to_idx dictionary (assign unique index for each attribute)
-            # and attr_number (total # of attributes)
+            # and attr_count (total # of attributes)
 
-            tmp_attr_list = self.raw_data.get_attributes()
-            tmp_attr_list.remove('_tid_')
-            for idx, attr in enumerate(tmp_attr_list):
-                # Map attribute to index
-                self.attr_to_idx[attr] = idx
-            self.attr_number = len(self.raw_data.get_attributes())
+            self.attr_to_idx = {attr: idx for idx, attr in enumerate(self.raw_data.get_attributes())}
+            self.attr_count = len(self.attr_to_idx)
         except Exception:
             logging.error('loading data for table %s', name)
             raise
@@ -123,14 +147,14 @@ class Dataset:
           2. sets an index on the aux_table's internal Pandas DataFrame (index_attrs=[<columns>]), AND/OR
           3. creates Postgres indexes for aux_table (store=True and index_attrs=[<columns>])
 
-        :param aux_table: (str) name of auxiliary table (see AuxTables)
+        :param aux_table: (AuxTable) auxiliary table to generate
         :param df: (DataFrame) dataframe to memoize/store for this auxiliary table
         :param store: (bool) if true, creates/replaces Postgres table for this auxiliary table
         :param index_attrs: (list[str]) list of attributes to create indexes on. If store is true,
         also creates indexes on Postgres table.
         """
         try:
-            self.aux_table[aux_table] = Table(aux_table.name, Source.DF, df)
+            self.aux_table[aux_table] = Table(aux_table.name, Source.DF, df=df)
             if store:
                 self.aux_table[aux_table].store_to_db(self.engine.engine)
             if index_attrs:
@@ -142,8 +166,12 @@ class Dataset:
             raise
 
     def generate_aux_table_sql(self, aux_table, query, index_attrs=False):
+        """
+        :param aux_table: (AuxTable) auxiliary table to generate
+        :param query: (str) SQL query whose result is used for generating the auxiliary table.
+        """
         try:
-            self.aux_table[aux_table] = Table(aux_table.name, Source.SQL, query, self.engine)
+            self.aux_table[aux_table] = Table(aux_table.name, Source.SQL, table_query=query, db_engine=self.engine)
             if index_attrs:
                 self.aux_table[aux_table].create_df_index(index_attrs)
                 self.aux_table[aux_table].create_db_index(self.engine, index_attrs)
@@ -153,7 +181,7 @@ class Dataset:
 
     def get_raw_data(self):
         """
-        Is this guaranteed sorted by TID?
+        get_raw_data returns a pandas.DataFrame containing the raw data as it was initially loaded.
         """
         if self.raw_data:
             return self.raw_data.df
@@ -161,12 +189,13 @@ class Dataset:
             raise Exception('ERROR No dataset loaded')
 
     def get_attributes(self):
-        if self.raw_data:
-            attrs = self.raw_data.get_attributes()
-            attrs.remove('_tid_')
-            return attrs
-        else:
+        """
+        get_attributes return the trainable/learnable attributes (i.e. exclude meta
+        columns like _tid_).
+        """
+        if self.raw_data is None:
             raise Exception('ERROR No dataset loaded')
+        return self.raw_data.get_attributes()
 
     def get_cell_id(self, tuple_id, attr_name):
         """
@@ -174,7 +203,7 @@ class Dataset:
 
         Cell ID: _tid_ * (# of attributes) + attr_idx
         """
-        vid = tuple_id*self.attr_number + self.attr_to_idx[attr_name]
+        vid = tuple_id*self.attr_count + self.attr_to_idx[attr_name]
 
         return vid
 
@@ -262,7 +291,7 @@ class Dataset:
                 init_records[tid][attr] = repaired_vals[tid][attr]
         repaired_df = pd.DataFrame.from_records(init_records)
         name = self.raw_data.name+'_repaired'
-        self.repaired_data = Table(name, Source.DF, repaired_df)
+        self.repaired_data = Table(name, Source.DF, df=repaired_df)
         self.repaired_data.store_to_db(self.engine.engine)
         status = "DONE generating repaired dataset"
         toc = time.clock()

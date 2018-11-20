@@ -80,11 +80,10 @@ class ViolationDetector(Detector):
         return query
 
     def gen_tid_attr_output(self, res, attr_list):
-        attrs = [x.lower() for x in attr_list]
         errors = []
         for tuple in res:
             tid = int(tuple[0])
-            for attr in attrs:
+            for attr in attr_list:
                 errors.append({'_tid_': tid, 'attribute': attr})
         error_df  = pd.DataFrame(data=errors)
         return error_df

@@ -148,12 +148,12 @@ If you are on MacOS, you may need to install XCode developer tools using the com
 
 ## Usage
 
-See the code in `tests/test_holoclean.py` for a documented usage of HoloClean.
+See the code in `examples/holoclean_repair_example.py` for a documented usage of HoloClean.
 
-In order to run the test script, run the following:
+In order to run the example script, run the following:
 ```bash
-$ cd tests
-$ ./start_test.sh
+$ cd examples
+$ ./start_example.sh
 ```
 
 The script sets up the python path environment for running holoclean.
