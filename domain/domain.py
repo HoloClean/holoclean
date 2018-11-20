@@ -1,3 +1,4 @@
+import logging
 import pandas as pd
 import time
 from tqdm import tqdm
@@ -13,7 +14,6 @@ class DomainEngine:
         self.env = env
         self.ds = dataset
         self.topk = env["pruning_topk"]
-        self.verbose = env['verbose']
         self.setup_complete = False
         self.active_attributes = None
         self.raw_data = None
@@ -69,9 +69,8 @@ class DomainEngine:
         tic = time.clock()
         self.pair_stats = self.preproc_pair_stats(pair_stats)
         toc = time.clock()
-        if self.verbose:
-            prep_time = toc - tic
-            print("DONE with pair stats preparation in %.2f secs"%prep_time)
+        prep_time = toc - tic
+        logging.debug("DONE with pair stats preparation in %.2f secs", prep_time)
         self.setup_complete = True
 
     def preproc_pair_stats(self, pair_stats):

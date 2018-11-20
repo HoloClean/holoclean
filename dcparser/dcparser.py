@@ -1,6 +1,9 @@
+import logging
 import os
 import time
+
 from .constraint import DenialConstraint
+
 
 class Parser:
     """
@@ -33,16 +36,15 @@ class Parser:
         try:
             dc_file = open(os.path.join(f_path,f_name), 'r')
             status = "OPENED constraints file successfully"
-            if self.env['verbose']:
-                print (status)
+            logging.debug(status)
             for line in dc_file:
                 if not line.isspace():
                     line = line.rstrip()
                     self.dc_strings.append(line)
-                    self.dcs[line] = (DenialConstraint(line,attrs,self.env['verbose']))
+                    self.dcs[line] = (DenialConstraint(line,attrs))
             status = 'DONE Loading DCs from ' + f_name
         except Exception:
-            print('ERROR loading constraints for file {}'.format(f_name))
+            logging.error('loading constraints for file %s', f_name)
             raise
         toc = time.clock()
         return status, toc - tic

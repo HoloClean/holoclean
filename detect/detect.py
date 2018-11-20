@@ -1,5 +1,7 @@
+import logging
 import pandas as pd
 import time
+
 from dataset import AuxTables
 
 
@@ -17,8 +19,7 @@ class DetectEngine:
             tic = time.clock()
             error_df = detector.detect_noisy_cells()
             toc = time.clock()
-            if self.env['verbose']:
-                print("DONE with Error Detector: %s in %.2f secs"%(detector.name, toc-tic))
+            logging.debug("DONE with Error Detector: %s in %.2f secs", detector.name, toc-tic)
             errors.append(error_df)
         errors_df = pd.concat(errors, ignore_index=True).drop_duplicates().reset_index(drop=True)
         errors_df['_cid_'] = errors_df.apply(lambda x: self.ds.get_cell_id(x['_tid_'], x['attribute']), axis=1)
