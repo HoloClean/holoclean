@@ -14,8 +14,18 @@ class FeaturizedDataset:
             f.setup_featurizer(self.ds, self.total_vars, self.classes, self.processes)
         tensors = [f.create_tensor() for f in featurizers]
         # save size info of all featurizers
-        self.featurizer_info = [(str(type(featurizers[i])), t.cpu().numpy().shape[2]) for i, t in enumerate(tensors)]
+        self.featurizer_info = [(str(type(featurizers[i])), t.size()[2]) for i, t in enumerate(tensors)]
         tensor = torch.cat(tensors,2)
+        # DEBUGING
+        self.debugging = {}
+        print("========== DEBUGGING ==========")
+        for i, t in enumerate(tensors):
+            debug = t[9324, :, :].numpy()
+            feat = str(type(featurizers[i]))
+            self.debugging[feat] = {}
+            self.debugging[feat]['size'] = debug.shape
+            self.debugging[feat]['weights'] = debug
+            
         self.tensor = tensor
         self.in_features = self.tensor.shape[2]
         self.weak_labels = self.generate_weak_labels()

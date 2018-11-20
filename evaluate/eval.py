@@ -10,14 +10,14 @@ errors_template = Template('SELECT count(*) '\
                             'FROM $init_table as t1, $grdt_table as t2 '\
                             'WHERE t1._tid_ = t2._tid_ '\
                               'AND t2._attribute_ = \'$attr\' '\
-                              'AND t1."$attr" != t2._value_')
+                              'AND t1.\"$attr\" != t2._value_')
 
 correct_repairs_template = Template('SELECT COUNT(*) FROM'\
                             '(SELECT t2._tid_, t2._attribute_, t2._value_ '\
                              'FROM $init_table as t1, $grdt_table as t2 '\
                              'WHERE t1._tid_ = t2._tid_ '\
                                'AND t2._attribute_ = \'$attr\' '\
-                               'AND t1.$"attr" != t2._value_ ) as errors, $inf_dom as repairs '\
+                               'AND t1.\"$attr\" != t2._value_ ) as errors, $inf_dom as repairs '\
                               'WHERE errors._tid_ = repairs._tid_ '\
                                 'AND errors._attribute_ = repairs.attribute '\
                                 'AND errors._value_ = repairs.rv_value')
@@ -66,15 +66,20 @@ class EvalEngine:
 
     def eval_report(self):
         tic = time.clock()
-        try:
-            prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
-            report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
-                      prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors, self.correct_repairs, self.total_repairs, self.total_repairs_grdt)
-            report_list = [prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
-                           self.correct_repairs, self.total_repairs, self.total_repairs_grdt]
-        except Exception as e:
-            report = "ERROR generating evaluation report: %s"%str(e)
-            report_list = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
+        report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
+                  prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors, self.correct_repairs, self.total_repairs, self.total_repairs_grdt)
+        report_list = [prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
+                       self.correct_repairs, self.total_repairs, self.total_repairs_grdt]
+#         try:
+#             prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
+#             report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
+#                       prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors, self.correct_repairs, self.total_repairs, self.total_repairs_grdt)
+#             report_list = [prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
+#                            self.correct_repairs, self.total_repairs, self.total_repairs_grdt]
+#         except Exception as e:
+#             report = "ERROR generating evaluation report: %s"%str(e)
+#             report_list = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         toc = time.clock()
         report_time = toc - tic
         return report, report_time, report_list
@@ -143,7 +148,7 @@ class EvalEngine:
         correct_repairs = 0.0
         for attr in self.ds.get_attributes():
             query = correct_repairs_template.substitute(init_table=self.ds.raw_data.name, grdt_table=self.clean_data.name,
-                        attr=attr, inf_dom=AuxTables.inf_values_dom.name)
+                                                        attr=attr, inf_dom=AuxTables.inf_values_dom.name)
             queries.append(query)
         results = self.ds.engine.execute_queries(queries)
         for res in results:
@@ -168,8 +173,8 @@ class EvalEngine:
         try:
             return self.correct_repairs / self.total_repairs_grdt
         except Exception as e:
-                print("ERROR computing precision: %s" % str(e))
-                return -1
+            print("ERROR computing precision: %s" % str(e))
+            return -1
 
     def compute_f1(self):
         prec = self.compute_precision()

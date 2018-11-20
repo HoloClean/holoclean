@@ -104,11 +104,12 @@ class RepairModel:
         output = softmax(fx, 1)
         return output
 
-    def get_featurizer_weights(self, feat_info):
+    def get_featurizer_weights(self, feat_info, debugging):
         weight = self.model.state_dict()['weight'].cpu().numpy()[0]
         weight = map(lambda x: round(x, 4), weight)
         begin = 0
         report = ""
+        log = open("debugging.log","w+")
         for f in feat_info:
             this_weight = weight[begin:begin+f[1]]
             weight_str = " | ".join(map(str, this_weight))
@@ -131,5 +132,15 @@ class RepairModel:
                 'size': f[1]
             }
             begin = begin+f[1]
+            train = debugging[f[0]]['weights']
+            # debugging
+            for dom_idx in range(train.shape[0]):
+                string = "dom_idx [{}],\t,\t,\t\n".format(dom_idx)
+                for i, x in enumerate(train[dom_idx,:]):
+                    if x != 0:
+                        string += "\t, idx [%d], input %.6f, weight %.6f, product %.4f\n" % (
+                            i, x, this_weight[i], this_weight[i]*x)
+                log.write(string)
+        log.close()
         return report
 
