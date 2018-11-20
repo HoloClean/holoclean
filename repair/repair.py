@@ -73,6 +73,4 @@ class RepairEngine:
         toc = time.clock()
         report_time = toc - tic
         status = "DONE saving weights of featurizers"
-        if self.env['print_feat_weights']:
-            print(report)
         return status, report_time, report
