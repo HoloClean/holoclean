@@ -26,6 +26,7 @@ class Table:
                     na_values = args[2]
                 else:
                     na_values = None
+                # TODO(richardwu): use COPY FROM instead of loading this into memory
                 self.df = pd.read_csv(os.path.join(file_path,file_name), dtype=str, na_values=na_values)
                 # Normalize to lower strings and strip whitespaces.
                 # TODO: No support for numerical values. To be added.
