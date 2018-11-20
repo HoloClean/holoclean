@@ -107,7 +107,7 @@ flags = [
          'help': 'Use bias term'}),
     (tuple(['--printfw']),
         {'default': False,
-         'dest': 'print_feat_weights',
+         'dest': 'print_fw',
          'action': 'store_true',
          'help': 'print the weights of featurizers'})
 ]
@@ -221,7 +221,7 @@ class Session:
         print(status)
         if self.env['verbose']:
             print('Time to store repaired dataset: %.2f secs' % time)
-        if self.env['print_feat_weights']:
+        if self.env['print_fw']:
             status, time = self.repair_engine.get_featurizer_weights()
             print(status)
             if self.env['verbose']:
