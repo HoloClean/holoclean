@@ -167,12 +167,13 @@ class Session:
         self.eval_engine = EvalEngine(env, self.ds)
 
         # use DEBUG logging level if verbose enabled
-        logger = logging.getLogger()
-        log_level = logging.INFO
+        root_logger = logging.getLogger()
+        gensim_logger = logging.getLogger('gensim')
+        root_level, gensim_level = logging.INFO, logging.WARNING
         if self.env['verbose']:
-            log_level = logging.DEBUG
-        logger.setLevel(log_level)
-
+            root_level, gensim_level = logging.DEBUG, logging.DEBUG
+        root_logger.setLevel(root_level)
+        gensim_logger.setLevel(gensim_level)
 
     def load_data(self, name, f_path, f_name, na_values=None):
         status, load_time = self.ds.load_data(name, f_path,f_name, na_values=na_values)
