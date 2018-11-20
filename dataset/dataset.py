@@ -1,6 +1,8 @@
+import logging
 import time
 from enum import Enum
 import pandas as pd
+
 from .dbengine import DBengine
 from .table import Table, Source
 
@@ -41,7 +43,7 @@ class Dataset:
             self.aux_table[tab] = None
         # start dbengine
         self.engine = DBengine(env['db_user'], env['db_pwd'], env['db_name'], env['db_host'], pool_size=env['threads'],
-                               verbose=env['verbose'], timeout=env['timeout'])
+                               timeout=env['timeout'])
         # members to convert (tuple_id, attribute) to cell_id
         self.attr_to_idx = {}
         self.attr_number = 0
@@ -75,7 +77,7 @@ class Dataset:
                 self.attr_to_idx[attr] = idx
             self.attr_number = len(self.raw_data.get_attributes())
         except Exception:
-            print('ERROR loading data for table {}'.format(name))
+            logging.error('loading data for table %s', name)
             raise
         toc = time.clock()
         load_time = toc - tic
@@ -94,7 +96,7 @@ class Dataset:
             if store and index_attrs:
                 self.aux_table[aux_table].create_db_index(self.engine, index_attrs)
         except Exception:
-            print('ERROR generating aux_table {}'.format(aux_table.name))
+            logging.error('generating aux_table %s', aux_table.name)
             raise
 
     def generate_aux_table_sql(self, aux_table, query, index_attrs=False):
@@ -104,7 +106,7 @@ class Dataset:
                 self.aux_table[aux_table].create_df_index(index_attrs)
                 self.aux_table[aux_table].create_db_index(self.engine, index_attrs)
         except Exception:
-            print('ERROR generating aux_table {}'.format(aux_table.name))
+            logging.error('generating aux_table %s', aux_table.name)
             raise
 
     def get_raw_data(self):

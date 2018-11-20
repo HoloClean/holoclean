@@ -1,3 +1,4 @@
+import logging
 import math
 import torch
 from torch.nn import Parameter
@@ -70,9 +71,9 @@ class RepairModel:
                 grdt = Y_train.numpy().flatten()
                 Y_pred = self.__predict__(X_train, mask_train)
                 Y_assign = Y_pred.data.numpy().argmax(axis=1)
-                print("Epoch %d, cost = %f, acc = %.2f%%" %
-                      (i + 1, cost / num_batches,
-                       100. * np.mean(Y_assign == grdt)))
+                logging.debug("Epoch %d, cost = %f, acc = %.2f%%",
+                        i + 1, cost / num_batches,
+                        100. * np.mean(Y_assign == grdt))
 
     def infer_values(self, X_pred, mask_pred):
         output = self.__predict__(X_pred, mask_pred)

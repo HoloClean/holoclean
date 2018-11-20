@@ -1,3 +1,5 @@
+import logging
+
 from dataset import Dataset
 from dcparser import Parser
 from domain import DomainEngine
@@ -164,66 +166,62 @@ class Session:
         self.repair_engine = RepairEngine(env, self.ds)
         self.eval_engine = EvalEngine(env, self.ds)
 
+        # use DEBUG logging level if verbose enabled
+        logger = logging.getLogger()
+        log_level = logging.INFO
+        if self.env['verbose']:
+            log_level = logging.DEBUG
+        logger.setLevel(log_level)
+
+
     def load_data(self, name, f_path, f_name, na_values=None):
         status, load_time = self.ds.load_data(name, f_path,f_name, na_values=na_values)
-        print(status)
-        if self.env['verbose']:
-            print('Time to load dataset: %.2f secs'%load_time)
+        logging.info(status)
+        logging.debug('Time to load dataset: %.2f secs'%load_time)
 
     def load_dcs(self, f_path, f_name):
         status, load_time = self.dc_parser.load_denial_constraints(f_path, f_name)
-        print(status)
-        if self.env['verbose']:
-            print('Time to load dirty data: %.2f secs'%load_time)
+        logging.info(status)
+        logging.debug('Time to load dirty data: %.2f secs'%load_time)
 
     def get_dcs(self):
         return self.dc_parser.get_dcs()
 
     def detect_errors(self, detect_list):
         status, detect_time = self.detect_engine.detect_errors(detect_list)
-        print(status)
-        if self.env['verbose']:
-            print('Time to detect errors: %.2f secs'%detect_time)
+        logging.info(status)
+        logging.debug('Time to detect errors: %.2f secs'%detect_time)
 
     def setup_domain(self):
         status, domain_time = self.domain_engine.setup()
-        print(status)
-        if self.env['verbose']:
-            print('Time to setup the domain: %.2f secs'%domain_time)
+        logging.info(status)
+        logging.debug('Time to setup the domain: %.2f secs'%domain_time)
 
     def repair_errors(self, featurizers):
         status, feat_time = self.repair_engine.setup_featurized_ds(featurizers)
-        print(status)
-        if self.env['verbose']:
-            print('Time to featurize data: %.2f secs'%feat_time)
+        logging.info(status)
+        logging.debug('Time to featurize data: %.2f secs'%feat_time)
         status, setup_time = self.repair_engine.setup_repair_model()
-        print(status)
-        if self.env['verbose']:
-            print('Time to setup repair model: %.2f secs' % feat_time)
+        logging.info(status)
+        logging.debug('Time to setup repair model: %.2f secs' % feat_time)
         status, fit_time = self.repair_engine.fit_repair_model()
-        print(status)
-        if self.env['verbose']:
-            print('Time to fit repair model: %.2f secs'%fit_time)
+        logging.info(status)
+        logging.debug('Time to fit repair model: %.2f secs'%fit_time)
         status, infer_time = self.repair_engine.infer_repairs()
-        print(status)
-        if self.env['verbose']:
-            print('Time to infer correct cell values: %.2f secs'%infer_time)
+        logging.info(status)
+        logging.debug('Time to infer correct cell values: %.2f secs'%infer_time)
         status, time = self.ds.get_inferred_values()
-        print(status)
-        if self.env['verbose']:
-            print('Time to collect inferred values: %.2f secs' % time)
+        logging.info(status)
+        logging.debug('Time to collect inferred values: %.2f secs' % time)
         status, time = self.ds.get_repaired_dataset()
-        print(status)
-        if self.env['verbose']:
-            print('Time to store repaired dataset: %.2f secs' % time)
+        logging.info(status)
+        logging.debug('Time to store repaired dataset: %.2f secs' % time)
 
     def evaluate(self, f_path, f_name, get_tid, get_attr, get_value, na_values=None):
         name = self.ds.raw_data.name + '_clean'
         status, load_time = self.eval_engine.load_data(name, f_path, f_name, get_tid, get_attr, get_value, na_values=na_values)
-        print(status)
-        if self.env['verbose']:
-            print('Time to evaluate repairs: %.2f secs'%load_time)
+        logging.info(status)
+        logging.debug('Time to evaluate repairs: %.2f secs'%load_time)
         status, report_time = self.eval_engine.eval_report()
-        print(status)
-        if self.env['verbose']:
-            print('Time to generate report: %.2f secs' % report_time)
+        logging.info(status)
+        logging.debug('Time to generate report: %.2f secs' % report_time)

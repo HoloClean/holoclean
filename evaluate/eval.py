@@ -1,3 +1,4 @@
+import logging
 import time
 import os
 import pandas as pd
@@ -46,7 +47,7 @@ class EvalEngine:
             self.clean_data.create_db_index(self.ds.engine, ['_attribute_'])
             status = 'DONE Loading '+f_name
         except Exception:
-            print('ERROR in load_data for table {}'.format(name))
+            logging.error('load_data for table %s', name)
             raise
         toc = time.clock()
         load_time = toc - tic
