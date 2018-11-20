@@ -74,7 +74,7 @@ class EvalEngine:
                            self.correct_repairs, self.total_repairs, self.total_repairs_grdt]
         except Exception as e:
             report = "ERROR generating evaluation report: %s"%str(e)
-            report_list = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            report_list = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
         toc = time.clock()
         report_time = toc - tic
         return report, report_time, report_list
