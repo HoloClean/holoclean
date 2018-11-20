@@ -42,7 +42,7 @@ class Parser:
                     self.dcs[line] = (DenialConstraint(line,attrs))
             status = 'DONE Loading DCs from {fname}'.format(fname=os.path.basename(fpath))
         except Exception:
-            logging.error('loading constraints for file %s', f_name)
+            logging.error('loading constraints for file %s', os.path.basename(fpath))
             raise
         toc = time.clock()
         return status, toc - tic
