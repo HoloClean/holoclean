@@ -23,10 +23,7 @@ class FreqFeaturizer(Featurizer):
         attr_idx = self.ds.attr_to_idx[attribute]
         tensor = torch.zeros(1, classes, self.attrs_number)
         for idx, val in enumerate(domain):
-            try:
-                prob = float(self.single_stats[attribute][val])/float(self.total)
-            except Exception:
-                prob = 0.0
+            prob = float(self.single_stats[attribute].get(val, 0))/float(self.total)
             tensor[0][idx][attr_idx] = prob
         return tensor
 

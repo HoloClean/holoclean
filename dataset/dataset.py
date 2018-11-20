@@ -168,7 +168,7 @@ class Dataset:
                 "WHERE t1._vid_ = t2._vid_"%(AuxTables.cell_domain.name, AuxTables.inf_values_idx.name)
         self.generate_aux_table_sql(AuxTables.inf_values_dom, query, index_attrs=['_tid_'])
         self.aux_table[AuxTables.inf_values_dom].create_db_index(self.engine, ['attribute'])
-        status = "DONE colleting the inferred values."
+        status = "DONE collecting the inferred values."
         toc = time.clock()
         total_time = toc - tic
         return status, total_time
