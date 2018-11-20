@@ -17,7 +17,11 @@ def execute_query(args, conn_args, verbose):
     tic = time.clock()
     con = psycopg2.connect(conn_args)
     cur = con.cursor()
-    cur.execute(query)
+    try:
+        cur.execute(query)
+    except Exception as e:
+        print(query)
+        raise Exception("ERROR executing query: %s" %e)
     res = cur.fetchall()
     con.close()
     toc = time.clock()
@@ -122,7 +126,9 @@ class DBengine:
         return True
 
     def create_db_index(self, name, table, attr_list):
-        stmt = index_template.substitute(idx_title=name, table=table, attr=','.join(attr_list))
+        # add qutores around attr 
+        quoted_attrs = map(lambda attr: '"{}"'.format(attr), attr_list)
+        stmt = index_template.substitute(idx_title=name, table=table, attr=','.join(quoted_attrs))
         tic = time.clock()
         conn = self.engine.connect()
         result = conn.execute(stmt)

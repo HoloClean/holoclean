@@ -91,7 +91,9 @@ class Predicate:
             if isinstance(component, str):
                 self.cnf_form += component
             else:
-                self.cnf_form += component[0] + "." + component[1]
+                # Need to wrap column names in quotations for Postgres
+                self.cnf_form += '{alias}."{attr}"'.format(alias=component[0],
+                                                           attr=component[1])
             if i < len(self.components) - 1:
                 self.cnf_form += self.operation
         if verbose:

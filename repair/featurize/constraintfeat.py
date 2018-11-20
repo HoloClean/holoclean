@@ -74,13 +74,15 @@ class ConstraintFeat(Featurizer):
     def relax_unary_predicate(self, predicate):
         attr =  predicate.components[0][1].lower()
         op = predicate.operation
-        const = predicate.components[1].lower()
+        const = '"{}"'.format(predicate.components[1].lower())
         return attr, op, const
 
     def relax_binary_predicate(self, predicate, rel_idx):
         attr = predicate.components[rel_idx][1].lower()
         op = predicate.operation
-        const = predicate.components[1-rel_idx][0]+'.'+predicate.components[1-rel_idx][1].lower()
+        const = '{}."{}"'.format(
+                predicate.components[1-rel_idx][0],
+                predicate.components[1-rel_idx][1].lower())
         return attr, op, const
 
     def get_binary_predicate_join_rel(self, predicate):

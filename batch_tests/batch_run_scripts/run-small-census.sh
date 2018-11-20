@@ -11,6 +11,7 @@ do
         python hc.py -notes v${c} -dataname small_census_01 -dcpath $location -dc $name -k 0.1 -w 0.01 -omit $feat occur --wlog &> ../log/small_census/omit-${feat}.log
         echo $c
         c=$((c+1))
+        break
     done
     python send_email.py hc2
     break

@@ -27,7 +27,6 @@ class Table:
                 else:
                     na_values = None
                 self.df = pd.read_csv(os.path.join(file_path,file_name), dtype=str, na_values=na_values)
-                print("DEBUGGING: {}".format(self.df.loc[1]))
                 # Normalize to lower strings and strip whitespaces.
                 # TODO: No support for numerical values. To be added.
                 for attr in self.df.columns.values:
@@ -68,7 +67,7 @@ class Table:
         self.df.set_index(attr_list, inplace=True)
 
     def create_db_index(self, dbengine, attr_list):
-        index_name = self.name+'_'+str(self.index_count)
+        index_name = '{name}_{idx}'.format(name=self.name, idx=self.index_count)
         try:
             dbengine.create_db_index(index_name, self.name, attr_list)
             self.index_count += 1
