@@ -168,8 +168,8 @@ class EvalEngine:
         try:
             return self.correct_repairs / self.total_repairs_grdt
         except Exception as e:
-                print("ERROR computing precision: %s" % str(e))
-                return -1
+            print("ERROR computing precision: %s" % str(e))
+            return -1
 
     def compute_f1(self):
         prec = self.compute_precision()
