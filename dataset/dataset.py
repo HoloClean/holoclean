@@ -1,6 +1,8 @@
+import logging
 import time
 from enum import Enum
 import pandas as pd
+
 from .dbengine import DBengine
 from .table import Table, Source
 
@@ -50,7 +52,7 @@ class Dataset:
             self.aux_table[tab] = None
         # start dbengine
         self.engine = DBengine(env['db_user'], env['db_pwd'], env['db_name'], env['db_host'], pool_size=env['threads'],
-                               verbose=env['verbose'], timeout=env['timeout'])
+                               timeout=env['timeout'])
         # members to convert (tuple_id, attribute) to cell_id
         self.attr_to_idx = {}
         self.attr_number = 0
@@ -101,9 +103,9 @@ class Dataset:
                 # Map attribute to index
                 self.attr_to_idx[attr] = idx
             self.attr_number = len(self.raw_data.get_attributes())
-
-        except Exception as e:
-            status = ' '.join(['For table:', name, str(e)])
+        except Exception:
+            logging.error('loading data for table %s', name)
+            raise
         toc = time.clock()
         load_time = toc - tic
         return status, load_time
@@ -135,8 +137,9 @@ class Dataset:
                 self.aux_table[aux_table].create_df_index(index_attrs)
             if store and index_attrs:
                 self.aux_table[aux_table].create_db_index(self.engine, index_attrs)
-        except Exception as e:
-            raise Exception(' '.join(['For table:',aux_table.name,str(e)]))
+        except Exception:
+            logging.error('generating aux_table %s', aux_table.name)
+            raise
 
     def generate_aux_table_sql(self, aux_table, query, index_attrs=False):
         try:
@@ -144,8 +147,9 @@ class Dataset:
             if index_attrs:
                 self.aux_table[aux_table].create_df_index(index_attrs)
                 self.aux_table[aux_table].create_db_index(self.engine, index_attrs)
-        except Exception as e:
-            raise Exception(' '.join(['For table:',aux_table.name,str(e)]))
+        except Exception:
+            logging.error('generating aux_table %s', aux_table.name)
+            raise
 
     def get_raw_data(self):
         """
@@ -241,32 +245,26 @@ class Dataset:
                 "_vid_, init_value, string_to_array(regexp_replace(domain, \'[{\"\"}]\', \'\', \'gi\'), \'|||\') as domain " \
                 "FROM %s) as t1, %s as t2 " \
                 "WHERE t1._vid_ = t2._vid_"%(AuxTables.cell_domain.name, AuxTables.inf_values_idx.name)
-        try:
-            self.generate_aux_table_sql(AuxTables.inf_values_dom, query, index_attrs=['_tid_'])
-            self.aux_table[AuxTables.inf_values_dom].create_db_index(self.engine, ['attribute'])
-            status = "DONE colleting the inferred values."
-        except Exception as e:
-            status = "ERROR when colleting the inferred values: %s"%str(e)
+        self.generate_aux_table_sql(AuxTables.inf_values_dom, query, index_attrs=['_tid_'])
+        self.aux_table[AuxTables.inf_values_dom].create_db_index(self.engine, ['attribute'])
+        status = "DONE collecting the inferred values."
         toc = time.clock()
         total_time = toc - tic
         return status, total_time
 
     def get_repaired_dataset(self):
         tic = time.clock()
-        try:
-            init_records = self.raw_data.df.sort_values(['_tid_']).to_records(index=False)
-            t = self.aux_table[AuxTables.inf_values_dom]
-            repaired_vals = dictify(t.df.reset_index())
-            for tid in repaired_vals:
-                for attr in repaired_vals[tid]:
-                    init_records[tid][attr] = repaired_vals[tid][attr]
-            repaired_df = pd.DataFrame.from_records(init_records)
-            name = self.raw_data.name+'_repaired'
-            self.repaired_data = Table(name, Source.DF, repaired_df)
-            self.repaired_data.store_to_db(self.engine.engine)
-            status = "DONE generating repaired dataset"
-        except Exception as e:
-            status = "ERROR when generating repaired dataset: %s"
+        init_records = self.raw_data.df.sort_values(['_tid_']).to_records(index=False)
+        t = self.aux_table[AuxTables.inf_values_dom]
+        repaired_vals = dictify(t.df.reset_index())
+        for tid in repaired_vals:
+            for attr in repaired_vals[tid]:
+                init_records[tid][attr] = repaired_vals[tid][attr]
+        repaired_df = pd.DataFrame.from_records(init_records)
+        name = self.raw_data.name+'_repaired'
+        self.repaired_data = Table(name, Source.DF, repaired_df)
+        self.repaired_data.store_to_db(self.engine.engine)
+        status = "DONE generating repaired dataset"
         toc = time.clock()
         total_time = toc - tic
         return status, total_time

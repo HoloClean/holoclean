@@ -1,3 +1,4 @@
+import logging
 import torch
 from tqdm import tqdm
 
@@ -28,8 +29,7 @@ class FeaturizedDataset:
             contains the domain index of the initial value for the i-th
             variable/VID.
         """
-        if self.env['verbose']:
-            print("Generating weak labels.")
+        logging.debug("Generating weak labels.")
         query = 'SELECT _vid_, init_index FROM %s AS t1 LEFT JOIN %s AS t2 ' \
                 'ON t1._cid_ = t2._cid_ WHERE t2._cid_ is NULL OR t1.fixed = 1;' % (
         AuxTables.cell_domain.name, AuxTables.dk_cells.name)
@@ -41,8 +41,7 @@ class FeaturizedDataset:
             vid = int(tuple[0])
             label = int(tuple[1])
             labels[vid] = label
-        if self.env['verbose']:
-            print("DONE generating weak labels.")
+        logging.debug("DONE generating weak labels.")
         return labels
 
     def generate_var_mask(self):
@@ -59,8 +58,7 @@ class FeaturizedDataset:
             where tensor[i][j] = 0 iff the value corresponding to domain index 'j'
             is valid for the i-th VID and tensor[i][j] = -10e6 otherwise.
         """
-        if self.env['verbose']:
-            print("Generating mask.")
+        logging.debug("Generating mask.")
         var_to_domsize = {}
         query = 'SELECT _vid_, domain_size FROM %s' % AuxTables.cell_domain.name
         res = self.ds.engine.execute_query(query)
@@ -70,8 +68,7 @@ class FeaturizedDataset:
             max_class = int(tuple[1])
             mask[vid, max_class:] = -10e6
             var_to_domsize[vid] = max_class
-        if self.env['verbose']:
-            print("DONE generating mask.")
+        logging.debug("DONE generating mask.")
         return mask, var_to_domsize
 
     def get_tensor(self):

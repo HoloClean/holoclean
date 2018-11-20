@@ -1,3 +1,4 @@
+import logging
 import time
 import os
 import pandas as pd
@@ -45,8 +46,9 @@ class EvalEngine:
             self.clean_data.create_db_index(self.ds.engine, ['_tid_'])
             self.clean_data.create_db_index(self.ds.engine, ['_attribute_'])
             status = 'DONE Loading '+f_name
-        except Exception as e:
-            status = ' '.join(['For table:', name, str(e)])
+        except Exception:
+            logging.error('load_data for table %s', name)
+            raise
         toc = time.clock()
         load_time = toc - tic
         return status, load_time
@@ -66,12 +68,9 @@ class EvalEngine:
 
     def eval_report(self):
         tic = time.clock()
-        try:
-            prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
-            report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
-                      prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors, self.correct_repairs, self.total_repairs, self.total_repairs_grdt)
-        except Exception as e:
-            report = "ERROR generating evaluation report: %s"%str(e)
+        prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
+        report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
+                  prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors, self.correct_repairs, self.total_repairs, self.total_repairs_grdt)
         toc = time.clock()
         report_time = toc - tic
         return report, report_time
@@ -159,17 +158,11 @@ class EvalEngine:
     def compute_f1(self):
         prec = self.compute_precision()
         rec = self.compute_recall()
-        try:
-            f1 = 2*(prec*rec)/(prec+rec)
-        except ZeroDivisionError as e:
-            f1 = -1.0
+        f1 = 2*(prec*rec)/(prec+rec)
         return f1
 
     def compute_repairing_f1(self):
         prec = self.compute_precision()
         rec = self.compute_repairing_recall()
-        try:
-            f1 = 2*(prec*rec)/(prec+rec)
-        except ZeroDivisionError as e:
-            f1 = -1.0
+        f1 = 2*(prec*rec)/(prec+rec)
         return f1
