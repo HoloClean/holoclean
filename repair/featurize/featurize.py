@@ -6,6 +6,7 @@ from dataset import AuxTables
 
 FeatInfo = namedtuple('FeatInfo', ['name', 'size', 'learnable', 'init_weight'])
 
+
 class FeaturizedDataset:
     def __init__(self, dataset, env, featurizers):
         self.ds = dataset
@@ -46,7 +47,7 @@ class FeaturizedDataset:
         query = """
         SELECT
             _vid_,
-            current_index
+            current_value_idx
         FROM
             {cell_domain} AS t1
         LEFT JOIN

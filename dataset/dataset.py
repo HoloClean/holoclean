@@ -295,7 +295,7 @@ class Dataset:
                     attribute,
                     _vid_,
                     current_value,
-                    string_to_array(regexp_replace(domain, \'[{\"\"}]\', \'\', \'gi\'), \'|||\') AS domain
+                    string_to_array(regexp_replace(domain, \'[{{\"\"}}]\', \'\', \'gi\'), \'|||\') AS domain
             FROM {cell_domain}) AS t1,
             {inf_values_idx} AS t2
         WHERE t1._vid_ = t2._vid_
