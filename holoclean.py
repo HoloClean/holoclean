@@ -106,7 +106,12 @@ flags = [
         {'default': False,
          'dest': 'bias',
          'action': 'store_true',
-         'help': 'Use bias term'})
+         'help': 'Use bias term'}),
+    (tuple(['--printfw']),
+        {'default': False,
+         'dest': 'print_fw',
+         'action': 'store_true',
+         'help': 'print the weights of featurizers'})
 ]
 
 class HoloClean:
@@ -238,6 +243,11 @@ class Session:
         status, time = self.ds.get_repaired_dataset()
         logging.info(status)
         logging.debug('Time to store repaired dataset: %.2f secs' % time)
+        if self.env['print_fw']:
+            status, time = self.repair_engine.get_featurizer_weights()
+            logging.info(status)
+            logging.debug('Time to store featurizer weights: %.2f secs' % time)
+            return status
 
     def evaluate(self, fpath, tid_col, attr_col, val_col, na_values=None):
         """
@@ -254,6 +264,7 @@ class Session:
         status, load_time = self.eval_engine.load_data(name, fpath, tid_col, attr_col, val_col, na_values=na_values)
         logging.info(status)
         logging.debug('Time to evaluate repairs: %.2f secs', load_time)
-        status, report_time = self.eval_engine.eval_report()
+        status, report_time, report_list = self.eval_engine.eval_report()
         logging.info(status)
         logging.debug('Time to generate report: %.2f secs' % report_time)
+        return report_list

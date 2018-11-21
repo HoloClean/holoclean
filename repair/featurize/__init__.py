@@ -7,6 +7,7 @@ from .occurfeat import OccurFeaturizer
 from .constraintfeat import ConstraintFeat
 from .langmodel import LangModelFeat
 from .initattfeat import InitAttFeaturizer
+from .occurattrfeat import OccurAttrFeaturizer
 
 __all__ = ['FeaturizedDataset', 'Featurizer', 'InitFeaturizer', 'InitSimFeaturizer', 'FreqFeaturizer',
-           'OccurFeaturizer', 'ConstraintFeat', 'LangModelFeat', 'InitAttFeaturizer']
+           'OccurFeaturizer', 'ConstraintFeat', 'LangModelFeat', 'InitAttFeaturizer', 'OccurAttrFeaturizer']

@@ -63,6 +63,7 @@ class RepairModel:
         self.in_features = in_features
         self.output_dim = output_dim
         self.model = TiedLinear(in_features, output_dim, bias)
+        self.featurizer_weights = {}
 
     def fit_model(self, X_train, Y_train, mask_train):
         n_examples, n_classes, n_features = X_train.shape
@@ -126,4 +127,33 @@ class RepairModel:
         fx = self.model.forward(X_var, index_var, mask_var)
         output = softmax(fx, 1)
         return output
+
+    def get_featurizer_weights(self, feat_info):
+        weight = self.model.state_dict()['weight'].cpu().numpy()[0]
+        weight = map(lambda x: round(x, 4), weight)
+        begin = 0
+        report = ""
+        for f in feat_info:
+            this_weight = weight[begin:begin+f[1]]
+            weight_str = " | ".join(map(str, this_weight))
+            feat_name = f[0].split('.')[-1].split("'>")[0]
+            max_w = max(this_weight)
+            min_w = min(this_weight)
+            mean_w = float(np.mean(this_weight))
+            abs_mean_w = float(np.mean(np.absolute(this_weight)))
+            # create report
+            report += "featurizer %s,size %d,max %.4f,min %.4f,avg %.4f,abs_avg %.4f,weight %s\n" % (
+                feat_name, int(f[1]), max_w, min_w, mean_w, abs_mean_w, weight_str
+            )
+            # create dictionary
+            self.featurizer_weights[feat_name] = {
+                'max': max_w,
+                'min': min_w,
+                'avg': mean_w,
+                'abs_avg': abs_mean_w,
+                'weights': this_weight,
+                'size': f[1]
+            }
+            begin = begin+f[1]
+        return report
 

@@ -77,12 +77,18 @@ class EvalEngine:
 
     def eval_report(self):
         tic = time.clock()
-        prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
-        report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
-                  prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors, self.correct_repairs, self.total_repairs, self.total_repairs_grdt)
+        try:
+            prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
+            report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
+                      prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors, self.correct_repairs, self.total_repairs, self.total_repairs_grdt)
+            report_list = [prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
+                           self.correct_repairs, self.total_repairs, self.total_repairs_grdt]
+        except Exception as e:
+            logging.error("ERROR generating evaluation report %s" % e)
+            raise
         toc = time.clock()
         report_time = toc - tic
-        return report, report_time
+        return report, report_time, report_list
 
     def compute_total_repairs(self):
         query = "SELECT count(*) FROM " \
@@ -156,12 +162,18 @@ class EvalEngine:
         self.correct_repairs = correct_repairs
 
     def compute_recall(self):
+        if self.total_errors == 0:
+            return 0
         return self.correct_repairs / self.total_errors
 
     def compute_repairing_recall(self):
+        if self.detected_errors == 0:
+            return 0
         return self.correct_repairs / self.detected_errors
 
     def compute_precision(self):
+        if self.total_repairs_grdt == 0:
+            return 0
         return self.correct_repairs / self.total_repairs_grdt
 
     def compute_f1(self):
