@@ -99,7 +99,7 @@ class DomainEngine:
         self.ds.generate_aux_table_sql(AuxTables.pos_values, query, index_attrs=['_tid_', 'attribute'])
 
     def setup_attributes(self):
-        self.active_attributes = self.get_active_attributes()
+        self.active_attributes = self.fetch_active_attributes()
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total
         self.single_stats = single_stats
@@ -143,9 +143,9 @@ class DomainEngine:
                     out[attr1][attr2][val1] = top_cands
         return out
 
-    def get_active_attributes(self):
+    def fetch_active_attributes(self):
         """
-        get_active_attributes returns the attributes to be modeled.
+        fetch_active_attributes fetches/refetches the attributes to be modeled.
         These attributes correspond only to attributes that contain at least
         one potentially erroneous cell.
         """
@@ -209,6 +209,12 @@ class DomainEngine:
         for row in tqdm(list(records)):
             tid = row['_tid_']
             app = []
+
+            # Iterate over each active attribute (attributes that have at
+            # least one dk cell) and generate for this cell:
+            # 1) the domain values
+            # 2) the initial values (taken from raw data)
+            # 3) the current value (best predicted value)
             for attr in self.active_attributes:
                 init_values, current_value, dom = self.get_domain_cell(attr, row)
                 init_values_idx = list(map(dom.index, init_values))
@@ -257,7 +263,7 @@ class DomainEngine:
         :return: (list of initial values, current value, list of domain values).
         """
 
-        domain = set([])
+        domain = set()
         correlated_attributes = self.get_corr_attributes(attr)
         # Iterate through all attributes correlated at least self.cor_strength ('cond_attr')
         # and take the top K co-occurrence values for 'attr' with the current
@@ -291,6 +297,7 @@ class DomainEngine:
         domain.update(set(init_values))
 
         # Take the first initial value as the current value
+        # TODO(richardwu): revisit how we should initialize 'current'
         current_value = init_values[0]
 
         return init_values, current_value, list(domain)
