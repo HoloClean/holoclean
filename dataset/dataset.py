@@ -280,12 +280,21 @@ class Dataset:
 
     def get_inferred_values(self):
         tic = time.clock()
-        query = "SELECT t1._tid_, t1.attribute, domain[inferred_assignment + 1] as rv_value " \
-                "FROM " \
-                "(SELECT _tid_, attribute, " \
-                "_vid_, init_value, string_to_array(regexp_replace(domain, \'[{\"\"}]\', \'\', \'gi\'), \'|||\') as domain " \
-                "FROM %s) as t1, %s as t2 " \
-                "WHERE t1._vid_ = t2._vid_"%(AuxTables.cell_domain.name, AuxTables.inf_values_idx.name)
+        query = """
+        SELECT  t1._tid_,
+                t1.attribute,
+                domain[inferred_assignment + 1] AS rv_value
+        FROM (
+            SELECT  _tid_,
+                    attribute,
+                    _vid_,
+                    current_value,
+                    string_to_array(regexp_replace(domain, \'[{\"\"}]\', \'\', \'gi\'), \'|||\') AS domain
+            FROM {cell_domain}) AS t1,
+            {inf_values_idx} AS t2
+        WHERE t1._vid_ = t2._vid_
+        """.format(cell_domain=AuxTables.cell_domain.name,
+                inf_values_idx=AuxTables.inf_values_idx.name)
         self.generate_aux_table_sql(AuxTables.inf_values_dom, query, index_attrs=['_tid_'])
         self.aux_table[AuxTables.inf_values_dom].create_db_index(self.engine, ['attribute'])
         status = "DONE collecting the inferred values."

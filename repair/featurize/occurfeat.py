@@ -23,7 +23,7 @@ class OccurFeaturizer(Featurizer):
         """
         Memoize single (frequency of attribute-value) and
         pairwise stats (frequency of attr1-value1-attr2-value2)
-        from Dataset.
+        for the current values from loaded dataset.
 
         self.single_stats is a dict { attribute -> { value -> count } }.
         self.pair_stats is a dict { attr1 -> { attr2 -> { val1 -> {val2 -> co-occur frequency } } } }.
@@ -38,12 +38,12 @@ class OccurFeaturizer(Featurizer):
     def create_tensor(self):
         """
         For each unique VID (cell) returns the co-occurrence probability between
-        each possible domain value for this VID and the initial/raw values for the
+        each possible domain value for this VID and the current value for the
         corresponding entity/tuple of this cell.
 
         :return: Torch.Tensor of shape (# of VIDs) X (max domain) X (# of attributes)
             where tensor[i][j][k] contains the co-occur probability between the j-th domain value
-            of the i-th random variable (VID) and the initial/raw value of the k-th
+            of the i-th random variable (VID) and the current value of the k-th
             attribute for the corresponding entity.
         """
         # Iterate over tuples in domain

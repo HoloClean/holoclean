@@ -1,8 +1,8 @@
 import holoclean
 from detect import NullDetector, ViolationDetector
-from repair.featurize import InitFeaturizer
-from repair.featurize import InitAttFeaturizer
-from repair.featurize import InitSimFeaturizer
+from repair.featurize import CurrentFeaturizer
+from repair.featurize import CurrentAttrFeaturizer
+from repair.featurize import CurrentSimFeaturizer
 from repair.featurize import FreqFeaturizer
 from repair.featurize import OccurFeaturizer
 from repair.featurize import ConstraintFeat
@@ -23,7 +23,7 @@ hc.detect_errors(detectors)
 
 # 4. Repair errors utilizing the defined features.
 hc.setup_domain()
-featurizers = [InitAttFeaturizer(learnable=False), InitSimFeaturizer(), FreqFeaturizer(), OccurFeaturizer(), LangModelFeat(), ConstraintFeat()]
+featurizers = [CurrentAttrFeaturizer(learnable=False), CurrentSimFeaturizer(), FreqFeaturizer(), OccurFeaturizer(), LangModelFeat(), ConstraintFeat()]
 hc.repair_errors(featurizers)
 
 # 5. Evaluate the correctness of the results.

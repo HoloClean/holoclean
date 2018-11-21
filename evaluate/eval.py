@@ -91,26 +91,46 @@ class EvalEngine:
         return report, report_time, report_list
 
     def compute_total_repairs(self):
-        query = "SELECT count(*) FROM " \
-                "(SELECT _vid_ " \
-                 "FROM %s as t1, %s as t2 " \
-                 "WHERE t1._tid_ = t2._tid_ " \
-                   "AND t1.attribute = t2.attribute " \
-                   "AND t1.init_value != t2.rv_value) AS t"\
-                %(AuxTables.cell_domain.name, AuxTables.inf_values_dom.name)
+        query = """
+        SELECT
+            count(*)
+        FROM
+            (SELECT
+                _vid_
+            FROM
+                {cell_domain} AS t1,
+                {inf_values_dom} as t2
+            WHERE
+                t1._tid_ = t2._tid_
+                AND t1.attribute = t2.attribute
+                AND t1.current_value != t2.rv_value
+            )
+        """.format(cell_domain=AuxTables.cell_domain.name,
+                inf_values_dom=AuxTables.inf_values_dom.name)
         res = self.ds.engine.execute_query(query)
         self.total_repairs = float(res[0][0])
 
     def compute_total_repairs_grdt(self):
-        query = "SELECT count(*) FROM " \
-                "(SELECT _vid_ " \
-                 "FROM %s as t1, %s as t2, %s as t3 " \
-                 "WHERE t1._tid_ = t2._tid_ " \
-                   "AND t1.attribute = t2.attribute " \
-                   "AND t1.init_value != t2.rv_value " \
-                   "AND t1._tid_ = t3._tid_ " \
-                   "AND t1.attribute = t3._attribute_) AS t"\
-                %(AuxTables.cell_domain.name, AuxTables.inf_values_dom.name, self.clean_data.name)
+        query = """
+        SELECT
+            count(*)
+        FROM
+            (SELECT
+                _vid_
+            FROM
+                {cell_domain} AS t1,
+                {inf_values_dom} AS t2,
+                {clean_data} AS t3
+            WHERE
+                t1._tid_ = t2._tid_
+                AND t1.attribute = t2.attribute
+                AND t1.current_value != t2.rv_value
+                AND t1._tid_ = t3._tid_
+                AND t1.attribute = t3._attribute_
+            ) AS t
+        """.format(cell_domain=AuxTables.cell_domain.name,
+                inf_values_dom=AuxTables.inf_values_dom.name,
+                clean_data=self.clean_data.name)
         res = self.ds.engine.execute_query(query)
         self.total_repairs_grdt = float(res[0][0])
 
@@ -139,13 +159,25 @@ class EvalEngine:
         self.total_errors = total_errors
 
     def compute_detected_errors(self):
-        query = "SELECT count(*) FROM " \
-                "(SELECT _vid_ " \
-                "FROM %s as t1, %s as t2, %s as t3 " \
-                "WHERE t1._tid_ = t2._tid_ AND t1._cid_ = t3._cid_ " \
-                "AND t1.attribute = t2._attribute_ " \
-                "AND t1.init_value != t2._value_) AS t" \
-                % (AuxTables.cell_domain.name, self.clean_data.name, AuxTables.dk_cells.name)
+        query = """
+        SELECT
+            count(*)
+        FROM
+            (SELECT
+                _vid_
+            FROM
+                {cell_domain} AS t1,
+                {clean_data} AS t2,
+                {dk_cells} AS t3
+            WHERE
+                t1._tid_ = t2._tid_
+                AND t1._cid_ = t3._cid_
+                AND t1.attribute = t2._attribute_
+                AND t1.current_value != t2._value_
+            ) AS t
+        """.format(cell_domain=AuxTables.cell_domain.name,
+                clean_data=self.clean_data.name,
+                dk_cells=AuxTables.dk_cells.name)
         res = self.ds.engine.execute_query(query)
         self.detected_errors = float(res[0][0])
 
