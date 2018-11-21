@@ -1,13 +1,13 @@
 from .featurize import FeaturizedDataset
 from .featurizer import Featurizer
-from .initfeat import InitFeaturizer
-from .initsimfeat import InitSimFeaturizer
-from .freqfeat import FreqFeaturizer
-from .occurfeat import OccurFeaturizer
 from .constraintfeat import ConstraintFeat
+from .currentfeat import CurrentFeaturizer
+from .currentattrfeat import CurrentAttrFeaturizer
+from .currentsimfeat import CurrentSimFeaturizer
+from .freqfeat import FreqFeaturizer
 from .langmodel import LangModelFeat
-from .initattfeat import InitAttFeaturizer
+from .occurfeat import OccurFeaturizer
 from .occurattrfeat import OccurAttrFeaturizer
 
-__all__ = ['FeaturizedDataset', 'Featurizer', 'InitFeaturizer', 'InitSimFeaturizer', 'FreqFeaturizer',
-           'OccurFeaturizer', 'ConstraintFeat', 'LangModelFeat', 'InitAttFeaturizer', 'OccurAttrFeaturizer']
+__all__ = ['FeaturizedDataset', 'Featurizer', 'CurrentFeaturizer', 'CurrentSimFeaturizer', 'FreqFeaturizer',
+           'OccurFeaturizer', 'ConstraintFeat', 'LangModelFeat', 'CurrentAttrFeaturizer', 'OccurAttrFeaturizer']

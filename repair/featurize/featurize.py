@@ -36,16 +36,27 @@ class FeaturizedDataset:
     def generate_weak_labels(self):
         """
         generate_weak_labels returns a tensor where for each VID we have the
-        domain index of the initial value.
+        domain index of the current value.
 
         :return: Torch.Tensor of size (# of variables) X 1 where tensor[i][0]
-            contains the domain index of the initial value for the i-th
+            contains the domain index of the current value for the i-th
             variable/VID.
         """
         logging.debug("Generating weak labels.")
-        query = 'SELECT _vid_, init_index FROM %s AS t1 LEFT JOIN %s AS t2 ' \
-                'ON t1._cid_ = t2._cid_ WHERE t2._cid_ is NULL OR t1.fixed = 1;' % (
-        AuxTables.cell_domain.name, AuxTables.dk_cells.name)
+        query = """
+        SELECT
+            _vid_,
+            current_index
+        FROM
+            {cell_domain} AS t1
+        LEFT JOIN
+            {dk_cells} AS t2
+        ON t1._cid_ = t2._cid_
+        WHERE
+            t2._cid_ is NULL
+            OR t1.fixed = 1
+        """.format(cell_domain=AuxTables.cell_domain.name,
+                dk_cells=AuxTables.dk_cells.name)
         res = self.ds.engine.execute_query(query)
         if len(res) == 0:
             raise Exception("No weak labels available. Reduce pruning threshold.")
@@ -92,10 +103,10 @@ class FeaturizedDataset:
         get_training_data returns X_train, y_train, and mask_train
         where each row of each tensor is a variable/VID and
         y_train are weak labels for each variable i.e. they are
-        set as the initial values.
+        set as the current value.
 
-        This assumes that we have a larger proportion of correct initial values
-        and only a small amount of incorrect initial values which allow us
+        This assumes that we have a larger proportion of correct current values
+        and only a small amount of incorrect current values which allow us
         to train to convergence.
         """
         train_idx = (self.weak_labels != -1).nonzero()[:,0]

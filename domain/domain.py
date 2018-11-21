@@ -7,7 +7,6 @@ import random
 
 from dataset import AuxTables
 
-
 class DomainEngine:
     def __init__(self, env, dataset, cor_strength = 0.1, sampling_prob=0.3, max_sample=5):
         """
@@ -74,18 +73,30 @@ class DomainEngine:
         pos_values schema:
             _tid_: entity/tuple ID
             _cid_: cell ID
-            _vid_: random variable ID (all cells with more than 1 domain value)
-            _
-
+            _vid_: random variable ID (1-1 with _cid_)
+            attribute: name of attribute
+            rv_val: cell value
+            val_id: domain index of rv_val
         """
         if domain.empty:
             raise Exception("ERROR: Generated domain is empty.")
-        else:
-            self.ds.generate_aux_table(AuxTables.cell_domain, domain, store=True, index_attrs=['_vid_'])
-            self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_tid_'])
-            self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_cid_'])
-            query = "SELECT _vid_, _cid_, _tid_, attribute, a.rv_val, a.val_id from %s , unnest(string_to_array(regexp_replace(domain,\'[{\"\"}]\',\'\',\'gi\'),\'|||\')) WITH ORDINALITY a(rv_val,val_id)" % AuxTables.cell_domain.name
-            self.ds.generate_aux_table_sql(AuxTables.pos_values, query, index_attrs=['_tid_', 'attribute'])
+
+        self.ds.generate_aux_table(AuxTables.cell_domain, domain, store=True, index_attrs=['_vid_'])
+        self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_tid_'])
+        self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_cid_'])
+        query = """
+        SELECT
+            _vid_,
+            _cid_,
+            _tid_,
+            attribute,
+            a.rv_val,
+            a.val_id
+        FROM
+            {cell_domain},
+            unnest(string_to_array(regexp_replace(domain,\'[{{\"\"}}]\',\'\',\'gi\'),\'|||\')) WITH ORDINALITY a(rv_val,val_id)
+        """.format(cell_domain=AuxTables.cell_domain.name)
+        self.ds.generate_aux_table_sql(AuxTables.pos_values, query, index_attrs=['_tid_', 'attribute'])
 
     def setup_attributes(self):
         self.active_attributes = self.get_active_attributes()
@@ -177,10 +188,13 @@ class DomainEngine:
             _cid_: cell ID (unique for every entity-attribute)
             _vid_: variable ID (1-1 correspondence with _cid_)
             attribute: attribute name
+            attribute_idx: index of attribute
             domain: ||| seperated string of domain values
             domain_size: length of domain
-            init_value: initial value for this cell
-            init_value_idx: domain index of init_value
+            init_values: initial values for this cell
+            init_values_idx: domain indexes of init_values
+            current_value: current value (current predicted)
+            current_value_idx: domain index for current value
             fixed: 1 if a random sample was taken since no correlated attributes/top K values
         """
 
@@ -196,23 +210,28 @@ class DomainEngine:
             tid = row['_tid_']
             app = []
             for attr in self.active_attributes:
-                init_value, dom = self.get_domain_cell(attr, row)
-                init_value_idx = dom.index(init_value)
-                if len(dom) > 1:
-                    cid = self.ds.get_cell_id(tid, attr)
-                    app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_":vid, "domain": "|||".join(dom),  "domain_size": len(dom),
-                                "init_value": init_value, "init_index": init_value_idx, "fixed":0})
-                    vid += 1
-                else:
-                    add_domain = self.get_random_domain(attr,init_value)
+                init_values, current_value, dom = self.get_domain_cell(attr, row)
+                init_values_idx = list(map(dom.index, init_values))
+                current_value_idx = dom.index(current_value)
+                cid = self.ds.get_cell_id(tid, attr)
+                fixed = 0
+
+                # If domain could not be generated from correlated attributes,
+                # randomly choose values to add to our domain.
+                if len(dom) == 1:
+                    fixed = 1
+                    add_domain = self.get_random_domain(attr, init_values)
                     # Check if attribute has more than one unique values
                     if len(add_domain) > 0:
-                        dom.extend(self.get_random_domain(attr,init_value))
-                        cid = self.ds.get_cell_id(tid, attr)
-                        app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_": vid, "domain": "|||".join(dom),
-                                    "domain_size": len(dom),
-                                    "init_value": init_value, "init_index": init_value_idx, "fixed": 1})
-                        vid += 1
+                        dom.extend(add_domain)
+
+                app.append({"_tid_": tid, "_cid_": cid, "_vid_":vid,
+                            "attribute": attr, "attribute_idx": self.ds.attr_to_idx[attr],
+                            "domain": '|||'.join(dom), "domain_size": len(dom),
+                            "init_values": '|||'.join(init_values), "init_values_idx": '|||'.join(init_values_idx),
+                            "current_value": current_value, "current_value_idx": current_value_idx,
+                            "fixed": fixed})
+                vid+=1
             cells.extend(app)
         domain_df = pd.DataFrame(data=cells)
         logging.info('DONE generating domain')
@@ -220,8 +239,8 @@ class DomainEngine:
 
     def get_domain_cell(self, attr, row):
         """
-        get_domain_cell returns a list of all domain values for the given
-        entity (row) and attribute.
+        get_domain_cell returns list of init values, current (best predicted)
+        value, and list of domain values for the given cell.
 
         We define domain values as values in 'attr' that co-occur with values
         in attributes ('cond_attr') that are correlated with 'attr' at least in
@@ -237,7 +256,7 @@ class DomainEngine:
 
         This would produce [B,C,E] as domain values.
 
-        :return: (initial value of entity-attribute, domain values for entity-attribute).
+        :return: (list of initial values, current value, list of domain values).
         """
 
         domain = set([])
@@ -265,25 +284,34 @@ class DomainEngine:
 
         # Remove _nan_ if added due to correlated attributes
         domain.discard('_nan_')
-        # Add initial value in domain
-        if pd.isnull(row[attr]):
-            domain.update(set(['_nan_']))
-            init_value = '_nan_'
-        else:
-            domain.update(set([row[attr]]))
-            init_value = row[attr]
-        return init_value, list(domain)
 
-    def get_random_domain(self, attr, cur_value):
+        # Add initial value in domain
+        init_values = ['_nan_']
+        if not pd.isnull(row[attr]):
+            # Assume value in raw dataset is given as ||| separate initial values
+            init_values = row[attr].split('|||')
+        domain.update(set(init_values))
+
+        # Take the first initial value as the current value
+        current_value = init_values[0]
+
+        return init_values, current_value, list(domain)
+
+    def get_random_domain(self, attr, init_values):
         """
         get_random_domain returns a random sample of at most size
-        'self.max_sample' of domain values for 'attr' that is NOT 'cur_value'.
+        'self.max_sample' of domain values for :param attr: that is NOT any
+        of :param init_values:
+
+        :param attr: (str) name of attribute to generate random domain for
+        :param init_values: (list[str]) list of initial values
         """
 
         if random.random() > self.sampling_prob:
             return []
         domain_pool = set(self.single_stats[attr].keys())
-        domain_pool.discard(cur_value)
+        # Do not include initial values in random domain
+        domain_pool = domain_pool.difference(init_values)
         size = len(domain_pool)
         if size > 0:
             k = min(self.max_sample, size)
