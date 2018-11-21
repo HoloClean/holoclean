@@ -68,6 +68,7 @@ class OccurAttrFeaturizer(Featurizer):
                 # Get topK values
                 if val not in self.pair_stats[attr][rv_attr]:
                     if not pd.isnull(tuple[rv_attr]):
+                        logging.error('Cannot find attribute: %s with value %s in pair-wise statistics' % (attr, val))
                         raise Exception('Something is wrong with the pairwise statistics. <Val> should be present in dictionary.')
                 else:
                     all_vals = self.pair_stats[attr][rv_attr][val]
