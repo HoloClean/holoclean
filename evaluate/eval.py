@@ -49,7 +49,7 @@ class EvalEngine:
                 val_col: '_value_'}, axis='columns', inplace=True)
             raw_data = raw_data[['_tid_', '_attribute_', '_value_']]
             # Normalize string to whitespaces.
-            raw_data['_value_'] = raw_data['_value_'].str.strip().str
+            raw_data['_value_'] = raw_data['_value_'].str.strip().str.lower()
             self.clean_data = Table(name, Source.DF, df=raw_data)
             self.clean_data.store_to_db(self.ds.engine.engine)
             self.clean_data.create_db_index(self.ds.engine, ['_tid_'])
