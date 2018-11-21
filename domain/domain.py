@@ -221,14 +221,12 @@ class DomainEngine:
                 if len(dom) == 1:
                     fixed = 1
                     add_domain = self.get_random_domain(attr, init_values)
-                    # Check if attribute has more than one unique values
-                    if len(add_domain) > 0:
-                        dom.extend(add_domain)
+                    dom.extend(add_domain)
 
                 app.append({"_tid_": tid, "_cid_": cid, "_vid_":vid,
                             "attribute": attr, "attribute_idx": self.ds.attr_to_idx[attr],
                             "domain": '|||'.join(dom), "domain_size": len(dom),
-                            "init_values": '|||'.join(init_values), "init_values_idx": '|||'.join(init_values_idx),
+                            "init_values": '|||'.join(init_values), "init_values_idx": '|||'.join(map(str,init_values_idx)),
                             "current_value": current_value, "current_value_idx": current_value_idx,
                             "fixed": fixed})
                 vid+=1

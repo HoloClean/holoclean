@@ -104,7 +104,7 @@ class EvalEngine:
                 t1._tid_ = t2._tid_
                 AND t1.attribute = t2.attribute
                 AND t1.current_value != t2.rv_value
-            )
+            ) AS t
         """.format(cell_domain=AuxTables.cell_domain.name,
                 inf_values_dom=AuxTables.inf_values_dom.name)
         res = self.ds.engine.execute_query(query)
