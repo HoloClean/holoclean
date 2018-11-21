@@ -1,3 +1,5 @@
+import logging
+
 from dataset import Dataset
 from dcparser import Parser
 from domain import DomainEngine
@@ -169,74 +171,100 @@ class Session:
         self.repair_engine = RepairEngine(env, self.ds)
         self.eval_engine = EvalEngine(env, self.ds)
 
-    def load_data(self, name, f_path, f_name, na_values=None):
-        status, load_time = self.ds.load_data(name, f_path,f_name, na_values=na_values)
-        print(status)
+        # use DEBUG logging level if verbose enabled
+        root_logger = logging.getLogger()
+        gensim_logger = logging.getLogger('gensim')
+        root_level, gensim_level = logging.INFO, logging.WARNING
         if self.env['verbose']:
-            print('Time to load dataset: %.2f secs'%load_time)
+            root_level, gensim_level = logging.DEBUG, logging.DEBUG
+        root_logger.setLevel(root_level)
+        gensim_logger.setLevel(gensim_level)
 
-    def load_dcs(self, f_path, f_name):
-        status, load_time = self.dc_parser.load_denial_constraints(f_path, f_name)
-        print(status)
-        if self.env['verbose']:
-            print('Time to load dirty data: %.2f secs'%load_time)
+    def load_data(self, name, fpath, na_values=None,
+            entity_col=None, src_col=None):
+        """
+        load_data takes the filepath to a CSV file to load as the initial dataset.
+
+        :param name: (str) name to initialize dataset with.
+        :param fpath: (str) filepath to CSV file.
+        :param na_values: (str) value that identifies a NULL value
+        :param entity_col: (st) column containing the unique
+            identifier/ID of an entity.  For fusion tasks, rows with
+            the same ID will be fused together in the output.
+            If None, assumes every row is a unique entity.
+        :param src_col: (str) if not None, for fusion tasks
+            specifies the column containing the source for each "mention" of an
+            entity.
+        """
+        status, load_time = self.ds.load_data(name, fpath, na_values=na_values,
+                entity_col=entity_col, src_col=src_col)
+        logging.info(status)
+        logging.debug('Time to load dataset: %.2f secs'%load_time)
+
+    def load_dcs(self, fpath):
+        """
+        load_dcs ingests the Denial Constraints for initialized dataset.
+
+        :param fpath: filepath to TXT file where each line contains one denial constraint.
+        """
+        status, load_time = self.dc_parser.load_denial_constraints(fpath)
+        logging.info(status)
+        logging.debug('Time to load dirty data: %.2f secs'%load_time)
 
     def get_dcs(self):
         return self.dc_parser.get_dcs()
 
     def detect_errors(self, detect_list):
         status, detect_time = self.detect_engine.detect_errors(detect_list)
-        print(status)
-        if self.env['verbose']:
-            print('Time to detect errors: %.2f secs'%detect_time)
+        logging.info(status)
+        logging.debug('Time to detect errors: %.2f secs'%detect_time)
 
     def setup_domain(self):
         status, domain_time = self.domain_engine.setup()
-        print(status)
-        if self.env['verbose']:
-            print('Time to setup the domain: %.2f secs'%domain_time)
+        logging.info(status)
+        logging.debug('Time to setup the domain: %.2f secs'%domain_time)
 
     def repair_errors(self, featurizers):
         status, feat_time = self.repair_engine.setup_featurized_ds(featurizers)
-        print(status)
-        if self.env['verbose']:
-            print('Time to featurize data: %.2f secs'%feat_time)
+        logging.info(status)
+        logging.debug('Time to featurize data: %.2f secs'%feat_time)
         status, setup_time = self.repair_engine.setup_repair_model()
-        print(status)
-        if self.env['verbose']:
-            print('Time to setup repair model: %.2f secs' % feat_time)
+        logging.info(status)
+        logging.debug('Time to setup repair model: %.2f secs' % feat_time)
         status, fit_time = self.repair_engine.fit_repair_model()
-        print(status)
-        if self.env['verbose']:
-            print('Time to fit repair model: %.2f secs'%fit_time)
+        logging.info(status)
+        logging.debug('Time to fit repair model: %.2f secs'%fit_time)
         status, infer_time = self.repair_engine.infer_repairs()
-        print(status)
-        if self.env['verbose']:
-            print('Time to infer correct cell values: %.2f secs'%infer_time)
+        logging.info(status)
+        logging.debug('Time to infer correct cell values: %.2f secs'%infer_time)
         status, time = self.ds.get_inferred_values()
-        print(status)
-        if self.env['verbose']:
-            print('Time to collect inferred values: %.2f secs' % time)
+        logging.info(status)
+        logging.debug('Time to collect inferred values: %.2f secs' % time)
         status, time = self.ds.get_repaired_dataset()
-        print(status)
-        if self.env['verbose']:
-            print('Time to store repaired dataset: %.2f secs' % time)
+        logging.info(status)
+        logging.debug('Time to store repaired dataset: %.2f secs' % time)
         if self.env['print_fw']:
             status, time = self.repair_engine.get_featurizer_weights()
-            print(status)
-            if self.env['verbose']:
-                print('Time to store featurizer weights: %.2f secs' % time)
+            logging.info(status)
+            logging.debug('Time to store featurizer weights: %.2f secs' % time)
             return status
-        
 
-    def evaluate(self, f_path, f_name, get_tid, get_attr, get_value, na_values=None):
+    def evaluate(self, fpath, tid_col, attr_col, val_col, na_values=None):
+        """
+        evaluate generates an evaluation report with metrics (e.g. precision,
+        recall) given a test set.
+
+        :param fpath: (str) filepath to test set (ground truth) CSV file.
+        :param tid_col: (str) column in CSV that corresponds to the TID.
+        :param attr_col: (str) column in CSV that corresponds to the attribute.
+        :param val_col: (str) column in CSV that corresponds to correct value
+            for the current TID and attribute (i.e. cell).
+        """
         name = self.ds.raw_data.name + '_clean'
-        status, load_time = self.eval_engine.load_data(name, f_path, f_name, get_tid, get_attr, get_value, na_values=na_values)
-        print(status)
-        if self.env['verbose']:
-            print('Time to evaluate repairs: %.2f secs'%load_time)
+        status, load_time = self.eval_engine.load_data(name, fpath, tid_col, attr_col, val_col, na_values=na_values)
+        logging.info(status)
+        logging.debug('Time to evaluate repairs: %.2f secs', load_time)
         status, report_time, report_list = self.eval_engine.eval_report()
-        print(status)
-        if self.env['verbose']:
-            print('Time to generate report: %.2f secs' % report_time)
+        logging.info(status)
+        logging.debug('Time to generate report: %.2f secs' % report_time)
         return report_list

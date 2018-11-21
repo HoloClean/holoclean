@@ -1,3 +1,4 @@
+import logging
 import time
 import os
 import pandas as pd
@@ -10,14 +11,24 @@ errors_template = Template('SELECT count(*) '\
                             'FROM $init_table as t1, $grdt_table as t2 '\
                             'WHERE t1._tid_ = t2._tid_ '\
                               'AND t2._attribute_ = \'$attr\' '\
-                              'AND t1.$attr != t2._value_')
+                              'AND t1."$attr" != t2._value_')
 
+"""
+The 'errors' aliased subquery returns the (_tid_, _attribute_, _value_)
+from the ground truth table for all cells that have an error in the original
+raw data.
+
+The 'repairs' aliased table contains the cells and values we've inferred.
+
+We then count the number of cells that we repaired to the correct ground
+truth value.
+"""
 correct_repairs_template = Template('SELECT COUNT(*) FROM'\
                             '(SELECT t2._tid_, t2._attribute_, t2._value_ '\
                              'FROM $init_table as t1, $grdt_table as t2 '\
                              'WHERE t1._tid_ = t2._tid_ '\
                                'AND t2._attribute_ = \'$attr\' '\
-                               'AND t1.$attr != t2._value_ ) as errors, $inf_dom as repairs '\
+                               'AND t1."$attr" != t2._value_ ) as errors, $inf_dom as repairs '\
                               'WHERE errors._tid_ = repairs._tid_ '\
                                 'AND errors._attribute_ = repairs.attribute '\
                                 'AND errors._value_ = repairs.rv_value')
@@ -28,25 +39,25 @@ class EvalEngine:
         self.env = env
         self.ds = dataset
 
-    def load_data(self, name, f_path, f_name, get_tid, get_attr, get_val, na_values=None):
+    def load_data(self, name, fpath, tid_col, attr_col, val_col, na_values=None):
         tic = time.clock()
         try:
-            raw_data = pd.read_csv(os.path.join(f_path,f_name), na_values=na_values)
+            raw_data = pd.read_csv(fpath, na_values=na_values)
             raw_data.fillna('_nan_',inplace=True)
-            raw_data['_tid_'] = raw_data.apply(get_tid, axis=1)
-            raw_data['_attribute_'] = raw_data.apply(get_attr, axis=1)
-            raw_data['_value_'] = raw_data.apply(get_val, axis=1)
+            raw_data.rename({tid_col: '_tid_',
+                attr_col: '_attribute_',
+                val_col: '_value_'}, axis='columns', inplace=True)
             raw_data = raw_data[['_tid_', '_attribute_', '_value_']]
-            # Normalize string to lower-case and strip whitespaces.
-            raw_data['_attribute_'] = raw_data['_attribute_'].apply(lambda x: x.lower())
-            raw_data['_value_'] = raw_data['_value_'].apply(lambda x: x.strip().lower())
-            self.clean_data = Table(name, Source.DF, raw_data)
+            # Normalize string to whitespaces.
+            raw_data['_value_'] = raw_data['_value_'].str.strip().str.lower()
+            self.clean_data = Table(name, Source.DF, df=raw_data)
             self.clean_data.store_to_db(self.ds.engine.engine)
             self.clean_data.create_db_index(self.ds.engine, ['_tid_'])
             self.clean_data.create_db_index(self.ds.engine, ['_attribute_'])
-            status = 'DONE Loading '+f_name
-        except Exception as e:
-            status = ' '.join(['For table:', name, str(e)])
+            status = 'DONE Loading {fname}'.format(fname=os.path.basename(fpath))
+        except Exception:
+            logging.error('load_data for table %s', name)
+            raise
         toc = time.clock()
         load_time = toc - tic
         return status, load_time
@@ -73,6 +84,7 @@ class EvalEngine:
             report_list = [prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
                            self.correct_repairs, self.total_repairs, self.total_repairs_grdt]
         except Exception as e:
+            logging.error("ERROR generating evaluation report %s" % e)
             raise Exception("ERROR generating evaluation report")
         toc = time.clock()
         report_time = toc - tic
@@ -167,17 +179,11 @@ class EvalEngine:
     def compute_f1(self):
         prec = self.compute_precision()
         rec = self.compute_recall()
-        try:
-            f1 = 2*(prec*rec)/(prec+rec)
-        except ZeroDivisionError as e:
-            f1 = -1.0
+        f1 = 2*(prec*rec)/(prec+rec)
         return f1
 
     def compute_repairing_f1(self):
         prec = self.compute_precision()
         rec = self.compute_repairing_recall()
-        try:
-            f1 = 2*(prec*rec)/(prec+rec)
-        except ZeroDivisionError as e:
-            f1 = -1.0
+        f1 = 2*(prec*rec)/(prec+rec)
         return f1

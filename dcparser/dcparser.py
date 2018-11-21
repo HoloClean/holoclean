@@ -1,6 +1,9 @@
+import logging
 import os
 import time
+
 from .constraint import DenialConstraint
+
 
 class Parser:
     """
@@ -17,12 +20,10 @@ class Parser:
         self.dc_strings = []
         self.dcs = {}
 
-    def load_denial_constraints(self, f_path, f_name):
+    def load_denial_constraints(self, fpath):
         """
-        Loads denial constraints from line-separated txt file
-        :param file_path: path to dc file
-        :param all_current_dcs: list of current dcs in the session
-        :return: list of Denial Constraint strings and their respective Denial Constraint Objects
+        Loads denial constraints from line-separated TXT file
+        :param fpath: filepath to TXT file containing denial constraints
         """
         tic = time.clock()
         if not self.ds.raw_data:
@@ -31,18 +32,18 @@ class Parser:
             return status, toc - tic
         attrs = self.ds.raw_data.get_attributes()
         try:
-            dc_file = open(os.path.join(f_path,f_name), 'r')
+            dc_file = open(fpath, 'r')
             status = "OPENED constraints file successfully"
-            if self.env['verbose']:
-                print (status)
+            logging.debug(status)
             for line in dc_file:
                 if not line.isspace():
                     line = line.rstrip()
                     self.dc_strings.append(line)
-                    self.dcs[line] = (DenialConstraint(line,attrs,self.env['verbose']))
-            status = 'DONE Loading DCs from ' + f_name
-        except Exception as e:
-            status = ' '.join(['For file:', f_name, str(e)])
+                    self.dcs[line] = (DenialConstraint(line,attrs))
+            status = 'DONE Loading DCs from {fname}'.format(fname=os.path.basename(fpath))
+        except Exception:
+            logging.error('loading constraints for file %s', os.path.basename(fpath))
+            raise
         toc = time.clock()
         return status, toc - tic
 

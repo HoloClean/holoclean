@@ -72,15 +72,31 @@ class ConstraintFeat(Featurizer):
         return self.ds.engine.execute_queries_w_backup(queries)
 
     def relax_unary_predicate(self, predicate):
-        attr =  predicate.components[0][1].lower()
+        """
+        relax_binary_predicate returns the attribute, operation, and
+        tuple attribute reference.
+
+        :return: (attr, op, const), for example:
+            ("StateAvg", "<>", 't1."StateAvg"')
+        """
+        attr =  predicate.components[0][1]
         op = predicate.operation
-        const = predicate.components[1].lower()
+        const = '"{}"'.format(predicate.components[1])
         return attr, op, const
 
     def relax_binary_predicate(self, predicate, rel_idx):
-        attr = predicate.components[rel_idx][1].lower()
+        """
+        relax_binary_predicate returns the attribute, operation, and
+        tuple attribute reference.
+
+        :return: (attr, op, const), for example:
+            ("StateAvg", "<>", 't1."StateAvg"')
+        """
+        attr = predicate.components[rel_idx][1]
         op = predicate.operation
-        const = predicate.components[1-rel_idx][0]+'.'+predicate.components[1-rel_idx][1].lower()
+        const = '{}."{}"'.format(
+                predicate.components[1-rel_idx][0],
+                predicate.components[1-rel_idx][1])
         return attr, op, const
 
     def get_binary_predicate_join_rel(self, predicate):
