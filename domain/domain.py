@@ -217,7 +217,7 @@ class DomainEngine:
             # 3) the current value (best predicted value)
             for attr in self.active_attributes:
                 init_values, current_value, dom = self.get_domain_cell(attr, row)
-                init_values_idx = list(map(dom.index, init_values))
+                init_values_idx = [dom.index(val) for val in init_values]
                 current_value_idx = dom.index(current_value)
                 cid = self.ds.get_cell_id(tid, attr)
                 fixed = 0
