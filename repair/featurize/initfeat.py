@@ -14,11 +14,8 @@ def gen_feat_tensor(input, classes):
 
 
 class InitFeaturizer(Featurizer):
-    def __init__(self, name='InitFeaturizer'):
-        super(InitFeaturizer, self).__init__(name)
-
     def specific_setup(self):
-        pass
+        self.name = 'InitFeaturizer'
 
     def create_tensor(self):
         query = 'SELECT _vid_, init_index FROM %s ORDER BY _vid_'%AuxTables.cell_domain.name

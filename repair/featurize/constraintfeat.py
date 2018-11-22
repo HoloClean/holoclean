@@ -38,11 +38,8 @@ def gen_feat_tensor(violations, total_vars, classes):
 
 
 class ConstraintFeat(Featurizer):
-
-    def __init__(self, name='ConstraintFeat'):
-        super(ConstraintFeat, self).__init__(name)
-
     def specific_setup(self):
+        self.name = 'ConstraintFeat'
         self.constraints = self.ds.constraints
         self.init_table_name = self.ds.raw_data.name
 
