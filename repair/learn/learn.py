@@ -59,7 +59,7 @@ class TiedLinear(torch.nn.Module):
         # Concats different featurizer weights - need to call during every pass
         self.concat_weights()
         output = X.mul(self.W)
-        if self.bias is not None:
+        if self.bias_flag
             output += self.B
         output = output.sum(2)
         # Add our mask so that invalid domain classes for a given variable/VID
