@@ -119,11 +119,14 @@ class DomainEngine:
             for attr2 in pair_stats[attr1].keys():
                 out[attr1][attr2] = {}
                 for val1 in pair_stats[attr1][attr2].keys():
-                    try:
-                        denominator = self.single_stats[attr1][val1]
-                    except KeyError:
-                        import pdb; pdb.set_trace()
-
+                    denominator = self.single_stats[attr1][val1]
+                    # TODO(richardwu): while this computes tau as the topk % of
+                    # count, we are actually not guaranteed any pairwise co-occurrence
+                    # thresholds exceed this count.
+                    # For example suppose topk = 0.1 ("top 10%") but we have
+                    # 20 co-occurrence counts i.e. 20 unique val2 with
+                    # uniform counts, therefore each co-occurrence count
+                    # is actually 1 / 20 = 0.05 of the frequency for val1.
                     tau = float(self.topk*denominator)
                     top_cands = [val2 for (val2, count) in pair_stats[attr1][attr2][val1].items() if count > tau]
                     out[attr1][attr2][val1] = top_cands
