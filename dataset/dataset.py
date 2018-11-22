@@ -141,13 +141,21 @@ class Dataset:
     def set_constraints(self, constraints):
         self.constraints = constraints
 
+    def aux_table_exists(self, aux_table):
+        """
+        get_aux_table returns True if :param aux_table: has been generated.
+
+        :param aux_table: (AuxTables(Enum)) auxiliary table to check
+        """
+        return aux_table in self.aux_tables
+
     def get_aux_table(self, aux_table):
         """
         get_aux_table returns the Table associated with :param aux_table:.
 
-        :param aux_table: (AuxTables(Enum)) auxiliary table to check
+        :param aux_table: (AuxTables(Enum)) auxiliary table to retrieve
         """
-        if aux_table not in self.aux_tables:
+        if not self.aux_table_exists(aux_table):
             raise Exception("{} auxiliary table has not been generated".format(aux_table))
         return self.aux_tables[aux_table]
 
@@ -234,14 +242,14 @@ class Dataset:
                 <count>: frequency (# of entities) where attr1: val1 AND attr2: val2
         """
         if not self.stats_ready:
-            self._collect_stats()
+            self.collect_stats()
         stats = (self.total_tuples, self.single_attr_stats, self.pair_attr_stats)
         self.stats_ready = True
         return stats
 
-    def _collect_stats(self):
+    def collect_stats(self):
         """
-        collect_stats memoizes:
+        collect_stats calculates and memoizes: (based on current statistics)
           1. self.single_attr_stats ({ attribute -> { value -> count } })
             the frequency (# of entities) of a given attribute-value
           2. self.pair_attr_stats ({ attr1 -> { attr2 -> {val1 -> {val2 -> count } } } })
@@ -252,7 +260,7 @@ class Dataset:
             Also known as co-occurrence count.
         """
 
-        self.total_tuples = self.get_raw_data().shape[0]
+        self.total_tuples = self.get_raw_data()['_tid_'].nunique()
         # Single attribute-value frequency
         for attr in self.get_attributes():
             self.single_attr_stats[attr] = self._get_stats_single(attr)
@@ -268,9 +276,27 @@ class Dataset:
         Returns a dictionary where the keys possible values for :param attr: and
         the values contain the frequency count of that value for this attribute.
         """
+<<<<<<< HEAD
         # need to decode values into unicode strings since we do lookups via
         # unicode strings from Postgres
         return self.get_raw_data()[[attr]].groupby([attr]).size().to_dict()
+=======
+
+        # If cell_domain has not been initialized yet, retrieve statistics
+        # from raw data (this happens when the domain is just being setup)
+        if not self.aux_table_exists(AuxTables.cell_domain):
+            return self.get_raw_data()[[attr]].groupby([attr]).size()
+
+        # Retrieve statistics on current value from cell_domain
+
+        df_domain = self.get_aux_table(AuxTables.cell_domain).df
+        df_count = df_domain.loc[df_domain['attribute'] == attr, 'current_value'].value_counts()
+        # We do not store attributes with only NULL values in cell_domain:
+        # we require _nan_ in our single stats however
+        if df_count.empty:
+            return pd.Series(self.total_tuples, index=['_nan_'])
+        return df_count
+>>>>>>> Re-compute single and co-occur stats after every EM iteration.
 
 <<<<<<< HEAD
     def get_stats_pair(self, first_attr, second_attr):
@@ -283,8 +309,31 @@ class Dataset:
             <second_val>: all values for second_attr that appeared at least once with <first_val>
             <count>: frequency (# of entities) where first_attr: <first_val> AND second_attr: <second_val>
         """
+<<<<<<< HEAD
         tmp_df = self.get_raw_data()[[first_attr,second_attr]].groupby([first_attr,second_attr]).size().reset_index(name="count")
         return _dictify(tmp_df)
+=======
+        # If cell_domain has not been initialized yet, retrieve statistics
+        # from raw data (this happens when the domain is just being setup)
+        if not self.aux_table_exists(AuxTables.cell_domain):
+            return self.get_raw_data()[[cond_attr,trg_attr]].groupby([cond_attr,trg_attr]).size().reset_index(name="count")
+
+        # Retrieve pairwise statistics on current value from cell_domain
+
+        df_domain = self.get_aux_table(AuxTables.cell_domain).df
+        # Filter cell_domain for only the attributes we care about
+        df_domain = df_domain[df_domain['attribute'].isin([cond_attr, trg_attr])]
+        # Convert to wide form so we have our :param cond_attr:
+        # and :trg_attr: as columns along with the _tid_ column
+        df_domain = df_domain[['_tid_', 'attribute', 'current_value']].pivot(index='_tid_', columns='attribute', values='current_value')
+        # We do not store cells for attributes consisting of only NULL values in cell_domain.
+        # We require this for pair stats though.
+        if cond_attr not in df_domain.columns:
+            df_domain[cond_attr] = '_nan_'
+        if trg_attr not in df_domain.columns:
+            df_domain[trg_attr] = '_nan_'
+        return df_domain.groupby([cond_attr, trg_attr]).size().reset_index(name="count")
+>>>>>>> Re-compute single and co-occur stats after every EM iteration.
 
     def get_domain_info(self):
         """

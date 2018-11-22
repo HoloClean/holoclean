@@ -286,6 +286,8 @@ class Session:
                 logging.debug('Time to retrieve featurizer weights: %.2f secs' % time)
             # Update current values with inferred values
             self.ds.update_current_values()
+            # Re-compute statistics with new current values
+            self.ds.collect_stats()
 
             # Call em_iter_func if provided at the end of every EM iteration
             if em_iter_func is not None:

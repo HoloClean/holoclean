@@ -31,7 +31,7 @@ class TestHolocleanRepair(unittest.TestCase):
 
         # 5. Repair and evaluate the correctness of the results.
         eval_func = lambda: hc.evaluate('../testdata/hospital_clean.csv', 'tid', 'attribute', 'correct_val')
-        hc.repair_errors(featurizers, em_iterations=2, em_iter_func=eval_func)
+        hc.repair_errors(featurizers, em_iterations=5, em_iter_func=eval_func)
 
 
 if __name__ == '__main__':

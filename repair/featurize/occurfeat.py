@@ -13,7 +13,7 @@ class OccurFeaturizer(Featurizer):
             raise Exception('Featurizer %s is not properly setup.'%self.name)
         self.all_attrs = self.ds.get_attributes()
         self.attrs_number = len(self.ds.attr_to_idx)
-        self.raw_data_dict = {}
+        self.current_values_dict = {}
         self.total = None
         self.single_stats = None
         self.pair_stats = None
@@ -28,8 +28,14 @@ class OccurFeaturizer(Featurizer):
         self.single_stats is a dict { attribute -> { value -> count } }.
         self.pair_stats is a dict { attr1 -> { attr2 -> { val1 -> {val2 -> co-occur frequency } } } }.
         """
-        # raw_data_dict is a Dictionary mapping TID -> { attribute -> value }
-        self.raw_data_dict = self.ds.raw_data.df.set_index('_tid_').to_dict('index')
+        # current_values_dict is a Dictionary mapping TID -> { attribute -> current value }
+        self.current_values_dict = {}
+
+        for (tid, attr, cur_val) in self.ds.get_aux_table(AuxTables.cell_domain).df[['_tid_', 'attribute', 'current_value']].to_records(index=False):
+            self.current_values_dict[tid] = self.current_values_dict.get(tid, {})
+            self.current_values_dict[tid][attr] = cur_val
+
+        # frequency and co-occurrence frequencies
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = float(total)
         self.single_stats = single_stats
@@ -53,18 +59,18 @@ class OccurFeaturizer(Featurizer):
         sorted_domain = t.df.reset_index().sort_values(by=['_vid_'])[['_tid_','attribute','_vid_','domain']]
         records = sorted_domain.to_records()
         for row in tqdm(list(records)):
-            #Get tuple from raw_dataset
+            #Get current values for this TID
             tid = row['_tid_']
-            tuple = self.raw_data_dict[tid]
-            feat_tensor = self.gen_feat_tensor(row, tuple)
+            current_tuple = self.current_values_dict[tid]
+            feat_tensor = self.gen_feat_tensor(row, current_tuple)
             tensors.append(feat_tensor)
         combined = torch.cat(tensors)
         return combined
 
-    def gen_feat_tensor(self, row, tuple):
+    def gen_feat_tensor(self, row, current_tuple):
         """
         For a given cell, we calculate the co-occurence probability of all domain values
-        for row['attribute'] with the row's co-value in every co-attributes.
+        for row['attribute'] with the row's current value in every co-attributes.
 
         That is for a domain value 'd' and current co-attribute value 'c' we have
             P(d | c)   P(d, c) / P(c)
@@ -73,9 +79,9 @@ class OccurFeaturizer(Featurizer):
         is the frequency of 'c'.
         """
         # tensor is a (1 X domain size X # of attributes) pytorch.Tensor
-        # tensor[0][domain_idx][coattr_idx] contains the co-occurrence probability
-        # between the co-attribute (coattr_idx) and the domain values
-        # a possible domain value for this entity (row/tuple)
+        # tensor[0][domain_idx][rv_idx] contains the co-occurrence probability
+        # between the current attribute (row['attribute']) and the domain values
+        # a possible domain value for this entity
         tensor = torch.zeros(1, self.classes, self.attrs_number)
         rv_attr = row['attribute']
         # Domain value --> index mapping
@@ -87,15 +93,17 @@ class OccurFeaturizer(Featurizer):
         # domain value for our current row['attribute'].
         for attr in self.all_attrs:
             # Skip pairwise with current attribute or NULL value
-            if attr == rv_attr or pd.isnull(tuple[attr]):
+            # 'attr' may not be in 'current_tuple' since we do not store
+            # attributes with all NULL values in our current values
+            if attr == rv_attr or pd.isnull(current_tuple.get(attr, None)):
                 continue
 
             attr_idx = self.ds.attr_to_idx[attr]
-            val = tuple[attr]
+            val = current_tuple[attr]
             attr_freq = float(self.single_stats[attr][val])
             # Get topK values
             if val not in self.pair_stats[attr][rv_attr]:
-                if not pd.isnull(tuple[rv_attr]):
+                if not pd.isnull(current_tuple[rv_attr]):
                     raise Exception('Something is wrong with the pairwise statistics. <{val}> should be present in dictionary.'.format(val))
             else:
                 # dict of { val -> co-occur count }
