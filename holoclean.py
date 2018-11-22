@@ -251,16 +251,16 @@ class Session:
         status, infer_time = self.repair_engine.infer_repairs()
         logging.info(status)
         logging.debug('Time to infer correct cell values: %.2f secs'%infer_time)
-        status, time = self.ds.get_inferred_values()
+        status, time = self.ds.generate_inferred_values()
         logging.info(status)
         logging.debug('Time to collect inferred values: %.2f secs' % time)
-        status, time = self.ds.get_repaired_dataset()
+        status, time = self.ds.generate_repaired_dataset()
         logging.info(status)
         logging.debug('Time to store repaired dataset: %.2f secs' % time)
         if self.env['print_fw']:
             status, time = self.repair_engine.get_featurizer_weights()
             logging.info(status)
-            logging.debug('Time to store featurizer weights: %.2f secs' % time)
+            logging.debug('Time to retrieve featurizer weights: %.2f secs' % time)
             return status
 
     def evaluate(self, fpath, tid_col, attr_col, val_col, na_values=None):

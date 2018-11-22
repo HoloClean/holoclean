@@ -49,9 +49,7 @@ class Dataset:
         self.raw_data = None
         self.repaired_data = None
         self.constraints = None
-        self.aux_table = {}
-        for tab in AuxTables:
-            self.aux_table[tab] = None
+        self.aux_tables = {}
         # start dbengine
         self.engine = DBengine(
             env['db_user'],
@@ -143,6 +141,17 @@ class Dataset:
     def set_constraints(self, constraints):
         self.constraints = constraints
 
+    def get_aux_table(self, aux_table):
+        """
+        get_aux_table returns the Table associated with :param aux_table:.
+
+        :param aux_table: (AuxTables(Enum)) auxiliary table to check
+        """
+        if aux_table not in self.aux_tables:
+            raise Exception("{} auxiliary table has not been generated".format(aux_table))
+        return self.aux_tables[aux_table]
+
+
     def generate_aux_table(self, aux_table, df, store=False, index_attrs=False):
         """
         generate_aux_table writes/overwrites the auxiliary table specified by
@@ -160,13 +169,13 @@ class Dataset:
         also creates indexes on Postgres table.
         """
         try:
-            self.aux_table[aux_table] = Table(aux_table.name, Source.DF, df=df)
+            self.aux_tables[aux_table] = Table(aux_table.name, Source.DF, df=df)
             if store:
-                self.aux_table[aux_table].store_to_db(self.engine.engine)
+                self.aux_tables[aux_table].store_to_db(self.engine.engine)
             if index_attrs:
-                self.aux_table[aux_table].create_df_index(index_attrs)
+                self.aux_tables[aux_table].create_df_index(index_attrs)
             if store and index_attrs:
-                self.aux_table[aux_table].create_db_index(self.engine, index_attrs)
+                self.aux_tables[aux_table].create_db_index(self.engine, index_attrs)
         except Exception:
             logging.error('generating aux_table %s', aux_table.name)
             raise
@@ -177,10 +186,10 @@ class Dataset:
         :param query: (str) SQL query whose result is used for generating the auxiliary table.
         """
         try:
-            self.aux_table[aux_table] = Table(aux_table.name, Source.SQL, table_query=query, db_engine=self.engine)
+            self.aux_tables[aux_table] = Table(aux_table.name, Source.SQL, table_query=query, db_engine=self.engine)
             if index_attrs:
-                self.aux_table[aux_table].create_df_index(index_attrs)
-                self.aux_table[aux_table].create_db_index(self.engine, index_attrs)
+                self.aux_tables[aux_table].create_df_index(index_attrs)
+                self.aux_tables[aux_table].create_db_index(self.engine, index_attrs)
         except Exception:
             logging.error('generating aux_table %s', aux_table.name)
             raise
@@ -225,12 +234,12 @@ class Dataset:
                 <count>: frequency (# of entities) where attr1: val1 AND attr2: val2
         """
         if not self.stats_ready:
-            self.collect_stats()
+            self._collect_stats()
         stats = (self.total_tuples, self.single_attr_stats, self.pair_attr_stats)
         self.stats_ready = True
         return stats
 
-    def collect_stats(self):
+    def _collect_stats(self):
         """
         collect_stats memoizes:
           1. self.single_attr_stats ({ attribute -> { value -> count } })
@@ -246,15 +255,15 @@ class Dataset:
         self.total_tuples = self.get_raw_data().shape[0]
         # Single attribute-value frequency
         for attr in self.get_attributes():
-            self.single_attr_stats[attr] = self.get_stats_single(attr)
+            self.single_attr_stats[attr] = self._get_stats_single(attr)
         # Co-occurence frequency
         for cond_attr in self.get_attributes():
             self.pair_attr_stats[cond_attr] = {}
             for trg_attr in self.get_attributes():
                 if trg_attr != cond_attr:
-                    self.pair_attr_stats[cond_attr][trg_attr] = self.get_stats_pair(cond_attr,trg_attr)
+                    self.pair_attr_stats[cond_attr][trg_attr] = self._get_stats_pair(cond_attr,trg_attr)
 
-    def get_stats_single(self, attr):
+    def _get_stats_single(self, attr):
         """
         Returns a dictionary where the keys possible values for :param attr: and
         the values contain the frequency count of that value for this attribute.
@@ -263,7 +272,11 @@ class Dataset:
         # unicode strings from Postgres
         return self.get_raw_data()[[attr]].groupby([attr]).size().to_dict()
 
+<<<<<<< HEAD
     def get_stats_pair(self, first_attr, second_attr):
+=======
+    def _get_stats_pair(self, cond_attr, trg_attr):
+>>>>>>> Cleaned up some private functions and accesses to aux_tables.
         """
         Returns a dictionary {first_val -> {second_val -> count } } where:
             <first_val>: all possible values for first_attr
@@ -284,7 +297,7 @@ class Dataset:
         classes = int(res[0][1])
         return total_vars, classes
 
-    def get_inferred_values(self):
+    def generate_inferred_values(self):
         tic = time.clock()
         query = """
         SELECT  t1._tid_,
@@ -302,17 +315,22 @@ class Dataset:
         """.format(cell_domain=AuxTables.cell_domain.name,
                 inf_values_idx=AuxTables.inf_values_idx.name)
         self.generate_aux_table_sql(AuxTables.inf_values_dom, query, index_attrs=['_tid_'])
-        self.aux_table[AuxTables.inf_values_dom].create_db_index(self.engine, ['attribute'])
+        self.get_aux_table(AuxTables.inf_values_dom).create_db_index(self.engine, ['attribute'])
         status = "DONE collecting the inferred values."
         toc = time.clock()
         total_time = toc - tic
         return status, total_time
 
-    def get_repaired_dataset(self):
+    def generate_repaired_dataset(self):
         tic = time.clock()
         init_records = self.raw_data.df.sort_values(['_tid_']).to_records(index=False)
+<<<<<<< HEAD
         t = self.aux_table[AuxTables.inf_values_dom]
         repaired_vals = _dictify(t.df.reset_index())
+=======
+        t = self.aux_tables[AuxTables.inf_values_dom]
+        repaired_vals = dictify(t.df.reset_index())
+>>>>>>> Cleaned up some private functions and accesses to aux_tables.
         for tid in repaired_vals:
             for attr in repaired_vals[tid]:
                 init_records[tid][attr] = repaired_vals[tid][attr]
@@ -324,5 +342,3 @@ class Dataset:
         toc = time.clock()
         total_time = toc - tic
         return status, total_time
-
-

@@ -49,7 +49,7 @@ class OccurFeaturizer(Featurizer):
         # Iterate over tuples in domain
         tensors = []
         # Set tuple_id index on raw_data
-        t = self.ds.aux_table[AuxTables.cell_domain]
+        t = self.ds.get_aux_table(AuxTables.cell_domain)
         sorted_domain = t.df.reset_index().sort_values(by=['_vid_'])[['_tid_','attribute','_vid_','domain']]
         records = sorted_domain.to_records()
         for row in tqdm(list(records)):
