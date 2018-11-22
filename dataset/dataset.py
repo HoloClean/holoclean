@@ -9,9 +9,9 @@ from .dbengine import DBengine
 from .table import Table, Source
 
 
-def dictify(frame):
+def _dictify(frame):
     """
-    dictify converts a frame with columns
+    _dictify converts a frame with columns
 
       col1    | col2    | .... | coln   | value
       ...
@@ -19,15 +19,15 @@ def dictify(frame):
 
     { val1 -> { val2 -> { ... { valn -> value } } } }
     """
-    d = {}
+    ret = {}
     for row in frame.values:
-        here = d
+        cur_level = ret
         for elem in row[:-2]:
-            if elem not in here:
-                here[elem] = {}
-            here = here[elem]
-        here[row[-2]] = row[-1]
-    return d
+            if elem not in cur_level:
+                cur_level[elem] = {}
+            cur_level = cur_level[elem]
+        cur_level[row[-2]] = row[-1]
+    return ret
 
 
 class AuxTables(Enum):
@@ -183,10 +183,9 @@ class Dataset:
         """
         get_raw_data returns a pandas.DataFrame containing the raw data as it was initially loaded.
         """
-        if self.raw_data:
-            return self.raw_data.df
-        else:
+        if self.raw_data is None:
             raise Exception('ERROR No dataset loaded')
+        return self.raw_data.df
 
     def get_attributes(self):
         """
@@ -208,6 +207,17 @@ class Dataset:
         return vid
 
     def get_statistics(self):
+        """
+        get_statistics returns:
+            1. self.total_tuples (total # of tuples)
+            2. self.single_attr_stats ({ attribute -> {value -> count } })
+              the frequency (# of entities) of a given attribute-value
+            3. self.pair_attr_stats ({ attr1 -> { attr2 -> DataFrame } } where
+                DataFrame contains 3 columns:
+                <attr1>: all possible values for attr1 ('val1')
+                <attr2>: all values for attr2 that appeared at least once with <val1> ('val2')
+                <count>: frequency (# of entities) where attr1: val1 AND attr2: val2
+        """
         if not self.stats_ready:
             self.collect_stats()
         stats = (self.total_tuples, self.single_attr_stats, self.pair_attr_stats)
@@ -217,10 +227,10 @@ class Dataset:
     def collect_stats(self):
         """
         collect_stats memoizes:
-          1. self.single_attr_stats ({ attribute -> Series (value -> count) })
+          1. self.single_attr_stats ({ attribute -> {value -> count } })
             the frequency (# of entities) of a given attribute-value
-          2. self.pair_attr_stats ({ attr1 -> { attr2 -> DataFrame } } where
-            DataFrame contains 3 columns:
+          2. self.pair_attr_stats ({ attr1 -> { attr2 -> {val1 -> {val2 -> count } } } })
+            where DataFrame contains 3 columns:
               <attr1>: all possible values for attr1 ('val1')
               <attr2>: all values for attr2 that appeared at least once with <val1> ('val2')
               <count>: frequency (# of entities) where attr1: val1 AND attr2: val2
@@ -240,20 +250,22 @@ class Dataset:
 
     def get_stats_single(self, attr):
         """
-        Returns a Series indexed on possible values for 'attr' and contains the frequency.
+        Returns a dictionary where the keys possible values for :param attr: and
+        the values contain the frequency count of that value for this attribute.
         """
-        tmp_df = self.get_raw_data()[[attr]].groupby([attr]).size()
-        return tmp_df
+        # need to decode values into unicode strings since we do lookups via
+        # unicode strings from Postgres
+        return self.get_raw_data()[[attr]].groupby([attr]).size().to_dict()
 
-    def get_stats_pair(self, cond_attr, trg_attr):
+    def get_stats_pair(self, first_attr, second_attr):
         """
-        Returns a DataFrame containing 3 columns:
-            <cond_attr>: all possible values for cond_attr ('val1')
-            <trg_attr>: all values for trg_attr that appeared at least once with <val1> ('val2')
-            <count>: frequency (# of entities) where cond_attr: val1 AND trg_attr: val2
+        Returns a dictionary {first_val -> {second_val -> count } } where:
+            <first_val>: all possible values for first_attr
+            <second_val>: all values for second_attr that appeared at least once with <first_val>
+            <count>: frequency (# of entities) where first_attr: <first_val> AND second_attr: <second_val>
         """
-        tmp_df = self.get_raw_data()[[cond_attr,trg_attr]].groupby([cond_attr,trg_attr]).size().reset_index(name="count")
-        return tmp_df
+        tmp_df = self.get_raw_data()[[first_attr,second_attr]].groupby([first_attr,second_attr]).size().reset_index(name="count")
+        return _dictify(tmp_df)
 
     def get_domain_info(self):
         """
@@ -285,7 +297,7 @@ class Dataset:
         tic = time.clock()
         init_records = self.raw_data.df.sort_values(['_tid_']).to_records(index=False)
         t = self.aux_table[AuxTables.inf_values_dom]
-        repaired_vals = dictify(t.df.reset_index())
+        repaired_vals = _dictify(t.df.reset_index())
         for tid in repaired_vals:
             for attr in repaired_vals[tid]:
                 init_records[tid][attr] = repaired_vals[tid][attr]

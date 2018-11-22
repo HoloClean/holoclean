@@ -6,7 +6,6 @@ import itertools
 import random
 
 from dataset import AuxTables
-from dataset.dataset import dictify
 
 
 class DomainEngine:
@@ -25,7 +24,6 @@ class DomainEngine:
         self.topk = env["pruning_topk"]
         self.setup_complete = False
         self.active_attributes = None
-        self.raw_data = None
         self.domain = None
         self.total = None
         self.correlations = None
@@ -57,14 +55,12 @@ class DomainEngine:
         the pairwise correlations between attributes (values are treated as
         discrete categories).
         """
-        self.raw_data = self.ds.get_raw_data().copy()
-        # convert dataset to numberic categories
-        df = pd.DataFrame()
-        for attr in self.raw_data.columns.values:
-            df[attr] = self.raw_data[attr].astype('category').cat.codes
+        df = self.ds.get_raw_data()[self.ds.get_attributes()].copy()
+        # convert dataset to categories/factors
+        for attr in df.columns:
+            df[attr] = df[attr].astype('category').cat.codes
         # drop columns with only one value and tid column
         df = df.loc[:, (df != 0).any(axis=0)]
-        df = df.drop(['_tid_'], axis=1)
         # Computer correlation across attributes
         m_corr = df.corr()
         self.correlations = m_corr
@@ -97,20 +93,20 @@ class DomainEngine:
         self.total = total
         self.single_stats = single_stats
         tic = time.clock()
-        self.pair_stats = self.preproc_pair_stats(pair_stats)
+        self.pair_stats = self._topk_pair_stats(pair_stats)
         toc = time.clock()
         prep_time = toc - tic
         logging.debug("DONE with pair stats preparation in %.2f secs", prep_time)
         self.setup_complete = True
 
-    def preproc_pair_stats(self, pair_stats):
+    def _topk_pair_stats(self, pair_stats):
         """
-        preproc_pair_stats converts 'pair_stats' which is a dictionary mapping
-            { attr1 -> { attr2 -> DataFrame } } where
+        _topk_pair_stats converts 'pair_stats' which is a dictionary mapping
+            { attr1 -> { attr2 -> {val1 -> {val2 -> count } } } } where
                 DataFrame contains 3 columns:
-                  <attr1>: all possible values for attr1 ('val1')
-                  <attr2>: all values for attr2 that appeared at least once with <val1> ('val2')
-                  <count>: frequency (# of entities) where attr1: val1 AND attr2: val2
+                  <val1>: all possible values for attr1
+                  <val2>: all values for attr2 that appeared at least once with <val1>
+                  <count>: frequency (# of entities) where attr1: <val1> AND attr2: <val2>
 
         to a flattened 4-level dictionary { attr1 -> { attr2 -> { val1 -> [Top K list of val2] } } }
         i.e. maps to the Top K co-occurring values for attr2 for a given
@@ -118,23 +114,19 @@ class DomainEngine:
         """
 
         out = {}
-        for key1 in tqdm(pair_stats):
-            if key1 == '_tid_':
-                continue
-            out[key1] = {}
-            for key2 in pair_stats[key1]:
-                if key1 == '_tid_':
-                    continue
-                df = pair_stats[key1][key2]
-                if not df.empty:
-                    out[key1][key2] = dictify(df)
-                    for val in out[key1][key2]:
-                        denominator = self.single_stats[key1][val]
-                        tau = float(self.topk*denominator)
-                        top_cands = [k for (k, v) in out[key1][key2][val].items() if v > tau]
-                        out[key1][key2][val] = top_cands
-                else:
-                    out[key1][key2] = {}
+        for attr1 in tqdm(pair_stats.keys()):
+            out[attr1] = {}
+            for attr2 in pair_stats[attr1].keys():
+                out[attr1][attr2] = {}
+                for val1 in pair_stats[attr1][attr2].keys():
+                    try:
+                        denominator = self.single_stats[attr1][val1]
+                    except KeyError:
+                        import pdb; pdb.set_trace()
+
+                    tau = float(self.topk*denominator)
+                    top_cands = [val2 for (val2, count) in pair_stats[attr1][attr2][val1].items() if count > tau]
+                    out[attr1][attr2][val1] = top_cands
         return out
 
     def get_active_attributes(self):
@@ -260,14 +252,13 @@ class DomainEngine:
                 s = self.pair_stats[cond_attr][attr]
                 try:
                     candidates = s[cond_val]
-                    domain.update(set(candidates))
+                    domain.update(candidates)
                 except KeyError as missing_val:
-                    if pd.isnull(row[attr]):
-                        pass
-                    else:
-                        # error since co-occurrence must be at least 1 (since the
-                        # current row counts as one co-occurrence).
-                        raise Exception(missing_val)
+                    if not pd.isnull(row[attr]):
+                        # error since co-occurrence must be at least 1 (since
+                        # the current row counts as one co-occurrence).
+                        logging.error('missing value: {}'.format(missing_val))
+                        raise
 
         # Remove _nan_ if added due to correlated attributes
         domain.discard('_nan_')
@@ -288,7 +279,7 @@ class DomainEngine:
 
         if random.random() > self.sampling_prob:
             return []
-        domain_pool = set(self.single_stats[attr].index.astype(str))
+        domain_pool = set(self.single_stats[attr].keys())
         domain_pool.discard(cur_value)
         size = len(domain_pool)
         if size > 0:
