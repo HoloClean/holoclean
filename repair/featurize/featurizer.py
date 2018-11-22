@@ -5,9 +5,11 @@ from multiprocessing import Pool
 class Featurizer:
     __metaclass__ = ABCMeta
 
-    def __init__(self, name):
-        self.name = name
-        self.setup_done = False
+    def __init__(self, learnable=True, init_weight=1.0):
+        self.name = None
+        self.setup_done =False
+        self.learnable = learnable
+        self.init_weight = init_weight
 
     def setup_featurizer(self, dataset, total_vars, classes, processes=20):
         self.ds = dataset

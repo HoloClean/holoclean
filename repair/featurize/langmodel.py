@@ -7,10 +7,8 @@ from .featurizer import Featurizer
 
 
 class LangModelFeat(Featurizer):
-    def __init__(self, name='LangModelFeat'):
-        super(LangModelFeat, self).__init__(name)
-
     def specific_setup(self):
+        self.name = 'LangModelFeat'
         self.emb_size = 10
         self.attrs_number = len(self.ds.attr_to_idx)
         self.attr_language_model = {}

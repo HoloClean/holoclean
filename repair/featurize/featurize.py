@@ -1,9 +1,10 @@
 import logging
 import torch
 from tqdm import tqdm
-
+from collections import namedtuple
 from dataset import AuxTables
 
+FeatInfo = namedtuple('FeatInfo', ['name', 'size', 'learnable', 'init_weight'])
 
 class FeaturizedDataset:
     def __init__(self, dataset, env, featurizers):
@@ -14,10 +15,10 @@ class FeaturizedDataset:
         for f in featurizers:
             f.setup_featurizer(self.ds, self.total_vars, self.classes, self.processes)
         tensors = [f.create_tensor() for f in featurizers]
-        # save size info of all featurizers
-        self.featurizer_info = [(str(type(featurizers[i])), t.size()[2]) for i, t in enumerate(tensors)]
+        self.featurizer_info = [FeatInfo(featurizers[i].name, t.size()[2], featurizers[i].learnable, featurizers[i].init_weight) for i, t in enumerate(tensors)]
         tensor = torch.cat(tensors,2)
         self.tensor = tensor
+        # TODO: remove after we validate it is not needed.
         self.in_features = self.tensor.shape[2]
         self.weak_labels = self.generate_weak_labels()
         self.var_class_mask, self.var_to_domsize = self.generate_var_mask()

@@ -23,10 +23,8 @@ def gen_feat_tensor(input, classes, total_attrs):
 
 
 class InitSimFeaturizer(Featurizer):
-    def __init__(self, name='InitSimFeaturizer'):
-        super(InitSimFeaturizer, self).__init__(name)
-
     def specific_setup(self):
+        self.name = 'InitSimFeaturizer'
         self.attr_to_idx = self.ds.attr_to_idx
         self.total_attrs = len(self.ds.attr_to_idx)
 

@@ -5,10 +5,8 @@ from .featurizer import Featurizer
 
 
 class FreqFeaturizer(Featurizer):
-    def __init__(self, name='FreqFeaturizer'):
-        super(FreqFeaturizer, self).__init__(name)
-
     def specific_setup(self):
+        self.name = 'FreqFeaturizer'
         self.attrs_number = len(self.ds.attr_to_idx)
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total

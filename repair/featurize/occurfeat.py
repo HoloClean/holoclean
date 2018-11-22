@@ -8,10 +8,8 @@ from dataset.dataset import dictify
 
 
 class OccurFeaturizer(Featurizer):
-    def __init__(self, name='OccuFeaturizer'):
-        super(OccurFeaturizer, self).__init__(name)
-
     def specific_setup(self):
+        self.name = 'OccurFeaturizer'
         if not self.setup_done:
             raise Exception('Featurizer %s is not properly setup.'%self.name)
         self.all_attrs = self.ds.get_attributes()
