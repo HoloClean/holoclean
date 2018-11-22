@@ -42,7 +42,7 @@ class EvalEngine:
     def load_data(self, name, fpath, tid_col, attr_col, val_col, na_values=None):
         tic = time.clock()
         try:
-            raw_data = pd.read_csv(fpath, na_values=na_values)
+            raw_data = pd.read_csv(fpath, na_values=na_values, encoding='utf-8')
             raw_data.fillna('_nan_',inplace=True)
             raw_data.rename({tid_col: '_tid_',
                 attr_col: '_attribute_',

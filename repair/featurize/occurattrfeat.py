@@ -4,7 +4,6 @@ from tqdm import tqdm
 
 from .featurizer import Featurizer
 from dataset import AuxTables
-from dataset.dataset import dictify
 
 
 class OccurAttrFeaturizer(Featurizer):
@@ -24,17 +23,8 @@ class OccurAttrFeaturizer(Featurizer):
         self.raw_data_dict = self.ds.raw_data.df.set_index('_tid_').to_dict('index')
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = float(total)
-        self.single_stats = {}
-        for attr in single_stats:
-            self.single_stats[attr] = single_stats[attr].to_dict()
-        self.pair_stats = {}
-        for attr1 in tqdm(pair_stats):
-            self.pair_stats[attr1] = {}
-            for attr2 in pair_stats[attr1]:
-                if attr2 == '_tid_':
-                    continue
-                tmp_df = pair_stats[attr1][attr2]
-                self.pair_stats[attr1][attr2] = dictify(tmp_df)
+        self.single_stats = single_stats
+        self.pair_stats = pair_stats
 
     def create_tensor(self):
         # Iterate over tuples in domain
