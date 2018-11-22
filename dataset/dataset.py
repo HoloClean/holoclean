@@ -342,3 +342,23 @@ class Dataset:
         toc = time.clock()
         total_time = toc - tic
         return status, total_time
+
+    def update_current_values(self):
+        """
+        update_current_values takes the inferred values from inf_values_dom
+        (auxiliary table) and updates them in the current_value column in
+        cell_domain (auxiliary table).
+        """
+        df_inferred = self.get_aux_table(AuxTables.inf_values_dom).df
+        df_cell_domain = self.get_aux_table(AuxTables.cell_domain).df
+
+        # Update current_value column with rv_values for inferred TIDs
+        df_updated = df_cell_domain.reset_index().merge(df_inferred, on=['_tid_', 'attribute'], how='left')
+        update_filter = df_updated['rv_value'].notnull()
+        df_updated.loc[update_filter, 'current_value'] = df_updated.loc[update_filter, 'rv_value']
+        df_updated.drop('rv_value', axis=1, inplace=True)
+
+        self.generate_aux_table(AuxTables.cell_domain, df_updated, store=True, index_attrs=['_vid_'])
+        # self.ds.get_aux_table(AuxTables.cell_domain).create_db_index(self.ds.engine, ['_tid_'])
+        # self.ds.get_aux_table(AuxTables.cell_domain).create_db_index(self.ds.engine, ['_cid_'])
+        logging.info('DONE updating current values with inferred values')

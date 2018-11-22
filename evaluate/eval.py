@@ -92,6 +92,8 @@ class EvalEngine:
         return report, report_time, report_list
 
     def compute_total_repairs(self):
+        # TODO(richardwu): how do we define a "repair" if we have multiple
+        # init values?
         query = """
         SELECT
             count(*)
@@ -104,7 +106,7 @@ class EvalEngine:
             WHERE
                 t1._tid_ = t2._tid_
                 AND t1.attribute = t2.attribute
-                AND t1.current_value != t2.rv_value
+                AND t1.init_values != t2.rv_value
             ) AS t
         """.format(cell_domain=AuxTables.cell_domain.name,
                 inf_values_dom=AuxTables.inf_values_dom.name)
@@ -112,6 +114,8 @@ class EvalEngine:
         self.total_repairs = float(res[0][0])
 
     def compute_total_repairs_grdt(self):
+        # TODO(richardwu): how do we define a "repair" if we have multiple
+        # init values?
         query = """
         SELECT
             count(*)
@@ -125,7 +129,7 @@ class EvalEngine:
             WHERE
                 t1._tid_ = t2._tid_
                 AND t1.attribute = t2.attribute
-                AND t1.current_value != t2.rv_value
+                AND t1.init_values != t2.rv_value
                 AND t1._tid_ = t3._tid_
                 AND t1.attribute = t3._attribute_
             ) AS t

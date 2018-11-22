@@ -66,7 +66,7 @@ class DomainEngine:
 
     def store_domains(self, domain):
         """
-        store_domains stores the 'domain' DataFrame as the 'cell_domain'
+        store_domains stores the :param domain: DataFrame as the 'cell_domain'
         auxiliary table as well as generates the 'pos_values' auxiliary table,
         a long-format of the domain values, in Postgres.
 

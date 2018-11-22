@@ -238,30 +238,60 @@ class Session:
         logging.info(status)
         logging.debug('Time to setup the domain: %.2f secs'%domain_time)
 
-    def repair_errors(self, featurizers):
-        status, feat_time = self.repair_engine.setup_featurized_ds(featurizers)
-        logging.info(status)
-        logging.debug('Time to featurize data: %.2f secs'%feat_time)
-        status, setup_time = self.repair_engine.setup_repair_model()
-        logging.info(status)
-        logging.debug('Time to setup repair model: %.2f secs' % feat_time)
-        status, fit_time = self.repair_engine.fit_repair_model()
-        logging.info(status)
-        logging.debug('Time to fit repair model: %.2f secs'%fit_time)
-        status, infer_time = self.repair_engine.infer_repairs()
-        logging.info(status)
-        logging.debug('Time to infer correct cell values: %.2f secs'%infer_time)
-        status, time = self.ds.generate_inferred_values()
-        logging.info(status)
-        logging.debug('Time to collect inferred values: %.2f secs' % time)
-        status, time = self.ds.generate_repaired_dataset()
-        logging.info(status)
-        logging.debug('Time to store repaired dataset: %.2f secs' % time)
-        if self.env['print_fw']:
-            status, time = self.repair_engine.get_featurizer_weights()
+    def repair_errors(self, featurizers, em_iterations=1, em_iter_func=None):
+        """
+        repair_errors attempts to repair detected error cells with the given
+        featurizers.
+
+        :param featurizers: (list[Featurizer]) list of featurizers to use on the dataset.
+        :param em_iterations: (int) number of EM iterations to perform.
+        :param em_iter_func: (function w/ no parameters) function to invoke
+            at the end of every EM iteration.
+
+        :returns: list of featurizer weights summary, one per EM iteration.
+
+        """
+        all_weights = []
+        for em_iter in range(1, em_iterations+1):
+            logging.info('performing EM iteration: %d', em_iter)
+            # Setup featurizers
+            status, feat_time = self.repair_engine.setup_featurized_ds(featurizers)
             logging.info(status)
-            logging.debug('Time to retrieve featurizer weights: %.2f secs' % time)
-            return status
+            logging.debug('Time to featurize data: %.2f secs'%feat_time)
+            # Initialize steps for repair process
+            status, setup_time = self.repair_engine.setup_repair_model()
+            logging.info(status)
+            logging.debug('Time to setup repair model: %.2f secs' % feat_time)
+            # Repair training using clean cells
+            status, fit_time = self.repair_engine.fit_repair_model()
+            logging.info(status)
+            logging.debug('Time to fit repair model: %.2f secs'%fit_time)
+            # Do actual inference on DK cells
+            status, infer_time = self.repair_engine.infer_repairs()
+            logging.info(status)
+            logging.debug('Time to infer correct cell values: %.2f secs'%infer_time)
+            # Convert probabilities to predictions (i.e. argmax)
+            status, time = self.ds.generate_inferred_values()
+            logging.info(status)
+            logging.debug('Time to collect inferred values: %.2f secs' % time)
+            # Convert long format of inferred values to wide format
+            status, time = self.ds.generate_repaired_dataset()
+            logging.info(status)
+            logging.debug('Time to store repaired dataset: %.2f secs' % time)
+            # Log featurizer weights
+            weights, time = self.repair_engine.get_featurizer_weights()
+            all_weights.append(weights)
+            if self.env['print_fw']:
+                logging.info(weights)
+                logging.debug('Time to retrieve featurizer weights: %.2f secs' % time)
+            # Update current values with inferred values
+            self.ds.update_current_values()
+
+            # Call em_iter_func if provided at the end of every EM iteration
+            if em_iter_func is not None:
+                em_iter_func()
+            logging.info('DONE EM iteration: %d', em_iter)
+        return all_weights
 
     def evaluate(self, fpath, tid_col, attr_col, val_col, na_values=None):
         """
