@@ -210,10 +210,10 @@ class Dataset:
         """
         get_statistics returns:
             1. self.total_tuples (total # of tuples)
-            2. self.single_attr_stats ({ attribute -> {value -> count } })
+            2. self.single_attr_stats ({ attribute -> { value -> count } })
               the frequency (# of entities) of a given attribute-value
-            3. self.pair_attr_stats ({ attr1 -> { attr2 -> DataFrame } } where
-                DataFrame contains 3 columns:
+            3. self.pair_attr_stats ({ attr1 -> { attr2 -> {val1 -> {val2 -> count } } } })
+              where DataFrame contains 3 columns:
                 <attr1>: all possible values for attr1 ('val1')
                 <attr2>: all values for attr2 that appeared at least once with <val1> ('val2')
                 <count>: frequency (# of entities) where attr1: val1 AND attr2: val2
@@ -227,7 +227,7 @@ class Dataset:
     def collect_stats(self):
         """
         collect_stats memoizes:
-          1. self.single_attr_stats ({ attribute -> {value -> count } })
+          1. self.single_attr_stats ({ attribute -> { value -> count } })
             the frequency (# of entities) of a given attribute-value
           2. self.pair_attr_stats ({ attr1 -> { attr2 -> {val1 -> {val2 -> count } } } })
             where DataFrame contains 3 columns:
