@@ -31,7 +31,6 @@ class DomainEngine:
         self.max_sample = max_sample
         self.single_stats = {}
         self.pair_stats = {}
-        self.all_attrs = {}
 
     def setup(self):
         """
@@ -54,7 +53,9 @@ class DomainEngine:
         the pairwise correlations between attributes (values are treated as
         discrete categories).
         """
-        df = self.ds.get_raw_data()[self.ds.get_attributes()].copy()
+        # use expanded raw DataFrame to calculate correlations (since
+        # raw may contain '|||' separated values)
+        df = self._expand_raw_df()[self.ds.get_attributes()]
         # convert dataset to categories/factors
         for attr in df.columns:
             df[attr] = df[attr].astype('category').cat.codes
@@ -63,6 +64,43 @@ class DomainEngine:
         # Computer correlation across attributes
         m_corr = df.corr()
         self.correlations = m_corr
+
+    def _expand_raw_df(self):
+        """
+        _expand_raw_df returns an expanded version of the raw DataFrame
+        where every row with cells with multiple values (separated by '|||')
+        are expanded into multiple rows that is the cross-product of the
+        multi-valued cells.
+
+        For example if a row contains
+
+        attr1       |   attr2
+        A|||B|||C       D|||E
+
+        this would be expanded into
+
+        attr1       |   attr2
+        A               D
+        A               E
+        B               D
+        B               E
+        C               D
+        C               E
+        """
+        # Cells may contain values separated by '|||': we need to
+        # expand this into multiple rows
+        raw_df = self.ds.get_raw_data()
+
+        tic = time.clock()
+        expanded_rows = []
+        for tup in raw_df.itertuples():
+            expanded_tup = [val.split('|||') if hasattr(val, 'split') else (val,) for val in tup ]
+            expanded_rows.extend([new_tup for new_tup in itertools.product(*expanded_tup)])
+        toc = time.clock()
+        logging.debug("Time to expand raw data: %.2f secs", toc-tic)
+        expanded_df = pd.DataFrame(expanded_rows, columns=raw_df.index.names + list(raw_df.columns))
+        expanded_df.set_index(raw_df.index.names, inplace=True)
+        return expanded_df
 
     def store_domains(self, domain):
         """
@@ -75,7 +113,7 @@ class DomainEngine:
             _cid_: cell ID
             _vid_: random variable ID (1-1 with _cid_)
             attribute: name of attribute
-            rv_val: cell value
+            rv_val: domain value
             val_id: domain index of rv_val
         """
         if domain.empty:
@@ -204,9 +242,8 @@ class DomainEngine:
         # Iterate over dataset rows
         cells = []
         vid = 0
-        records = self.ds.get_raw_data().to_records()
-        self.all_attrs = list(records.dtype.names)
-        for row in tqdm(list(records)):
+        raw_records = self.ds.get_raw_data().to_records()
+        for row in tqdm(raw_records):
             tid = row['_tid_']
             app = []
 
@@ -260,6 +297,9 @@ class DomainEngine:
 
         This would produce [B,C,E] as domain values.
 
+        :param attr: (str) name of attribute to generate domain info for
+        :param row: (pandas.record) Pandas record (tuple) of the current TID's row
+
         :return: (list of initial values, current value, list of domain values).
         """
 
@@ -269,17 +309,17 @@ class DomainEngine:
         # and take the top K co-occurrence values for 'attr' with the current
         # row's 'cond_attr' value.
         for cond_attr in correlated_attributes:
-            if cond_attr == attr or cond_attr == 'index' or cond_attr == '_tid_':
+            if cond_attr == attr:
                 continue
-            cond_val = row[cond_attr]
-            if not pd.isnull(cond_val):
-                if not self.pair_stats[cond_attr][attr]:
-                    break
+            # row[cond_attr] should always be a string (since it comes from self.raw_data)
+            for cond_val in row[cond_attr].split('|||'):
                 s = self.pair_stats[cond_attr][attr]
                 try:
                     candidates = s[cond_val]
                     domain.update(candidates)
                 except KeyError as missing_val:
+                    # KeyError is possible since we do not store stats for
+                    # attributes with only NULL values
                     if not pd.isnull(row[attr]):
                         # error since co-occurrence must be at least 1 (since
                         # the current row counts as one co-occurrence).
@@ -289,18 +329,51 @@ class DomainEngine:
         # Remove _nan_ if added due to correlated attributes
         domain.discard('_nan_')
 
-        # Add initial value in domain
-        init_values = ['_nan_']
-        if not pd.isnull(row[attr]):
-            # Assume value in raw dataset is given as ||| separate initial values
-            init_values = row[attr].split('|||')
-        domain.update(set(init_values))
-
-        # Take the first initial value as the current value
-        # TODO(richardwu): revisit how we should initialize 'current'
-        current_value = init_values[0]
+        init_values, current_value = self._init_and_current(attr, row)
+        domain.update(init_values)
 
         return init_values, current_value, list(domain)
+
+    def _init_and_current(self, attr, init_row):
+        """
+        _init_and_current returns the initial values for :param attr:
+        and the current value: the initial value that has the highest
+        cumulative co-occurrence probability with the other initial values in
+        this row.
+        """
+        # Assume value in raw dataset is given as ||| separate initial values
+        init_values = init_row[attr].split('|||')
+
+        # Only one initial value: current is the initial value
+        if len(init_values) == 1:
+            return init_values, init_values[0]
+
+        _, single_stats, pair_stats = self.ds.get_statistics()
+        attrs = self.ds.get_attributes()
+
+        # Determine current value by computing co-occurrence probability
+        best_val = None
+        best_score = None
+        for init_val in init_values:
+            # Compute total sum of co-occur probabilities with all other
+            # initial values in this row, that is we calculate the sum of
+            #
+            #   P(initial | other_init_val) = P(initial, other_init_val) / P(other_init_val)
+            #
+            # We subtract one for pair_stats since we do not want to include
+            # the co-occurrence of our current row (consider the extreme case
+            # where an errorneous initial value only occurs once: its co-occurrence
+            # probability will always be 1 but it does not tell us this value
+            # co-occurs most frequently with our other initial values).
+            cur_score = sum(float(pair_stats[attr][other_attr][init_val][other_val] - 1) / single_stats[attr][init_val]
+                    for other_attr in attrs
+                    if attr != other_attr
+                    for other_val in init_row[other_attr].split('|||'))
+            # Keep the best initial value only
+            if best_score is None or cur_score > best_score:
+                best_val = init_val
+                best_score = cur_score
+        return init_values, best_val
 
     def get_random_domain(self, attr, init_values):
         """

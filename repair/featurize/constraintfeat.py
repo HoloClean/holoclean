@@ -70,11 +70,11 @@ class ConstraintFeat(Featurizer):
 
     def relax_unary_predicate(self, predicate):
         """
-        relax_binary_predicate returns the attribute, operation, and
+        relax_unary_predicate returns the attribute, operation, and
         tuple attribute reference.
 
         :return: (attr, op, const), for example:
-            ("StateAvg", "<>", 't1."StateAvg"')
+            ("StateAvg", "<>", "StateAvg"')
         """
         attr =  predicate.components[0][1]
         op = predicate.operation

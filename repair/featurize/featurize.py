@@ -14,7 +14,7 @@ class FeaturizedDataset:
         self.total_vars, self.classes = self.ds.get_domain_info()
         self.processes = self.env['threads']
         for f in featurizers:
-            f.setup_featurizer(self.ds, self.total_vars, self.classes, self.processes)
+            f.setup_featurizer(self.env, self.ds, self.total_vars, self.classes, self.processes)
         tensors = [f.create_tensor() for f in featurizers]
         self.featurizer_info = [FeatInfo(featurizers[i].name, t.size()[2], featurizers[i].learnable, featurizers[i].init_weight) for i, t in enumerate(tensors)]
         tensor = torch.cat(tensors,2)

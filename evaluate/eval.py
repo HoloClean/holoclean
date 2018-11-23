@@ -119,8 +119,9 @@ class EvalEngine:
         the number of cells where the initial value differs from the inferred
         value (i.e. the number of repairs) for the entities in the TRAINING data.
         """
-        # TODO(richardwu): how do we define a "repair" if we have multiple
-        # init values?
+        # This query works with init_values with multiple values ('|||' separated)
+        # since it is still considered a 'repair' if we convert multiple
+        # initial values into one value.
         query = """
         SELECT
             count(*)
@@ -144,8 +145,9 @@ class EvalEngine:
         the number of cells where the initial value differs from the inferred
         value (i.e. the number of repairs) for the entities in the TEST (clean) data.
         """
-        # TODO(richardwu): how do we define a "repair" if we have multiple
-        # init values?
+        # This query works with init_values with multiple values ('|||' separated)
+        # since it is still considered a 'repair' if we convert multiple
+        # initial values into one value.
         query = """
         SELECT
             count(*)

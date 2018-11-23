@@ -11,7 +11,8 @@ class Featurizer:
         self.learnable = learnable
         self.init_weight = init_weight
 
-    def setup_featurizer(self, dataset, total_vars, classes, processes=20):
+    def setup_featurizer(self, env, dataset, total_vars, classes, processes=20):
+        self.env = env
         self.ds = dataset
         self.total_vars = total_vars
         self.classes = classes

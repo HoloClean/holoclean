@@ -32,8 +32,8 @@ class OccurAttrFeaturizer(Featurizer):
         # Set tuple_id index on raw_data
         t = self.ds.get_aux_table(AuxTables.cell_domain)
         sorted_domain = t.df.reset_index().sort_values(by=['_vid_'])[['_tid_','attribute','_vid_','domain']]
-        records = sorted_domain.to_records()
-        for row in tqdm(list(records)):
+        tuples = sorted_domain.itertuples()
+        for row in tqdm(list(tuples)):
             #Get tuple from raw_dataset
             tid = row['_tid_']
             tuple = self.raw_data_dict[tid]

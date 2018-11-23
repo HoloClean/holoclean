@@ -17,24 +17,33 @@ class ViolationDetector(Detector):
         self.constraints = dataset.constraints
 
     def detect_noisy_cells(self):
-        # Convert  Constraints to SQL queries
+        """
+        detect_noisy_cells returns all cells that are involved in a DC violation.
+
+        :return: pandas.DataFrame with two columns:
+            '_tid_': TID of tuple
+            'attribute': attribute corresponding to cell involved in DC violation
+        """
+
+        # Convert Constraints to SQL queries
+
         tbl = self.ds.raw_data.name
         queries = []
+        # attributes involved in a DC violation (indexed by corresponding query)
         attrs = []
-        for c_key in self.constraints:
-            c = self.constraints[c_key]
-            q = self.to_sql(tbl, c)
+        for constraint in self.constraints.values():
+            # SQL query to query for TIDs involved in a DC violation for this constraint
+            q = self.to_sql(tbl, constraint)
             queries.append(q)
-            attrs.append(c.components)
+            attrs.append(constraint.components)
         # Execute Queries over the DBEngine of Dataset
         results = self.ds.engine.execute_queries(queries)
 
         # Generate final output
         errors = []
-        for i in range(len(attrs)):
-            res = results[i]
-            attr_list = attrs[i]
-            tmp_df = self.gen_tid_attr_output(res, attr_list)
+        for attr_list, res in zip(attrs, results):
+            # DataFrame with TID and attribute pairs from DC violation queries
+            tmp_df = self._gen_tid_attr_output(res, attr_list)
             errors.append(tmp_df)
         errors_df = pd.concat(errors, ignore_index=True).drop_duplicates().reset_index(drop=True)
         return errors_df
@@ -79,7 +88,12 @@ class ViolationDetector(Detector):
             query = mult_template.substitute(table=tbl, cond1=cond1, c='', cond2=cond2)
         return query
 
-    def gen_tid_attr_output(self, res, attr_list):
+    def _gen_tid_attr_output(self, res, attr_list):
+        """
+        _gen_tid_attr_output creates a DataFrame containing the TIDs from
+        the DC violation query results in :param res: with the attributes
+        that were involved in the violation in :param attr_list:.
+        """
         errors = []
         for tuple in res:
             tid = int(tuple[0])

@@ -14,7 +14,7 @@ hc = holoclean.HoloClean(
     pruning_topk=0.1,
     epochs=30,
     weight_decay=0.01,
-    threads=20,
+    threads=4,
     batch_size=1,
     verbose=True,
     timeout=3*60000,
@@ -40,8 +40,8 @@ featurizers = [
     LangModelFeat(),
     ConstraintFeat()
 ]
-hc.repair_errors(featurizers)
-
 
 # 5. Evaluate the correctness of the results.
-hc.evaluate('../testdata/hospital_clean.csv', 'tid', 'attribute', 'correct_val')
+em_iter_func = lambda: hc.evaluate('../testdata/hospital_clean.csv', 'tid', 'attribute', 'correct_val')
+hc.repair_errors(featurizers, em_iterations=1, em_iter_func=em_iter_func)
+

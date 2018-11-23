@@ -112,7 +112,12 @@ flags = [
         {'default': False,
          'dest': 'print_fw',
          'action': 'store_true',
-         'help': 'print the weights of featurizers'})
+         'help': 'print the weights of featurizers'}),
+    (tuple(['--currentstats']),
+        {'default': False,
+         'dest': 'current_stats',
+         'action': 'store_true',
+         'help': 're-compute frequency and co-occur stats after every EM iteration'}),
 ]
 
 
@@ -286,8 +291,9 @@ class Session:
                 logging.debug('Time to retrieve featurizer weights: %.2f secs' % time)
             # Update current values with inferred values
             self.ds.update_current_values()
-            # Re-compute statistics with new current values
-            self.ds.collect_stats()
+            if self.env['current_stats']:
+                # Re-compute statistics with new current values
+                self.ds.collect_current_stats()
 
             # Call em_iter_func if provided at the end of every EM iteration
             if em_iter_func is not None:

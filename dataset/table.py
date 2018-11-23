@@ -1,6 +1,6 @@
+from enum import Enum
 import os
 import pandas as pd
-from enum import Enum
 
 class Source(Enum):
     FILE = 1

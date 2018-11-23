@@ -31,7 +31,7 @@ class OccurFeaturizer(Featurizer):
         # current_values_dict is a Dictionary mapping TID -> { attribute -> current value }
         self.current_values_dict = {}
 
-        for (tid, attr, cur_val) in self.ds.get_aux_table(AuxTables.cell_domain).df[['_tid_', 'attribute', 'current_value']].to_records(index=False):
+        for (tid, attr, cur_val) in self.ds.get_aux_table(AuxTables.cell_domain).df[['_tid_', 'attribute', 'current_value']].itertuples(index=False):
             self.current_values_dict[tid] = self.current_values_dict.get(tid, {})
             self.current_values_dict[tid][attr] = cur_val
 
@@ -56,10 +56,9 @@ class OccurFeaturizer(Featurizer):
         tensors = []
         # Set tuple_id index on raw_data
         t = self.ds.get_aux_table(AuxTables.cell_domain)
-        sorted_domain = t.df.reset_index().sort_values(by=['_vid_'])[['_tid_','attribute','_vid_','domain']]
+        sorted_domain = t.df.reset_index().sort_values(by=['_vid_'])[['_tid_','attribute','domain']]
         records = sorted_domain.to_records()
-        for row in tqdm(list(records)):
-            #Get current values for this TID
+        for row in tqdm(records):
             tid = row['_tid_']
             current_tuple = self.current_values_dict[tid]
             feat_tensor = self.gen_feat_tensor(row, current_tuple)
@@ -80,7 +79,7 @@ class OccurFeaturizer(Featurizer):
         """
         # tensor is a (1 X domain size X # of attributes) pytorch.Tensor
         # tensor[0][domain_idx][rv_idx] contains the co-occurrence probability
-        # between the current attribute (row['attribute']) and the domain values
+        # between the current attribute (row.attribute) and the domain values
         # a possible domain value for this entity
         tensor = torch.zeros(1, self.classes, self.attrs_number)
         rv_attr = row['attribute']
@@ -90,33 +89,36 @@ class OccurFeaturizer(Featurizer):
 
         # Iterate through every attribute (and current value for that
         # attribute) and set the co-occurrence probability for every
-        # domain value for our current row['attribute'].
-        for attr in self.all_attrs:
-            # Skip pairwise with current attribute or NULL value
-            # 'attr' may not be in 'current_tuple' since we do not store
-            # attributes with all NULL values in our current values
-            if attr == rv_attr or pd.isnull(current_tuple.get(attr, None)):
+        # domain value for our current row.attribute.
+        for cur_attr in self.all_attrs:
+            # Skip pairwise with current attribute or NULL value.
+            # 'attr' may not be in 'current_tuple' since we do not
+            # store attributes with all NULL values in cell_domain.
+            if cur_attr == rv_attr or pd.isnull(current_tuple.get(cur_attr, None)):
                 continue
 
-            attr_idx = self.ds.attr_to_idx[attr]
-            val = current_tuple[attr]
-            attr_freq = float(self.single_stats[attr][val])
-            # Get topK values
-            if val not in self.pair_stats[attr][rv_attr]:
-                if not pd.isnull(current_tuple[rv_attr]):
-                    raise Exception('Something is wrong with the pairwise statistics. <{val}> should be present in dictionary.'.format(val))
-            else:
-                # dict of { val -> co-occur count }
-                all_vals = self.pair_stats[attr][rv_attr][val]
-                if len(all_vals) <= len(rv_domain_idx):
-                    candidates = list(all_vals.keys())
-                else:
-                    candidates = domain
+            cur_val = current_tuple[cur_attr]
+            if cur_val not in self.pair_stats[cur_attr][rv_attr]:
+                # cur_val may not be in pairwise stats if cur_attr contains
+                # only NULL values
+                if not pd.isnull(current_tuple[cur_attr]):
+                    # Actual error if not null
+                    raise Exception('Something is wrong with the pairwise statistics. <{cur_val}> should be present in dictionary.'.format(cur_val=cur_val))
+                continue
 
-                # iterate through all possible domain values of row['attribute']
-                for rv_val in candidates:
-                    cooccur_freq = float(all_vals.get(rv_val,0.0))
-                    prob = cooccur_freq/attr_freq
-                    if rv_val in rv_domain_idx:
-                        tensor[0][rv_domain_idx[rv_val]][attr_idx] = prob
+            # Get topK values
+            all_vals = self.pair_stats[cur_attr][rv_attr][cur_val]
+            if len(all_vals) <= len(rv_domain_idx):
+                candidates = list(all_vals.keys())
+            else:
+                candidates = domain
+
+            # iterate through all possible domain values of row.attribute
+            for rv_val in candidates:
+                cooccur_freq = float(all_vals.get(rv_val,0.0))
+                cur_attr_freq = float(self.single_stats[cur_attr][cur_val])
+                prob = cooccur_freq/cur_attr_freq
+                if rv_val in rv_domain_idx:
+                    cur_attr_idx = self.ds.attr_to_idx[cur_attr]
+                    tensor[0][rv_domain_idx[rv_val]][cur_attr_idx] = prob
         return tensor
