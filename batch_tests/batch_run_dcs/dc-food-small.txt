@@ -1,0 +1,1 @@
+food	GL	GLD	1113194633_food_GLD_cov_alpha0dot01_topk_3_s400_k8_b001_multiple_topdown_knn10_hamming_dc.txt	12	[1-3-4-5-7-14-15-18-19-22-30-33]	2	/fastdisk/ProfilerData/food/GL/GLD/sparsity_0.01/decomposition/knn/multiple_topdown

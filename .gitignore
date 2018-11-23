@@ -19,3 +19,5 @@ build/
 dist/
 lib/
 info/
+
+batch_tests/batch_run_scripts/send_email.py

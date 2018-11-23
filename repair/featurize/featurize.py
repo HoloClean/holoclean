@@ -17,6 +17,16 @@ class FeaturizedDataset:
         tensors = [f.create_tensor() for f in featurizers]
         self.featurizer_info = [FeatInfo(featurizers[i].name, t.size()[2], featurizers[i].learnable, featurizers[i].init_weight) for i, t in enumerate(tensors)]
         tensor = torch.cat(tensors,2)
+        # DEBUGING
+        self.debugging = {}
+        print("========== DEBUGGING ==========")
+        for i, t in enumerate(tensors):
+            debug = t[9324, :, :].numpy()
+            feat = featurizers[i].name
+            self.debugging[feat] = {}
+            self.debugging[feat]['size'] = debug.shape
+            self.debugging[feat]['weights'] = debug
+            
         self.tensor = tensor
         # TODO: remove after we validate it is not needed.
         self.in_features = self.tensor.shape[2]

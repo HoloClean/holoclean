@@ -69,7 +69,7 @@ class RepairEngine:
 
     def get_featurizer_weights(self):
         tic = time.clock()
-        status = self.repair_model.get_featurizer_weights(self.feat_dataset.featurizer_info)
+        report = self.repair_model.get_featurizer_weights(self.feat_dataset.featurizer_info, self.feat_dataset.debugging)
         toc = time.clock()
         report_time = toc - tic
         return status, report_time

@@ -11,7 +11,7 @@ errors_template = Template('SELECT count(*) '\
                             'FROM $init_table as t1, $grdt_table as t2 '\
                             'WHERE t1._tid_ = t2._tid_ '\
                               'AND t2._attribute_ = \'$attr\' '\
-                              'AND t1."$attr" != t2._value_')
+                              'AND t1.\"$attr\" != t2._value_')
 
 """
 The 'errors' aliased subquery returns the (_tid_, _attribute_, _value_)
@@ -28,7 +28,7 @@ correct_repairs_template = Template('SELECT COUNT(*) FROM'\
                              'FROM $init_table as t1, $grdt_table as t2 '\
                              'WHERE t1._tid_ = t2._tid_ '\
                                'AND t2._attribute_ = \'$attr\' '\
-                               'AND t1."$attr" != t2._value_ ) as errors, $inf_dom as repairs '\
+                               'AND t1.\"$attr\" != t2._value_ ) as errors, $inf_dom as repairs '\
                               'WHERE errors._tid_ = repairs._tid_ '\
                                 'AND errors._attribute_ = repairs.attribute '\
                                 'AND errors._value_ = repairs.rv_value')
@@ -86,6 +86,7 @@ class EvalEngine:
         except Exception as e:
             logging.error("ERROR generating evaluation report %s" % e)
             raise
+
         toc = time.clock()
         report_time = toc - tic
         return report, report_time, report_list
@@ -154,7 +155,7 @@ class EvalEngine:
         correct_repairs = 0.0
         for attr in self.ds.get_attributes():
             query = correct_repairs_template.substitute(init_table=self.ds.raw_data.name, grdt_table=self.clean_data.name,
-                        attr=attr, inf_dom=AuxTables.inf_values_dom.name)
+                                                        attr=attr, inf_dom=AuxTables.inf_values_dom.name)
             queries.append(query)
         results = self.ds.engine.execute_queries(queries)
         for res in results:

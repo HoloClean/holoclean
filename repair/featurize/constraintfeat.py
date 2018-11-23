@@ -94,6 +94,7 @@ class ConstraintFeat(Featurizer):
         const = '{}."{}"'.format(
                 predicate.components[1-rel_idx][0],
                 predicate.components[1-rel_idx][1])
+
         return attr, op, const
 
     def get_binary_predicate_join_rel(self, predicate):
