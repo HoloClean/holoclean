@@ -53,8 +53,14 @@ class Dataset:
         for tab in AuxTables:
             self.aux_table[tab] = None
         # start dbengine
-        self.engine = DBengine(env['db_user'], env['db_pwd'], env['db_name'], env['db_host'], pool_size=env['threads'],
-                               timeout=env['timeout'])
+        self.engine = DBengine(
+            env['db_user'],
+            env['db_pwd'],
+            env['db_name'],
+            env['db_host'],
+            pool_size=env['threads'],
+            timeout=env['timeout']
+        )
         # members to convert (tuple_id, attribute) to cell_id
         self.attr_to_idx = {}
         self.attr_count = 0

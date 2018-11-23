@@ -39,10 +39,10 @@ We then create a database `holo` and user `holo` (default settings for HoloClean
 ```
 CREATE DATABASE holo;
 CREATE USER holocleanuser;
-ALTER USER holo WITH PASSWORD 'abcd1234';
+ALTER USER holocleanuser WITH PASSWORD 'abcd1234';
 GRANT ALL PRIVILEGES ON DATABASE holo TO holocleanuser;
 \c holo
-ALTER SCHEMA public OWNER TO holo;
+ALTER SCHEMA public OWNER TO holocleanuser;
 ```
 
 In general, to connect to the `holo` database from the Postgres psql console
