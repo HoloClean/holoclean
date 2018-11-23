@@ -1,4 +1,5 @@
 import logging
+import os
 
 from dataset import Dataset
 from dcparser import Parser
@@ -114,6 +115,7 @@ flags = [
          'help': 'print the weights of featurizers'})
 ]
 
+
 class HoloClean:
     """
     Main entry point for HoloClean.
@@ -138,6 +140,19 @@ class HoloClean:
         for arg, opts in flags:
             arg_defaults[opts['dest']] = opts['default']
 
+        # check env vars
+        for arg, opts in arguments:
+            # if env var is set use that
+            if opts["metavar"] and opts["metavar"] in os.environ.keys():
+                logging.debug(
+                    "Overriding {} with env varible {} set to {}".format(
+                        opts['dest'],
+                        opts["metavar"],
+                        os.environ[opts["metavar"]])
+                )
+                arg_defaults[opts['dest']] = os.environ[opts["metavar"]]
+
+        # Override defaults with manual flags
         for key in kwargs:
             arg_defaults[key] = kwargs[key]
 
@@ -160,11 +175,10 @@ class Session:
         :param env: Holoclean environment
         :param name: Name for the Holoclean session
         """
-
         # Initialize members
         self.name = name
         self.env = env
-        self.ds = Dataset(name,env)
+        self.ds = Dataset(name, env)
         self.dc_parser = Parser(env, self.ds)
         self.domain_engine = DomainEngine(env, self.ds)
         self.detect_engine = DetectEngine(env, self.ds)
