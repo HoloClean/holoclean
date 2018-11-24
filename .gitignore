@@ -20,4 +20,6 @@ dist/
 lib/
 info/
 
+.ipynb_checkpoints/
+
 batch_tests/batch_run_scripts/send_email.py
