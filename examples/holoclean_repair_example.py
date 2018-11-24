@@ -12,7 +12,7 @@ from repair.featurize import LangModelFeat
 # 1. Setup a HoloClean session.
 hc = holoclean.HoloClean(
     pruning_topk=0.1,
-    epochs=30,
+    epochs=10,
     weight_decay=0.01,
     threads=4,
     batch_size=1,
@@ -43,5 +43,5 @@ featurizers = [
 
 # 5. Evaluate the correctness of the results.
 em_iter_func = lambda: hc.evaluate('../testdata/hospital_clean.csv', 'tid', 'attribute', 'correct_val')
-hc.repair_errors(featurizers, em_iterations=1, em_iter_func=em_iter_func)
+hc.repair_errors(featurizers, em_iterations=3, em_iter_func=em_iter_func)
 
