@@ -359,16 +359,23 @@ class DomainEngine:
             # initial values in this row, that is we calculate the sum of
             #
             #   P(initial | other_init_val) = P(initial, other_init_val) / P(other_init_val)
-            #
-            # We subtract one for pair_stats since we do not want to include
-            # the co-occurrence of our current row (consider the extreme case
-            # where an errorneous initial value only occurs once: its co-occurrence
-            # probability will always be 1 but it does not tell us this value
-            # co-occurs most frequently with our other initial values).
-            cur_score = sum(float(pair_stats[attr][other_attr][init_val][other_val] - 1) / single_stats[attr][init_val]
-                    for other_attr in attrs
-                    if attr != other_attr
-                    for other_val in init_row[other_attr].split('|||'))
+            cur_score = 0
+            for other_attr in attrs:
+                if attr == other_attr:
+                    continue
+                other_vals = init_row[other_attr].split('|||')
+                for other_val in other_vals:
+                    # We subtract the co-occurrence weight for this current row
+                    # from pair_stats since we do not want to include the
+                    # co-occurrence of our current row.
+                    #
+                    # Consider the extreme case where an errorneous initial
+                    # value only occurs once: its co-occurrence probability
+                    # will always be 1 but it does not mean this value
+                    # co-occurs most frequently with our other initial values.
+                    cooccur_freq =  pair_stats[attr][other_attr][init_val][other_val] - 1. / (len(other_vals) * len(init_values))
+
+                    cur_score += float(cooccur_freq) / single_stats[attr][init_val]
             # Keep the best initial value only
             if best_score is None or cur_score > best_score:
                 best_val = init_val
