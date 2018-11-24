@@ -296,9 +296,12 @@ class Dataset:
         # We need to iterate through this in a for loop instead of groupby & size
         # since our values may be '|||' separated
         freq_count = {}
-        for (vals,) in self.get_raw_data()[[attr]].itertuples(index=False):
-            for val in vals.split('|||'):
-                freq_count[val] = freq_count.get(val, 0) + 1
+        for (cell,) in self.get_raw_data()[[attr]].itertuples(index=False):
+            vals = cell.split('|||')
+            for val in vals:
+                # Correct for if there are multiple values: equal weight all
+                # values and their contribution to counts
+                freq_count[val] = freq_count.get(val, 0) + 1. / len(vals)
         return freq_count
 
     def _get_current_stats_single(self, attr):
@@ -328,11 +331,15 @@ class Dataset:
         # We need to iterate through this in a for loop instead of groupby & size
         # since our values may be '|||' separated
         cooccur_freq_count = {}
-        for vals1, vals2 in self.get_raw_data()[[first_attr,second_attr]].itertuples(index=False):
-            for val1 in vals1.split('|||'):
+        for cell1, cell2 in self.get_raw_data()[[first_attr,second_attr]].itertuples(index=False):
+            vals1 = cell1.split('|||')
+            vals2 = cell2.split('|||')
+            for val1 in vals1:
                 cooccur_freq_count[val1] = cooccur_freq_count.get(val1, {})
-                for val2 in vals2.split('|||'):
-                    cooccur_freq_count[val1][val2] = cooccur_freq_count[val1].get(val2, 0) + 1
+                for val2 in vals2:
+                    # Correct for if there are multiple values: equal weight all
+                    # co-pairs and their contribution to co-occur counts
+                    cooccur_freq_count[val1][val2] = cooccur_freq_count[val1].get(val2, 0) + 1. / (len(vals1) * len(vals2))
         return cooccur_freq_count
 
     def _get_current_stats_pair(self, first_attr, second_attr):
