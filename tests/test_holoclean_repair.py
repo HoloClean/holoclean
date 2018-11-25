@@ -1,7 +1,7 @@
 import unittest
 
 import holoclean
-from detect import NullDetector, ViolationDetector
+from detect import MultiInitDetector, NullDetector, ViolationDetector
 from repair.featurize import CurrentFeaturizer
 from repair.featurize import CurrentAttrFeaturizer
 from repair.featurize import CurrentSimFeaturizer
@@ -23,7 +23,7 @@ class TestHolocleanRepair(unittest.TestCase):
         hc.ds.set_constraints(hc.get_dcs())
 
         # 3. Detect erroneous cells using these two detectors.
-        detectors = [NullDetector(), ViolationDetector()]
+        detectors = [MultiInitDetector(), NullDetector(), ViolationDetector()]
         hc.detect_errors(detectors)
 
         # 4. Repair errors utilizing the defined features.

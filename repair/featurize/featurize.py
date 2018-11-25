@@ -27,7 +27,7 @@ class FeaturizedDataset:
             self.debugging[feat] = {}
             self.debugging[feat]['size'] = debug.shape
             self.debugging[feat]['weights'] = debug
-            
+
         self.tensor = tensor
         # TODO: remove after we validate it is not needed.
         self.in_features = self.tensor.shape[2]
@@ -37,7 +37,8 @@ class FeaturizedDataset:
     def generate_weak_labels(self):
         """
         generate_weak_labels returns a tensor where for each VID we have the
-        domain index of the current value.
+        domain index of the current value (our initial current value is our
+        target "weak" labels).
 
         :return: Torch.Tensor of size (# of variables) X 1 where tensor[i][0]
             contains the domain index of the current value for the i-th
