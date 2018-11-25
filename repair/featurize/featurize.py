@@ -45,6 +45,11 @@ class FeaturizedDataset:
             variable/VID.
         """
         logging.debug("Generating weak labels.")
+
+        # We include "t1.fixed = 1" i.e. cells with randomly generated domains
+        # are included in our weak labels: we want to keep their values as is.
+        # The other domain values in the random domain are negative samples
+        # for training.
         query = """
         SELECT
             _vid_,
