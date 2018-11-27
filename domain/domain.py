@@ -4,12 +4,13 @@ import time
 from tqdm import tqdm
 import itertools
 import random
+import math
 
-from dataset import AuxTables
+from dataset import AuxTables, CellStatus
 
 
 class DomainEngine:
-    def __init__(self, env, dataset, cor_strength = 0.1, sampling_prob=0.3, max_sample=5):
+    def __init__(self, env, dataset, cor_strength = 0.1, sampling_prob=1.0, max_sample=5):
         """
         :param env: (dict) contains global settings such as verbose
         :param dataset: (Dataset) current dataset
@@ -93,6 +94,7 @@ class DomainEngine:
         self.total = total
         self.single_stats = single_stats
         tic = time.clock()
+        self.raw_pair_stats = pair_stats
         self.pair_stats = self._topk_pair_stats(pair_stats)
         toc = time.clock()
         prep_time = toc - tic
@@ -144,7 +146,7 @@ class DomainEngine:
             raise Exception("No attribute contains erroneous cells.")
         return set(itertools.chain(*result))
 
-    def get_corr_attributes(self, attr):
+    def get_corr_attributes(self, attr, thres):
         """
         get_corr_attributes returns attributes from self.correlations
         that are correlated with attr with magnitude at least self.cor_strength
@@ -155,7 +157,7 @@ class DomainEngine:
 
         d_temp = self.correlations[attr]
         d_temp = d_temp.abs()
-        cor_attrs = [rec[0] for rec in d_temp[d_temp > self.cor_strength].iteritems() if rec[0] != attr]
+        cor_attrs = [rec[0] for rec in d_temp[d_temp > thres].iteritems() if rec[0] != attr]
         return cor_attrs
 
     def generate_domain(self):
@@ -198,10 +200,12 @@ class DomainEngine:
             for attr in self.active_attributes:
                 init_value, dom = self.get_domain_cell(attr, row)
                 init_value_idx = dom.index(init_value)
+                weak_label, fixed = self.get_weak_label(attr, row, init_value, dom, 0.99)
+                weak_label_idx = dom.index(weak_label)
                 if len(dom) > 1:
                     cid = self.ds.get_cell_id(tid, attr)
                     app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_":vid, "domain": "|||".join(dom),  "domain_size": len(dom),
-                                "init_value": init_value, "init_index": init_value_idx, "fixed":0})
+                                "init_value": init_value, "init_index": init_value_idx, "weak_label": weak_label, "weak_label_idx": weak_label_idx, "fixed": fixed})
                     vid += 1
                 else:
                     add_domain = self.get_random_domain(attr,init_value)
@@ -211,7 +215,7 @@ class DomainEngine:
                         cid = self.ds.get_cell_id(tid, attr)
                         app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_": vid, "domain": "|||".join(dom),
                                     "domain_size": len(dom),
-                                    "init_value": init_value, "init_index": init_value_idx, "fixed": 1})
+                                    "init_value": init_value, "init_index": init_value_idx, "weak_label": init_value, "weak_label_idx": init_value_idx, "fixed": CellStatus.single_value.value})
                         vid += 1
             cells.extend(app)
         domain_df = pd.DataFrame(data=cells)
@@ -241,7 +245,7 @@ class DomainEngine:
         """
 
         domain = set([])
-        correlated_attributes = self.get_corr_attributes(attr)
+        correlated_attributes = self.get_corr_attributes(attr, self.cor_strength)
         # Iterate through all attributes correlated at least self.cor_strength ('cond_attr')
         # and take the top K co-occurrence values for 'attr' with the current
         # row's 'cond_attr' value.
@@ -291,3 +295,46 @@ class DomainEngine:
         else:
             additional_values = []
         return additional_values
+
+    def get_weak_label(self, attr, row, init_value, dom, thres=0.99, corr_strength=0.3):
+        """
+        Uses a Naive Bayes model to suggest a correct value for a cell. If the confidence of the
+        predicted value is above <thress> the predicted value is used as ground truth.
+        :param attr: The attribute of the cell under consideration.
+        :param row: The row of the cell under consideration.
+        :param init_value: The initial value of cell (attr, row).
+        :param dom: The pruned domain of the random variable corresponding to cell (attr, row).
+        :param thres: The confidence threshold.
+        :return: Returns a tuple (weak_label, fixed). The weak_label corresponds to a value from the domain and fixed
+        indicates if this value should be used as ground truth or not.
+        """
+        nb_score = {}
+        for val1 in dom:
+            val1_count = self.single_stats[attr][val1]
+            log_prob = math.log(float(val1_count)/float(self.total))
+            correlated_attributes = self.get_corr_attributes(attr, corr_strength)
+            total_log_prob = 0.0
+            for at in correlated_attributes:
+                if at != attr:
+                    val2 = row[at]
+                    val2_count = self.single_stats[at][val2]
+                    val2_val1_count = 0.1
+                    if val1 in self.raw_pair_stats[attr][at]:
+                        if val2 in self.raw_pair_stats[attr][at][val1]:
+                            val2_val1_count = max(self.raw_pair_stats[attr][at][val1][val2] - 1.0, 0.1)
+                    p = float(val2_val1_count)/float(val1_count)
+                    log_prob += math.log(p)
+                    total_log_prob += math.log(float(val2_count)/float(self.total))
+            nb_score.update({val1: log_prob-total_log_prob})
+        max_key = max(nb_score, key=nb_score.get)
+        log_probability = nb_score[max_key]
+        total_log_prob = 0.0
+        for v in nb_score.values():
+            total_log_prob += math.exp(v)
+        weak_label = init_value
+        fixed = CellStatus.not_set.value
+        confidence = math.exp(log_probability)/total_log_prob
+        if confidence > thres and max_key != init_value:
+            weak_label = max_key
+            fixed = CellStatus.weak_label.value
+        return weak_label, fixed

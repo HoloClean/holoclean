@@ -238,7 +238,7 @@ class Session:
         logging.info(status)
         logging.debug('Time to setup the domain: %.2f secs'%domain_time)
 
-    def repair_errors(self, featurizers):
+    def repair_errors(self, featurizers, infer_labeled=True):
         status, feat_time = self.repair_engine.setup_featurized_ds(featurizers)
         logging.info(status)
         logging.debug('Time to featurize data: %.2f secs'%feat_time)
@@ -248,7 +248,7 @@ class Session:
         status, fit_time = self.repair_engine.fit_repair_model()
         logging.info(status)
         logging.debug('Time to fit repair model: %.2f secs'%fit_time)
-        status, infer_time = self.repair_engine.infer_repairs()
+        status, infer_time = self.repair_engine.infer_repairs(infer_labeled)
         logging.info(status)
         logging.debug('Time to infer correct cell values: %.2f secs'%infer_time)
         status, time = self.ds.get_inferred_values()

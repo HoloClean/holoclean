@@ -2,7 +2,7 @@ import logging
 import torch
 from tqdm import tqdm
 from collections import namedtuple
-from dataset import AuxTables
+from dataset import AuxTables, CellStatus
 
 FeatInfo = namedtuple('FeatInfo', ['name', 'size', 'learnable', 'init_weight', 'feature_names'])
 
@@ -25,7 +25,7 @@ class FeaturizedDataset:
         self.tensor = tensor
         # TODO: remove after we validate it is not needed.
         self.in_features = self.tensor.shape[2]
-        self.weak_labels = self.generate_weak_labels()
+        self.weak_labels, self.labels_type = self.generate_weak_labels()
         self.var_class_mask, self.var_to_domsize = self.generate_var_mask()
 
     def generate_weak_labels(self):
@@ -38,19 +38,22 @@ class FeaturizedDataset:
             variable/VID.
         """
         logging.debug("Generating weak labels.")
-        query = 'SELECT _vid_, init_index FROM %s AS t1 LEFT JOIN %s AS t2 ' \
-                'ON t1._cid_ = t2._cid_ WHERE t2._cid_ is NULL OR t1.fixed = 1;' % (
-        AuxTables.cell_domain.name, AuxTables.dk_cells.name)
+        query = 'SELECT _vid_, weak_label_idx, fixed FROM %s AS t1 LEFT JOIN %s AS t2 ' \
+                'ON t1._cid_ = t2._cid_ WHERE t2._cid_ is NULL OR t1.fixed != %d;' % (
+        AuxTables.cell_domain.name, AuxTables.dk_cells.name, CellStatus.not_set.value)
         res = self.ds.engine.execute_query(query)
         if len(res) == 0:
             raise Exception("No weak labels available. Reduce pruning threshold.")
         labels = -1 * torch.ones(self.total_vars, 1).type(torch.LongTensor)
+        labels_type = -1 * torch.ones(self.total_vars, 1).type(torch.LongTensor)
         for tuple in tqdm(res):
             vid = int(tuple[0])
             label = int(tuple[1])
+            fixed = int(tuple[2])
             labels[vid] = label
+            labels_type[vid] = fixed
         logging.debug("DONE generating weak labels.")
-        return labels
+        return labels, labels_type
 
     def generate_var_mask(self):
         """
@@ -99,8 +102,13 @@ class FeaturizedDataset:
         mask_train = self.var_class_mask.index_select(0, train_idx)
         return X_train, Y_train, mask_train
 
-    def get_infer_data(self):
-        infer_idx = (self.weak_labels == -1).nonzero()[:, 0]
-        X_infer = self.tensor.index_select(0, infer_idx)
-        mask_infer = self.var_class_mask.index_select(0, infer_idx)
+    def get_infer_data(self, infer_labeled):
+        if infer_labeled:
+            infer_idx = (self.labels_type <= CellStatus.single_value.value).nonzero()[:, 0]
+            X_infer = self.tensor.index_select(0, infer_idx)
+            mask_infer = self.var_class_mask.index_select(0, infer_idx)
+        else:
+            infer_idx = (self.weak_labels == -1).nonzero()[:, 0]
+            X_infer = self.tensor.index_select(0, infer_idx)
+            mask_infer = self.var_class_mask.index_select(0, infer_idx)
         return X_infer, mask_infer, infer_idx

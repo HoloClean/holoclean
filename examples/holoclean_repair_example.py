@@ -10,7 +10,7 @@ from repair.featurize import LangModelFeat
 
 # 1. Setup a HoloClean session.
 hc = holoclean.HoloClean(
-    pruning_topk=0.1,
+    pruning_topk=0.01,
     epochs=30,
     weight_decay=0.01,
     threads=20,
@@ -32,7 +32,7 @@ hc.detect_errors(detectors)
 # 4. Repair errors utilizing the defined features.
 hc.setup_domain()
 featurizers = [
-    InitAttFeaturizer(learnable=False),
+    InitAttFeaturizer(),
     InitSimFeaturizer(),
     FreqFeaturizer(),
     OccurFeaturizer(),

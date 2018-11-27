@@ -39,6 +39,11 @@ class AuxTables(Enum):
     inf_values_idx = 6
     inf_values_dom = 7
 
+class CellStatus(Enum):
+    not_set        = 0
+    weak_label     = 1
+    single_value   = 2
+
 class Dataset:
     """
     This class keeps all dataframes and tables for a HC session
