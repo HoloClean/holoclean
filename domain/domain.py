@@ -324,8 +324,7 @@ class DomainEngine:
                             val2_val1_count = max(self.raw_pair_stats[attr][at][val1][val2] - 1.0, 0.1)
                     p = float(val2_val1_count)/float(val1_count)
                     log_prob += math.log(p)
-                    total_log_prob += math.log(float(val2_count)/float(self.total))
-            nb_score.update({val1: log_prob-total_log_prob})
+            nb_score.update({val1: log_prob})
         max_key = max(nb_score, key=nb_score.get)
         log_probability = nb_score[max_key]
         total_log_prob = 0.0
