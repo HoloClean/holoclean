@@ -19,7 +19,15 @@ class FreqFeaturizer(Featurizer):
         attr_idx = self.ds.attr_to_idx[attribute]
         tensor = torch.zeros(1, classes, self.attrs_number)
         for idx, val in enumerate(domain):
-            prob = float(self.single_stats[attribute][val])/float(self.total)
+            freq = 0.0
+            if self.env['current_stats']:
+                # In the case where we update statistics to current values after
+                # every EM iteration, the domain value may no longer appear amongst
+                # current values.
+                freq = self.single_stats[attribute].get(val, 0)
+            else:
+                freq = self.single_stats[attribute][val]
+            prob = float(freq)/float(self.total)
             tensor[0][idx][attr_idx] = prob
         return tensor
 

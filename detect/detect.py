@@ -34,5 +34,5 @@ class DetectEngine:
         if errors_df.empty:
             raise Exception("ERROR: Detected errors dataframe is empty.")
         self.ds.generate_aux_table(AuxTables.dk_cells, errors_df, store=True)
-        self.ds.aux_table[AuxTables.dk_cells].create_db_index(self.ds.engine, ['_cid_'])
+        self.ds.get_aux_table(AuxTables.dk_cells).create_db_index(self.ds.engine, ['_cid_'])
 

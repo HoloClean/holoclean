@@ -9,6 +9,7 @@ _templates
 .DS_store
 .venv
 *.swp
+*.swn
 *.pyc
 
 # pip package metadata

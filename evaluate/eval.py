@@ -7,11 +7,18 @@ from string import Template
 from dataset import AuxTables
 from dataset.table import Table, Source
 
-errors_template = Template('SELECT count(*) '\
-                            'FROM $init_table as t1, $grdt_table as t2 '\
-                            'WHERE t1._tid_ = t2._tid_ '\
-                              'AND t2._attribute_ = \'$attr\' '\
-                              'AND t1.\"$attr\" != t2._value_')
+errors_template = Template("""
+SELECT
+    count(*)
+FROM
+    $raw_table as t1
+INNER JOIN
+    $clean_table as t2
+ON
+    t1._tid_ = t2._tid_
+    AND t2._attribute_ = '$attr'
+    AND t1."$attr" != t2._value_
+""")
 
 """
 The 'errors' aliased subquery returns the (_tid_, _attribute_, _value_)
@@ -23,15 +30,30 @@ The 'repairs' aliased table contains the cells and values we've inferred.
 We then count the number of cells that we repaired to the correct ground
 truth value.
 """
-correct_repairs_template = Template('SELECT COUNT(*) FROM'\
-                            '(SELECT t2._tid_, t2._attribute_, t2._value_ '\
-                             'FROM $init_table as t1, $grdt_table as t2 '\
-                             'WHERE t1._tid_ = t2._tid_ '\
-                               'AND t2._attribute_ = \'$attr\' '\
-                               'AND t1.\"$attr\" != t2._value_ ) as errors, $inf_dom as repairs '\
-                              'WHERE errors._tid_ = repairs._tid_ '\
-                                'AND errors._attribute_ = repairs.attribute '\
-                                'AND errors._value_ = repairs.rv_value')
+correct_repairs_template = Template("""
+SELECT
+    count(*)
+FROM (
+    SELECT
+        t2._tid_,
+        t2._attribute_,
+        t2._value_
+    FROM
+        $raw_table AS t1
+    INNER JOIN
+        $clean_table AS t2
+    ON
+        t1._tid_ = t2._tid_
+        AND t2._attribute_ = '$attr'
+        AND t1."$attr" != t2._value_
+) AS errors
+INNER JOIN
+    $inf_dom AS repairs
+ON
+    errors._tid_ = repairs._tid_
+    AND errors._attribute_ = repairs.attribute
+    AND errors._value_ = repairs.rv_value
+""")
 
 
 class EvalEngine:
@@ -64,7 +86,7 @@ class EvalEngine:
 
     def evaluate_repairs(self):
         self.compute_total_repairs()
-        self.compute_total_repairs_grdt()
+        self.compute_total_repairs_clean()
         self.compute_total_errors()
         self.compute_detected_errors()
         self.compute_correct_repairs()
@@ -79,10 +101,10 @@ class EvalEngine:
         tic = time.clock()
         try:
             prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
-            report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
-                      prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors, self.correct_repairs, self.total_repairs, self.total_repairs_grdt)
+            report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (clean data) = %d" % (
+                      prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors, self.correct_repairs, self.total_repairs, self.total_repairs_clean)
             report_list = [prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
-                           self.correct_repairs, self.total_repairs, self.total_repairs_grdt]
+                           self.correct_repairs, self.total_repairs, self.total_repairs_clean]
         except Exception as e:
             logging.error("ERROR generating evaluation report %s" % e)
             raise
@@ -92,34 +114,68 @@ class EvalEngine:
         return report, report_time, report_list
 
     def compute_total_repairs(self):
-        query = "SELECT count(*) FROM " \
-                "(SELECT _vid_ " \
-                 "FROM %s as t1, %s as t2 " \
-                 "WHERE t1._tid_ = t2._tid_ " \
-                   "AND t1.attribute = t2.attribute " \
-                   "AND t1.init_value != t2.rv_value) AS t"\
-                %(AuxTables.cell_domain.name, AuxTables.inf_values_dom.name)
+        """
+        compute_total_repairs memoizes into self.total_repairs
+        the number of cells where the initial value differs from the inferred
+        value (i.e. the number of repairs) for the entities in the TRAINING data.
+        """
+        # This query works with init_values with multiple values ('|||' separated)
+        # since it is still considered a 'repair' if we convert multiple
+        # initial values into one value.
+        query = """
+        SELECT
+            count(*)
+        FROM
+            {cell_domain} AS t1
+        INNER JOIN
+            {inf_values_dom} as t2
+        ON
+            t1._tid_ = t2._tid_
+            AND t1.attribute = t2.attribute
+        WHERE
+            t1.init_values != t2.rv_value
+        """.format(cell_domain=AuxTables.cell_domain.name,
+                inf_values_dom=AuxTables.inf_values_dom.name)
         res = self.ds.engine.execute_query(query)
         self.total_repairs = float(res[0][0])
 
-    def compute_total_repairs_grdt(self):
-        query = "SELECT count(*) FROM " \
-                "(SELECT _vid_ " \
-                 "FROM %s as t1, %s as t2, %s as t3 " \
-                 "WHERE t1._tid_ = t2._tid_ " \
-                   "AND t1.attribute = t2.attribute " \
-                   "AND t1.init_value != t2.rv_value " \
-                   "AND t1._tid_ = t3._tid_ " \
-                   "AND t1.attribute = t3._attribute_) AS t"\
-                %(AuxTables.cell_domain.name, AuxTables.inf_values_dom.name, self.clean_data.name)
+    def compute_total_repairs_clean(self):
+        """
+        compute_total_repairs_clean memoizes into self.total_repairs_clean
+        the number of cells where the initial value differs from the inferred
+        value (i.e. the number of repairs) for the entities in the TEST (clean) data.
+        """
+        # This query works with init_values with multiple values ('|||' separated)
+        # since it is still considered a 'repair' if we convert multiple
+        # initial values into one value.
+        query = """
+        SELECT
+            count(*)
+        FROM
+            {cell_domain} AS t1
+        INNER JOIN
+            {inf_values_dom} AS t2
+        ON
+            t1._tid_ = t2._tid_
+            AND t1.attribute = t2.attribute
+        INNER JOIN
+            {clean_data} AS t3
+        ON
+            t1._tid_ = t3._tid_
+            AND t1.attribute = t3._attribute_
+        WHERE
+            t1.init_values != t2.rv_value
+        """.format(cell_domain=AuxTables.cell_domain.name,
+                inf_values_dom=AuxTables.inf_values_dom.name,
+                clean_data=self.clean_data.name)
         res = self.ds.engine.execute_query(query)
-        self.total_repairs_grdt = float(res[0][0])
+        self.total_repairs_clean = float(res[0][0])
 
     def compute_total_errors(self):
         queries = []
         total_errors = 0.0
         for attr in self.ds.get_attributes():
-            query = errors_template.substitute(init_table=self.ds.raw_data.name, grdt_table=self.clean_data.name,
+            query = errors_template.substitute(raw_table=self.ds.raw_data.name, clean_table=self.clean_data.name,
                         attr=attr)
             queries.append(query)
         results = self.ds.engine.execute_queries(queries)
@@ -127,11 +183,11 @@ class EvalEngine:
             total_errors += float(res[0][0])
         self.total_errors = total_errors
 
-    def compute_total_errors_grdt(self):
+    def compute_total_errors_clean(self):
         queries = []
         total_errors = 0.0
         for attr in self.ds.get_attributes():
-            query = errors_template.substitute(init_table=self.ds.raw_data.name, grdt_table=self.clean_data.name,
+            query = errors_template.substitute(raw_table=self.ds.raw_data.name, clean_table=self.clean_data.name,
                         attr=attr)
             queries.append(query)
         results = self.ds.engine.execute_queries(queries)
@@ -140,13 +196,30 @@ class EvalEngine:
         self.total_errors = total_errors
 
     def compute_detected_errors(self):
-        query = "SELECT count(*) FROM " \
-                "(SELECT _vid_ " \
-                "FROM %s as t1, %s as t2, %s as t3 " \
-                "WHERE t1._tid_ = t2._tid_ AND t1._cid_ = t3._cid_ " \
-                "AND t1.attribute = t2._attribute_ " \
-                "AND t1.init_value != t2._value_) AS t" \
-                % (AuxTables.cell_domain.name, self.clean_data.name, AuxTables.dk_cells.name)
+        """
+        compute_detected_errors
+        """
+        # TODO(richardwu): how do we define a "repair" if we have multiple
+        # init values?
+        query = """
+        SELECT
+            count(*)
+        FROM
+            (SELECT
+                _vid_
+            FROM
+                {cell_domain} AS t1,
+                {clean_data} AS t2,
+                {dk_cells} AS t3
+            WHERE
+                t1._tid_ = t2._tid_
+                AND t1._cid_ = t3._cid_
+                AND t1.attribute = t2._attribute_
+                AND t1.init_values != t2._value_
+            ) AS t
+        """.format(cell_domain=AuxTables.cell_domain.name,
+                clean_data=self.clean_data.name,
+                dk_cells=AuxTables.dk_cells.name)
         res = self.ds.engine.execute_query(query)
         self.detected_errors = float(res[0][0])
 
@@ -154,8 +227,8 @@ class EvalEngine:
         queries = []
         correct_repairs = 0.0
         for attr in self.ds.get_attributes():
-            query = correct_repairs_template.substitute(init_table=self.ds.raw_data.name, grdt_table=self.clean_data.name,
-                                                        attr=attr, inf_dom=AuxTables.inf_values_dom.name)
+            query = correct_repairs_template.substitute(raw_table=self.ds.raw_data.name, clean_table=self.clean_data.name,
+                        attr=attr, inf_dom=AuxTables.inf_values_dom.name)
             queries.append(query)
         results = self.ds.engine.execute_queries(queries)
         for res in results:
@@ -173,9 +246,9 @@ class EvalEngine:
         return self.correct_repairs / self.detected_errors
 
     def compute_precision(self):
-        if self.total_repairs_grdt == 0:
+        if self.total_repairs_clean == 0:
             return 0
-        return self.correct_repairs / self.total_repairs_grdt
+        return self.correct_repairs / self.total_repairs_clean
 
     def compute_f1(self):
         prec = self.compute_precision()

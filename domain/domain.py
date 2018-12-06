@@ -7,7 +7,6 @@ import random
 
 from dataset import AuxTables
 
-
 class DomainEngine:
     def __init__(self, env, dataset, cor_strength = 0.1, sampling_prob=0.3, max_sample=5):
         """
@@ -32,7 +31,6 @@ class DomainEngine:
         self.max_sample = max_sample
         self.single_stats = {}
         self.pair_stats = {}
-        self.all_attrs = {}
 
     def setup(self):
         """
@@ -55,7 +53,9 @@ class DomainEngine:
         the pairwise correlations between attributes (values are treated as
         discrete categories).
         """
-        df = self.ds.get_raw_data()[self.ds.get_attributes()].copy()
+        # use expanded raw DataFrame to calculate correlations (since
+        # raw may contain '|||' separated values)
+        df = self._expand_raw_df()[self.ds.get_attributes()]
         # convert dataset to categories/factors
         for attr in df.columns:
             df[attr] = df[attr].astype('category').cat.codes
@@ -65,30 +65,79 @@ class DomainEngine:
         m_corr = df.corr()
         self.correlations = m_corr
 
+    def _expand_raw_df(self):
+        """
+        _expand_raw_df returns an expanded version of the raw DataFrame
+        where every row with cells with multiple values (separated by '|||')
+        are expanded into multiple rows that is the cross-product of the
+        multi-valued cells.
+
+        For example if a row contains
+
+        attr1       |   attr2
+        A|||B|||C       D|||E
+
+        this would be expanded into
+
+        attr1       |   attr2
+        A               D
+        A               E
+        B               D
+        B               E
+        C               D
+        C               E
+        """
+        # Cells may contain values separated by '|||': we need to
+        # expand this into multiple rows
+        raw_df = self.ds.get_raw_data()
+
+        tic = time.clock()
+        expanded_rows = []
+        for tup in raw_df.itertuples():
+            expanded_tup = [val.split('|||') if hasattr(val, 'split') else (val,) for val in tup ]
+            expanded_rows.extend([new_tup for new_tup in itertools.product(*expanded_tup)])
+        toc = time.clock()
+        logging.debug("Time to expand raw data: %.2f secs", toc-tic)
+        expanded_df = pd.DataFrame(expanded_rows, columns=raw_df.index.names + list(raw_df.columns))
+        expanded_df.set_index(raw_df.index.names, inplace=True)
+        return expanded_df
+
     def store_domains(self, domain):
         """
-        store_domains stores the 'domain' DataFrame as the 'cell_domain'
+        store_domains stores the :param domain: DataFrame as the 'cell_domain'
         auxiliary table as well as generates the 'pos_values' auxiliary table,
         a long-format of the domain values, in Postgres.
 
         pos_values schema:
             _tid_: entity/tuple ID
             _cid_: cell ID
-            _vid_: random variable ID (all cells with more than 1 domain value)
-            _
-
+            _vid_: random variable ID (1-1 with _cid_)
+            attribute: name of attribute
+            rv_val: domain value
+            val_id: domain index of rv_val
         """
         if domain.empty:
             raise Exception("ERROR: Generated domain is empty.")
-        else:
-            self.ds.generate_aux_table(AuxTables.cell_domain, domain, store=True, index_attrs=['_vid_'])
-            self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_tid_'])
-            self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_cid_'])
-            query = "SELECT _vid_, _cid_, _tid_, attribute, a.rv_val, a.val_id from %s , unnest(string_to_array(regexp_replace(domain,\'[{\"\"}]\',\'\',\'gi\'),\'|||\')) WITH ORDINALITY a(rv_val,val_id)" % AuxTables.cell_domain.name
-            self.ds.generate_aux_table_sql(AuxTables.pos_values, query, index_attrs=['_tid_', 'attribute'])
+
+        self.ds.generate_aux_table(AuxTables.cell_domain, domain, store=True, index_attrs=['_vid_'])
+        self.ds.get_aux_table(AuxTables.cell_domain).create_db_index(self.ds.engine, ['_tid_'])
+        self.ds.get_aux_table(AuxTables.cell_domain).create_db_index(self.ds.engine, ['_cid_'])
+        query = """
+        SELECT
+            _vid_,
+            _cid_,
+            _tid_,
+            attribute,
+            a.rv_val,
+            a.val_id
+        FROM
+            {cell_domain},
+            unnest(string_to_array(regexp_replace(domain,\'[{{\"\"}}]\',\'\',\'gi\'),\'|||\')) WITH ORDINALITY a(rv_val,val_id)
+        """.format(cell_domain=AuxTables.cell_domain.name)
+        self.ds.generate_aux_table_sql(AuxTables.pos_values, query, index_attrs=['_tid_', 'attribute'])
 
     def setup_attributes(self):
-        self.active_attributes = self.get_active_attributes()
+        self.active_attributes = self.fetch_active_attributes()
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total
         self.single_stats = single_stats
@@ -132,9 +181,9 @@ class DomainEngine:
                     out[attr1][attr2][val1] = top_cands
         return out
 
-    def get_active_attributes(self):
+    def fetch_active_attributes(self):
         """
-        get_active_attributes returns the attributes to be modeled.
+        fetch_active_attributes fetches/refetches the attributes to be modeled.
         These attributes correspond only to attributes that contain at least
         one potentially erroneous cell.
         """
@@ -177,10 +226,13 @@ class DomainEngine:
             _cid_: cell ID (unique for every entity-attribute)
             _vid_: variable ID (1-1 correspondence with _cid_)
             attribute: attribute name
+            attribute_idx: index of attribute
             domain: ||| seperated string of domain values
             domain_size: length of domain
-            init_value: initial value for this cell
-            init_value_idx: domain index of init_value
+            init_values: initial values for this cell
+            init_values_idx: domain indexes of init_values
+            current_value: current value (current predicted)
+            current_value_idx: domain index for current value
             fixed: 1 if a random sample was taken since no correlated attributes/top K values
         """
 
@@ -190,29 +242,37 @@ class DomainEngine:
         # Iterate over dataset rows
         cells = []
         vid = 0
-        records = self.ds.get_raw_data().to_records()
-        self.all_attrs = list(records.dtype.names)
-        for row in tqdm(list(records)):
+        raw_records = self.ds.get_raw_data().to_records()
+        for row in tqdm(raw_records):
             tid = row['_tid_']
             app = []
+
+            # Iterate over each active attribute (attributes that have at
+            # least one dk cell) and generate for this cell:
+            # 1) the domain values
+            # 2) the initial values (taken from raw data)
+            # 3) the current value (best predicted value)
             for attr in self.active_attributes:
-                init_value, dom = self.get_domain_cell(attr, row)
-                init_value_idx = dom.index(init_value)
-                if len(dom) > 1:
-                    cid = self.ds.get_cell_id(tid, attr)
-                    app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_":vid, "domain": "|||".join(dom),  "domain_size": len(dom),
-                                "init_value": init_value, "init_index": init_value_idx, "fixed":0})
-                    vid += 1
-                else:
-                    add_domain = self.get_random_domain(attr,init_value)
-                    # Check if attribute has more than one unique values
-                    if len(add_domain) > 0:
-                        dom.extend(self.get_random_domain(attr,init_value))
-                        cid = self.ds.get_cell_id(tid, attr)
-                        app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_": vid, "domain": "|||".join(dom),
-                                    "domain_size": len(dom),
-                                    "init_value": init_value, "init_index": init_value_idx, "fixed": 1})
-                        vid += 1
+                init_values, current_value, dom = self.get_domain_cell(attr, row)
+                init_values_idx = [dom.index(val) for val in init_values]
+                current_value_idx = dom.index(current_value)
+                cid = self.ds.get_cell_id(tid, attr)
+                fixed = 0
+
+                # If domain could not be generated from correlated attributes,
+                # randomly choose values to add to our domain.
+                if len(dom) == 1:
+                    fixed = 1
+                    add_domain = self.get_random_domain(attr, init_values)
+                    dom.extend(add_domain)
+
+                app.append({"_tid_": tid, "_cid_": cid, "_vid_":vid,
+                            "attribute": attr, "attribute_idx": self.ds.attr_to_idx[attr],
+                            "domain": '|||'.join(dom), "domain_size": len(dom),
+                            "init_values": '|||'.join(init_values), "init_values_idx": '|||'.join(map(str,init_values_idx)),
+                            "current_value": current_value, "current_value_idx": current_value_idx,
+                            "fixed": fixed})
+                vid+=1
             cells.extend(app)
         domain_df = pd.DataFrame(data=cells)
         logging.info('DONE generating domain')
@@ -220,8 +280,8 @@ class DomainEngine:
 
     def get_domain_cell(self, attr, row):
         """
-        get_domain_cell returns a list of all domain values for the given
-        entity (row) and attribute.
+        get_domain_cell returns list of init values, current (best predicted)
+        value, and list of domain values for the given cell.
 
         We define domain values as values in 'attr' that co-occur with values
         in attributes ('cond_attr') that are correlated with 'attr' at least in
@@ -237,26 +297,29 @@ class DomainEngine:
 
         This would produce [B,C,E] as domain values.
 
-        :return: (initial value of entity-attribute, domain values for entity-attribute).
+        :param attr: (str) name of attribute to generate domain info for
+        :param row: (pandas.record) Pandas record (tuple) of the current TID's row
+
+        :return: (list of initial values, current value, list of domain values).
         """
 
-        domain = set([])
+        domain = set()
         correlated_attributes = self.get_corr_attributes(attr)
         # Iterate through all attributes correlated at least self.cor_strength ('cond_attr')
         # and take the top K co-occurrence values for 'attr' with the current
         # row's 'cond_attr' value.
         for cond_attr in correlated_attributes:
-            if cond_attr == attr or cond_attr == 'index' or cond_attr == '_tid_':
+            if cond_attr == attr:
                 continue
-            cond_val = row[cond_attr]
-            if not pd.isnull(cond_val):
-                if not self.pair_stats[cond_attr][attr]:
-                    break
+            # row[cond_attr] should always be a string (since it comes from self.raw_data)
+            for cond_val in row[cond_attr].split('|||'):
                 s = self.pair_stats[cond_attr][attr]
                 try:
                     candidates = s[cond_val]
                     domain.update(candidates)
                 except KeyError as missing_val:
+                    # KeyError is possible since we do not store stats for
+                    # attributes with only NULL values
                     if not pd.isnull(row[attr]):
                         # error since co-occurrence must be at least 1 (since
                         # the current row counts as one co-occurrence).
@@ -265,25 +328,75 @@ class DomainEngine:
 
         # Remove _nan_ if added due to correlated attributes
         domain.discard('_nan_')
-        # Add initial value in domain
-        if pd.isnull(row[attr]):
-            domain.update(set(['_nan_']))
-            init_value = '_nan_'
-        else:
-            domain.update(set([row[attr]]))
-            init_value = row[attr]
-        return init_value, list(domain)
 
-    def get_random_domain(self, attr, cur_value):
+        init_values, current_value = self._init_and_current(attr, row)
+        domain.update(init_values)
+
+        return init_values, current_value, list(domain)
+
+    def _init_and_current(self, attr, init_row):
+        """
+        _init_and_current returns the initial values for :param attr:
+        and the current value: the initial value that has the highest
+        cumulative co-occurrence probability with the other initial values in
+        this row.
+        """
+        # Assume value in raw dataset is given as ||| separate initial values
+        init_values = init_row[attr].split('|||')
+
+        # Only one initial value: current is the initial value
+        if len(init_values) == 1:
+            return init_values, init_values[0]
+
+        _, single_stats, pair_stats = self.ds.get_statistics()
+        attrs = self.ds.get_attributes()
+
+        # Determine current value by computing co-occurrence probability
+        best_val = None
+        best_score = None
+        for init_val in init_values:
+            # Compute total sum of co-occur probabilities with all other
+            # initial values in this row, that is we calculate the sum of
+            #
+            #   P(initial | other_init_val) = P(initial, other_init_val) / P(other_init_val)
+            cur_score = 0
+            for other_attr in attrs:
+                if attr == other_attr:
+                    continue
+                other_vals = init_row[other_attr].split('|||')
+                for other_val in other_vals:
+                    # We subtract the co-occurrence weight for this current row
+                    # from pair_stats since we do not want to include the
+                    # co-occurrence of our current row.
+                    #
+                    # Consider the extreme case where an errorneous initial
+                    # value only occurs once: its co-occurrence probability
+                    # will always be 1 but it does not mean this value
+                    # co-occurs most frequently with our other initial values.
+                    cooccur_freq =  pair_stats[attr][other_attr][init_val][other_val] - 1. / (len(other_vals) * len(init_values))
+
+                    cur_score += float(cooccur_freq) / single_stats[attr][init_val]
+            # Keep the best initial value only
+            if best_score is None or cur_score > best_score:
+                best_val = init_val
+                best_score = cur_score
+        return init_values, best_val
+
+    def get_random_domain(self, attr, init_values):
         """
         get_random_domain returns a random sample of at most size
-        'self.max_sample' of domain values for 'attr' that is NOT 'cur_value'.
+        'self.max_sample' of domain values for :param attr: that is NOT any
+        of :param init_values:
+
+        :param attr: (str) name of attribute to generate random domain for
+        :param init_values: (list[str]) list of initial values
         """
 
         if random.random() > self.sampling_prob:
             return []
         domain_pool = set(self.single_stats[attr].keys())
-        domain_pool.discard(cur_value)
+        # Do not include initial values in random domain
+        domain_pool = domain_pool.difference(init_values)
         size = len(domain_pool)
         if size > 0:
             k = min(self.max_sample, size)
