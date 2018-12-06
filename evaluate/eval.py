@@ -11,7 +11,7 @@ errors_template = Template('SELECT count(*) '\
                             'FROM $init_table as t1, $grdt_table as t2 '\
                             'WHERE t1._tid_ = t2._tid_ '\
                               'AND t2._attribute_ = \'$attr\' '\
-                              'AND t1.\"$attr\" != t2._value_')
+                              'AND t1."$attr" != t2._value_')
 
 """
 The 'errors' aliased subquery returns the (_tid_, _attribute_, _value_)
@@ -28,7 +28,7 @@ correct_repairs_template = Template('SELECT COUNT(*) FROM'\
                              'FROM $init_table as t1, $grdt_table as t2 '\
                              'WHERE t1._tid_ = t2._tid_ '\
                                'AND t2._attribute_ = \'$attr\' '\
-                               'AND t1.\"$attr\" != t2._value_ ) as errors, $inf_dom as repairs '\
+                               'AND t1."$attr" != t2._value_ ) as errors, $inf_dom as repairs '\
                               'WHERE errors._tid_ = repairs._tid_ '\
                                 'AND errors._attribute_ = repairs.attribute '\
                                 'AND errors._value_ = repairs.rv_value')

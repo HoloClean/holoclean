@@ -1,7 +1,0 @@
-food	GL	GLD	1113194633_food_GLD_cov_alpha0dot01_topk_3_s400_k8_b001_multiple_topdown_knn10_hamming_dc.txt	12	[1-3-4-5-7-14-15-18-19-22-30-33]	2	/fastdisk/ProfilerData/food/GL/GLD/sparsity_0.01/decomposition/knn/multiple_topdown
-food	attention	joint	1113205630_food_preFalse_joint_osc0dot01_topk_3_dc.txt	6	[34-42-43-44-45-46]	3	/fastdisk/ProfilerData/food/attention/joint/decomposition
-food	attention	joint	1113224153_food_preFalse_joint_topk_3_dc.txt	6	[29-42-44-46-47-48]	4	/fastdisk/ProfilerData/food/attention/joint/decomposition
-food	attention	joint	1113213158_food_preFalse_joint_osc0dot02_topk_3_dc.txt	7	[42-45-49-50-51-52-53]	4	/fastdisk/ProfilerData/food/attention/joint/decomposition
-food	attention	joint	1113213158_food_preFalse_joint_osc0dot02_topk_5_dc.txt	8	[37-42-50-53-54-55-56-57]	4	/fastdisk/ProfilerData/food/attention/joint/decomposition
-food	attention	joint	1113220644_food_preFalse_joint_osc0dot0_topk_3_dc.txt	6	[39-40-42-43-63-64]	4	/fastdisk/ProfilerData/food/attention/joint/decomposition
-food	GL	GL	1114094842_food_GL_cov_alpha0dot01_topk_10_dc.txt	4	[1-2-3-4]	2	/fastdisk/ProfilerData/food/GL/GL/sparsity_0.01/decomposition
