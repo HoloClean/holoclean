@@ -144,7 +144,7 @@ class RepairModel:
         output = softmax(fx, 1)
         return output
 
-    def get_featurizer_weights(self, feat_info, debugging):
+    def get_featurizer_weights(self, feat_info):
         report = ""
         for i, f in enumerate(feat_info):
             this_weight = self.model.weight_list[i].data.numpy()[0]
