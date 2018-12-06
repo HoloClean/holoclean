@@ -146,7 +146,6 @@ class RepairModel:
 
     def get_featurizer_weights(self, feat_info, debugging):
         report = ""
-        log = open("debugging.log","w+")
         for i, f in enumerate(feat_info):
             this_weight = self.model.weight_list[i].data.numpy()[0]
             weight_str = " | ".join(map(str, np.around(this_weight,3)))
@@ -169,15 +168,4 @@ class RepairModel:
                 'weights': this_weight,
                 'size': feat_size
             }
-            
-            # debugging
-            train = debugging[feat_name]['weights']
-            for dom_idx in range(train.shape[0]):
-                string = "dom_idx [{}],\t,\t,\t\n".format(dom_idx)
-                for i, x in enumerate(train[dom_idx,:]):
-                    if x != 0:
-                        string += "\t, idx [%d], input %.6f, weight %.6f, product %.4f\n" % (
-                            i, x, this_weight[i], this_weight[i]*x)
-                log.write(string)
-        log.close()
         return report
