@@ -231,17 +231,15 @@ class DomainEngine:
 
         estimator = RecurrentLogistic(self.ds, pruned_domain, self.active_attributes)
         losses = estimator.train(num_recur=1, num_epochs=3, batch_size=32)
-        import pdb; pdb.set_trace()
 
         # iterate through raw/current data and
         for row in records:
             for attr in self.active_attributes:
                 # TODO(richardwu): better way of doing this since this does a full table scan
-                try:
-                    domain = domain_df.loc[(domain_df['_tid_'] == row['_tid_']) & (domain_df['attribute'] == attr), 'domain'].values[0].split('|||')
-                except TypeError:
-                    import pdb; pdb.set_trace()
+                domain = domain_df.loc[(domain_df['_tid_'] == row['_tid_']) & (domain_df['attribute'] == attr), 'domain'].values[0].split('|||')
                 preds = estimator.predict_pp(row, attr, domain)
+                # TODO(richardwu): use prediction probabilities to update domain/weak labels
+
 
         logging.info('DONE generating domain')
         return domain_df
