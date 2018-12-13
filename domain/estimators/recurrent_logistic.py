@@ -128,8 +128,11 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         :param values: (list[str]) values to generate features for
         :param featurizers: (list[Featurizer]) featurizers to use
         """
-        out_tensor = torch.zeros(len(values), sum(feat.num_features() for feat in featurizers))
+        # Fastpath for 1 featurizer
+        if len(featurizers) == 1:
+            return featurizers[0].create_tensor(row, attr, values)
 
+        out_tensor = torch.zeros(len(values), sum(feat.num_features() for feat in featurizers))
         # iterate through each featurizer
         feat_idx = 0
         for featurizer in featurizers:
@@ -137,7 +140,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
             assert(feat_tensor.shape[0] == len(values))
             assert(feat_tensor.shape[1] == featurizer.num_features())
 
-            out_tensor[:][feat_idx:feat_idx+featurizer.num_features()] = feat_tensor
+            out_tensor[:, feat_idx:feat_idx+featurizer.num_features()] = feat_tensor
             feat_idx += featurizer.num_features()
 
         return out_tensor
@@ -264,7 +267,7 @@ class CooccurFeaturizer(Featurizer):
                 cooccur = self.cooccur_freq[attr][other_attr][val].get(row[other_attr], 0)
                 freq = self.freq[other_attr][row[other_attr]]
 
-                tensor[val_idx][attr_idx] = float(cooccur) / float(freq)
+                tensor[val_idx,attr_idx] = float(cooccur) / float(freq)
         return tensor
 
     def _get_freq(self, attr):
