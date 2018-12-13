@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+import copy
 import logging
 import pandas as pd
 import torch
@@ -23,7 +24,10 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         :param active_attrs: (list[str]) attributes that have random values
         """
         torch.nn.Module.__init__(self)
-        Estimator.__init__(self, dataset, pruned_domain, active_attrs)
+        Estimator.__init__(self, dataset)
+
+        self.dom = pruned_domain
+        self.active_attrs = active_attrs
 
         # self.dom maps tid --> attr --> list of domain values
         # we need to find the number of domain values we will be generating
@@ -35,6 +39,10 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
 
         # generate featurizers
         self._update_featurizers()
+
+        # make a copy of the initial featurizers for prediction/test set
+        # i.e. we want to use our original co-occurrence statistics
+        self.test_featurizers = [feat.copy() for feat in self.train_featurizers]
 
         # pytorch logistic regression model
         self._W = torch.nn.Parameter(torch.zeros(len(self.attrs),1))
@@ -48,15 +56,19 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         Reinitialize featurizers that depend on updated current values.
         """
 
-        self.featurizers = [
+        # Featurizers used for training
+        self.train_featurizers = [
                 CooccurFeaturizer(self.cur_df, self.attrs)
                 ]
-        self.num_features = sum(feat.num_features() for feat in self.featurizers)
+        # initialize featurizers
+        [feat.setup() for feat in self.train_featurizers]
+
+        self.num_train_features = sum(feat.num_features() for feat in self.train_featurizers)
 
     def _update_training_data(self):
 
         # Each row corresponds to a possible value for a given attribute and given TID
-        self._X = torch.zeros(self.n_samples, self.num_features)
+        self._X = torch.zeros(self.n_samples, self.num_train_features)
         self._Y = torch.zeros(self.n_samples)
 
         logging.info('RecurrentLogistic: featurizing training data')
@@ -73,7 +85,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
                     'val': val} for val in domain_vals]
 
                 # Initialize our X matrix with features from featurizers
-                feat_tensor = self._gen_feat_tensor(row, attr, domain_vals)
+                feat_tensor = self._gen_train_tensor(row, attr, domain_vals)
                 assert(feat_tensor.shape[0] == len(domain_vals))
                 self._X[sample_idx:sample_idx+len(domain_vals)] = feat_tensor
 
@@ -87,21 +99,43 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         # Map index (along first dimension) in self._X and self._Y to domain values
         self._domain_idx_df = pd.DataFrame(domain_idx_df)
 
-    def _gen_feat_tensor(self, row, attr, values):
+    def _gen_train_tensor(self, row, attr, values):
         """
+        Returns featurized tensor using training corpus (statistics are
+        based on current best predicted values).
+
         :param row: (namedtuple, recarray, dict) current values
         :param attr: (str) attribute for :param values:
         :param values: (list[str]) values to generate features for
         """
-        out_tensor = torch.zeros(len(values), self.num_features)
+        return self._gen_feat_tensor(row, attr, values, self.train_featurizers)
+
+    def _gen_test_tensor(self, row, attr, values):
+        """
+        Returns featurized tensor using initial corpus (statistics are
+        based on initial values).
+
+        :param row: (namedtuple, recarray, dict) current values
+        :param attr: (str) attribute for :param values:
+        :param values: (list[str]) values to generate features for
+        """
+        return self._gen_feat_tensor(row, attr, values, self.test_featurizers)
+
+    def _gen_feat_tensor(self, row, attr, values, featurizers):
+        """
+        :param row: (namedtuple, recarray, dict) current values
+        :param attr: (str) attribute for :param values:
+        :param values: (list[str]) values to generate features for
+        :param featurizers: (list[Featurizer]) featurizers to use
+        """
+        out_tensor = torch.zeros(len(values), sum(feat.num_features() for feat in featurizers))
 
         # iterate through each featurizer
         feat_idx = 0
-        for featurizer in self.featurizers:
+        for featurizer in featurizers:
             feat_tensor = featurizer.create_tensor(row, attr, values)
             assert(feat_tensor.shape[0] == len(values))
             assert(feat_tensor.shape[1] == featurizer.num_features())
-
 
             out_tensor[:][feat_idx:feat_idx+featurizer.num_features()] = feat_tensor
             feat_idx += featurizer.num_features()
@@ -123,10 +157,16 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
 
         batch_losses = []
         for recur_idx in range(1, num_recur+1):
+            # We need to update our statistics in featurizers on the 2nd and
+            # later iteration with our newest current values
+            if recur_idx > 1:
+                self._update_featurizers()
             self._update_training_data()
             torch_ds = TensorDataset(self._X, self._Y)
 
             logging.info("RecurrentLogistic: training, recur iteration: %d", recur_idx)
+
+            # Main training loop
             for epoch_idx in range(1, num_epochs+1):
                 logging.info("RecurrentLogistic: epoch %d", epoch_idx)
                 for batch_X, batch_Y in tqdm(DataLoader(torch_ds, batch_size=batch_size)):
@@ -141,9 +181,15 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         return batch_losses
 
     def predict_pp(self, row, attr, values):
-        pred_X = self._gen_feat_tensor(row, attr, values)
+        """
+        predict_pp generates posterior probabilities for :param values: for the
+        cell corresponding to :param attr: of this :param row:.
+
+        :return: (list[2-tuple]) 2-tuples corresponding to (value, proba)
+        """
+        pred_X = self._gen_test_tensor(row, attr, values)
         pred_Y = self.forward(pred_X)
-        return list(zip(values, pred_Y))
+        return list(zip(values, map(float, pred_Y)))
 
 
 class Featurizer:
@@ -155,11 +201,19 @@ class Featurizer:
     __metaclass__ = ABCMeta
 
     @abstractmethod
+    def setup(self):
+        raise NotImplementedError
+
+    @abstractmethod
     def num_features(self):
         raise NotImplementedError
 
     @abstractmethod
     def create_tensor(self, row, attr, values):
+        raise NotImplementedError
+
+    @abstractmethod
+    def copy(self):
         raise NotImplementedError
 
 
@@ -172,6 +226,10 @@ class CooccurFeaturizer(Featurizer):
         self.data_df = data_df
         self.attrs = attrs
 
+    def num_features(self):
+        return len(self.attrs)
+
+    def setup(self):
         # Frequencies of values per each attribute
         self.freq = {}
         for attr in self.attrs:
@@ -185,9 +243,6 @@ class CooccurFeaturizer(Featurizer):
                 if attr1 == attr2:
                     continue
                 self.cooccur_freq[attr1][attr2] = self._get_cooccur_freq(attr1, attr2)
-
-    def num_features(self):
-        return len(self.attrs)
 
     def create_tensor(self, row, attr, values):
         """
@@ -228,4 +283,13 @@ class CooccurFeaturizer(Featurizer):
         """
         tmp_df = self.data_df[[attr1,attr2]].groupby([attr1,attr2]).size().reset_index(name="count")
         return dictify_df(tmp_df)
+
+    def copy(self):
+        """
+        Makes a copy of this featurizer.
+        """
+        temp = CooccurFeaturizer(self.data_df.copy(), [a for a in self.attrs])
+        temp.freq = copy.deepcopy(self.freq)
+        temp.cooccur_freq = copy.deepcopy(self.cooccur_freq)
+        return temp
 

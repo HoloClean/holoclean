@@ -11,10 +11,11 @@ from repair.featurize import LangModelFeat
 # 1. Setup a HoloClean session.
 hc = holoclean.HoloClean(
     pruning_topk=0.0,
+    weak_label_thresh=0.90,
     epochs=20,
     weight_decay=0.1,
     threads=20,
-    batch_size=1,
+    batch_size=32,
     verbose=True,
     timeout=3*60000,
     print_fw=True

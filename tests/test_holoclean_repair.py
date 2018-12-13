@@ -14,7 +14,7 @@ from repair.featurize import LangModelFeat
 class TestHolocleanRepair(unittest.TestCase):
     def test_hospital(self):
         # 1. Setup a HoloClean session.
-        hc = holoclean.HoloClean(pruning_topk=0.1, epochs=30, weight_decay=0.01, threads=20, batch_size=1, verbose=True, timeout=3*60000).session
+        hc = holoclean.HoloClean(pruning_topk=0.1, epochs=30, weight_decay=0.01, threads=20, batch_size=32, verbose=True, timeout=3*60000).session
 
         # 2. Load training data and denial constraints.
         hc.load_data('hospital', '../testdata/hospital.csv')

@@ -8,7 +8,7 @@ class Estimator:
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, dataset, pruned_domain, active_attrs):
+    def __init__(self, dataset):
         """
         :param dataset: (Dataset)
         :param pruned_domain: (dict[dict[list[str]]]) dictionary that maps
@@ -16,9 +16,7 @@ class Estimator:
         _tid_ (str) --> attr (str) --> (pruned) domain values (list[str]).
         """
         self.ds = dataset
-        self.dom = pruned_domain
         self.attrs = self.ds.get_attributes()
-        self.active_attrs = active_attrs
 
     @abstractmethod
     def train(self, **kwargs):

@@ -93,7 +93,13 @@ arguments = [
       'dest': 'batch_size',
       'default': 1,
       'type': int,
-      'help': 'The batch size during training.'})
+      'help': 'The batch size during training.'}),
+    (('-wlt', '--weak-label-thresh'),
+     {'metavar': 'WEAK_LABEL_THRESH',
+      'dest': 'weak_label_thresh',
+      'default': 0.90,
+      'type': float,
+      'help': 'Threshold of posterior probability to assign weak labels.'}),
 ]
 
 # Flags for Holoclean mode

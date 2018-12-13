@@ -24,6 +24,7 @@ class DomainEngine:
         self.env = env
         self.ds = dataset
         self.topk = env["pruning_topk"]
+        self.weak_label_thresh = env["weak_label_thresh"]
         self.setup_complete = False
         self.active_attributes = None
         self.domain = None
@@ -199,13 +200,15 @@ class DomainEngine:
             tid = row['_tid_']
             app = []
             for attr in self.active_attributes:
+                # TODO(richardwu): relax domain prune here: simply take all
+                # values with at least one co-occurrence
                 init_value, dom = self.get_domain_cell(attr, row)
                 init_value_idx = dom.index(init_value)
+                # we will use an Estimator model for weak labelling below, which requires
+                # the full pruned domain first
                 weak_label = init_value
                 weak_label_idx = init_value_idx
-                fixed = 1
-                # weak_label, fixed = self.get_weak_label(attr, row, init_value, dom, 0.99)
-                # weak_label_idx = dom.index(weak_label)
+                fixed = CellStatus.not_set
                 if len(dom) > 1:
                     cid = self.ds.get_cell_id(tid, attr)
                     app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_":vid, "domain": "|||".join(dom),  "domain_size": len(dom),
@@ -224,24 +227,51 @@ class DomainEngine:
             cells.extend(app)
         domain_df = pd.DataFrame(data=cells)
 
+        logging.info('generating posteriors for domain values using RecurrentLogistic model')
+
+        # Use pruned domain from correlated attributes above for Logistic
+        # model
         pruned_domain = {}
         for row in domain_df[['_tid_', 'attribute', 'domain']].to_records():
             pruned_domain[row['_tid_']] =  pruned_domain.get(row['_tid_'], {})
             pruned_domain[row['_tid_']][row['attribute']] = row['domain'].split('|||')
 
         estimator = RecurrentLogistic(self.ds, pruned_domain, self.active_attributes)
-        losses = estimator.train(num_recur=1, num_epochs=3, batch_size=32)
+        estimator.train(num_recur=1, num_epochs=3, batch_size=self.env['batch_size'])
 
-        # iterate through raw/current data and
-        for row in records:
-            for attr in self.active_attributes:
-                # TODO(richardwu): better way of doing this since this does a full table scan
-                domain = domain_df.loc[(domain_df['_tid_'] == row['_tid_']) & (domain_df['attribute'] == attr), 'domain'].values[0].split('|||')
-                preds = estimator.predict_pp(row, attr, domain)
-                # TODO(richardwu): use prediction probabilities to update domain/weak labels
+        logging.info('generating weak labels from posterior model')
+
+        # raw records indexed by tid
+        records_by_tid = {row['_tid_']: row for row in records}
+        # iterate through raw/current data and generate posterior probabilities for
+        # weak labelling
+        num_weak_labels = 0
+        updated_domain_df = []
+        for row in tqdm(domain_df.to_records()):
+            domain_values = row['domain'].split('|||')
+            preds = estimator.predict_pp(records_by_tid[row['_tid_']], row['attribute'], domain_values)
 
 
-        logging.info('DONE generating domain')
+            #TODO(richardwu): use predictions to select final set of possible values / final domain
+            # will need to recompute init_index as well
+
+            # Assign weak label if domain value exceeds our weak label threshold
+            weak_label, weak_label_prob = max(preds, key=lambda pred: pred[1])
+            if weak_label_prob >= self.weak_label_thresh:
+                num_weak_labels+=1
+
+                weak_label_idx = domain_values.index(weak_label)
+                row['weak_label'] = weak_label
+                row['weak_label_idx'] = weak_label_idx
+                row['fixed'] = CellStatus.weak_label
+
+                updated_domain_df.append(row)
+
+        domain_df = pd.DataFrame.from_records(updated_domain_df).sort_values('_vid_')
+
+        logging.info('weak labels assigned: %d', num_weak_labels)
+
+        logging.info('DONE generating domain and weak labels')
         return domain_df
 
     def get_domain_cell(self, attr, row):
@@ -317,45 +347,3 @@ class DomainEngine:
         else:
             additional_values = []
         return additional_values
-
-    def get_weak_label(self, attr, row, init_value, dom, thres=0.99, corr_strength=0.3):
-        """
-        Uses a Naive Bayes model to suggest a correct value for a cell. If the confidence of the
-        predicted value is above <thress> the predicted value is used as ground truth.
-        :param attr: The attribute of the cell under consideration.
-        :param row: The row of the cell under consideration.
-        :param init_value: The initial value of cell (attr, row).
-        :param dom: The pruned domain of the random variable corresponding to cell (attr, row).
-        :param thres: The confidence threshold.
-        :return: Returns a tuple (weak_label, fixed). The weak_label corresponds to a value from the domain and fixed
-        indicates if this value should be used as ground truth or not.
-        """
-        nb_score = {}
-        for val1 in dom:
-            val1_count = self.single_stats[attr][val1]
-            log_prob = math.log(float(val1_count)/float(self.total))
-            correlated_attributes = self.get_corr_attributes(attr, corr_strength)
-            total_log_prob = 0.0
-            for at in correlated_attributes:
-                if at != attr:
-                    val2 = row[at]
-                    val2_count = self.single_stats[at][val2]
-                    val2_val1_count = 0.1
-                    if val1 in self.raw_pair_stats[attr][at]:
-                        if val2 in self.raw_pair_stats[attr][at][val1]:
-                            val2_val1_count = max(self.raw_pair_stats[attr][at][val1][val2] - 1.0, 0.1)
-                    p = float(val2_val1_count)/float(val1_count)
-                    log_prob += math.log(p)
-            nb_score.update({val1: log_prob})
-        max_key = max(nb_score, key=nb_score.get)
-        log_probability = nb_score[max_key]
-        total_log_prob = 0.0
-        for v in nb_score.values():
-            total_log_prob += math.exp(v)
-        weak_label = init_value
-        fixed = CellStatus.not_set.value
-        confidence = math.exp(log_probability)/total_log_prob
-        if confidence > thres and max_key != init_value:
-            weak_label = max_key
-            fixed = CellStatus.weak_label.value
-        return weak_label, fixed
