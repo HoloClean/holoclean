@@ -34,4 +34,4 @@ class TestHolocleanRepair(unittest.TestCase):
         hc.evaluate('../testdata/hospital_clean.csv', 'tid', 'attribute', 'correct_val')
 
 if __name__ == '__main__':
-    unitttest.main()
+    unittest.main()

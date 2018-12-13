@@ -7,6 +7,7 @@ import random
 import math
 
 from dataset import AuxTables, CellStatus
+from .estimators import RecurrentLogistic
 
 
 class DomainEngine:
@@ -200,8 +201,11 @@ class DomainEngine:
             for attr in self.active_attributes:
                 init_value, dom = self.get_domain_cell(attr, row)
                 init_value_idx = dom.index(init_value)
-                weak_label, fixed = self.get_weak_label(attr, row, init_value, dom, 0.99)
-                weak_label_idx = dom.index(weak_label)
+                weak_label = init_value
+                weak_label_idx = init_value_idx
+                fixed = 1
+                # weak_label, fixed = self.get_weak_label(attr, row, init_value, dom, 0.99)
+                # weak_label_idx = dom.index(weak_label)
                 if len(dom) > 1:
                     cid = self.ds.get_cell_id(tid, attr)
                     app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_":vid, "domain": "|||".join(dom),  "domain_size": len(dom),
@@ -219,6 +223,26 @@ class DomainEngine:
                         vid += 1
             cells.extend(app)
         domain_df = pd.DataFrame(data=cells)
+
+        pruned_domain = {}
+        for row in domain_df[['_tid_', 'attribute', 'domain']].to_records():
+            pruned_domain[row['_tid_']] =  pruned_domain.get(row['_tid_'], {})
+            pruned_domain[row['_tid_']][row['attribute']] = row['domain'].split('|||')
+
+        estimator = RecurrentLogistic(self.ds, pruned_domain, self.active_attributes)
+        losses = estimator.train(num_recur=1, num_epochs=3, batch_size=32)
+        import pdb; pdb.set_trace()
+
+        # iterate through raw/current data and
+        for row in records:
+            for attr in self.active_attributes:
+                # TODO(richardwu): better way of doing this since this does a full table scan
+                try:
+                    domain = domain_df.loc[(domain_df['_tid_'] == row['_tid_']) & (domain_df['attribute'] == attr), 'domain'].values[0].split('|||')
+                except TypeError:
+                    import pdb; pdb.set_trace()
+                preds = estimator.predict_pp(row, attr, domain)
+
         logging.info('DONE generating domain')
         return domain_df
 

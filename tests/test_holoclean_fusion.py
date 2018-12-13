@@ -11,4 +11,4 @@ class TestHolocleanFusion(unittest.TestCase):
         hc.load_data('flight', '../testdata/flight.csv', entity_col='flight', src_col='src')
 
 if __name__ == '__main__':
-    unitttest.main()
+    unittest.main()

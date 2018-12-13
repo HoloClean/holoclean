@@ -5,7 +5,6 @@ from tqdm import tqdm
 from .featurizer import Featurizer
 from dataset import AuxTables
 
-
 class OccurFeaturizer(Featurizer):
     def specific_setup(self):
         self.name = 'OccurFeaturizer'
