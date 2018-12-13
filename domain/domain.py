@@ -265,9 +265,9 @@ class DomainEngine:
                 row['weak_label_idx'] = weak_label_idx
                 row['fixed'] = CellStatus.weak_label
 
-                updated_domain_df.append(row)
+            updated_domain_df.append(row)
 
-        domain_df = pd.DataFrame.from_records(updated_domain_df).sort_values('_vid_')
+        domain_df = pd.DataFrame.from_records(updated_domain_df, columns=updated_domain_df[0].dtype.names).drop('index', axis=1).sort_values('_vid_')
 
         logging.info('weak labels assigned: %d', num_weak_labels)
 
