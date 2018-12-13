@@ -208,7 +208,7 @@ class DomainEngine:
                 # the full pruned domain first
                 weak_label = init_value
                 weak_label_idx = init_value_idx
-                fixed = CellStatus.not_set
+                fixed = CellStatus.not_set.value
                 if len(dom) > 1:
                     cid = self.ds.get_cell_id(tid, attr)
                     app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_":vid, "domain": "|||".join(dom),  "domain_size": len(dom),
@@ -263,7 +263,7 @@ class DomainEngine:
                 weak_label_idx = domain_values.index(weak_label)
                 row['weak_label'] = weak_label
                 row['weak_label_idx'] = weak_label_idx
-                row['fixed'] = CellStatus.weak_label
+                row['fixed'] = CellStatus.weak_label.value
 
             updated_domain_df.append(row)
 
