@@ -9,9 +9,10 @@ class NaiveBayes(Estimator):
     where v_init_i is the init value for corresponding to attribute i. This
     probability is normalized over all values passed into predict_pp.
     """
-    def __init__(self, dataset, freq, cooccur_freq, correlations, corr_strength):
+    def __init__(self, freq, cooccur_freq, n_tuples, correlations, corr_strength):
         self._freq = freq
         self._cooccur_freq = cooccur_freq
+        self._n_tuples = n_tuples
         self._correlations = correlations
         self._corr_strength = corr_strength
 
@@ -22,7 +23,7 @@ class NaiveBayes(Estimator):
         nb_score = []
         for val1 in values:
             val1_count = self._freq[attr][val1]
-            log_prob = math.log(float(val1_count)/float(self.total))
+            log_prob = math.log(float(val1_count)/float(self._n_tuples))
             correlated_attributes = self._get_corr_attributes(attr)
             total_log_prob = 0.0
             for at in correlated_attributes:
@@ -41,7 +42,7 @@ class NaiveBayes(Estimator):
 
         return [(val, math.exp(log_prob) / denom) for val, log_ in nb_score]
 
-    def _get_corr_attributes(attr):
+    def _get_corr_attributes(self, attr):
         if attr not in self._correlations:
             return []
 

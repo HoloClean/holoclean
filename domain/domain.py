@@ -7,7 +7,7 @@ import random
 import math
 
 from dataset import AuxTables, CellStatus
-from .estimators import RecurrentLogistic
+from .estimators import RecurrentLogistic, NaiveBayes
 
 
 class DomainEngine:
@@ -241,6 +241,8 @@ class DomainEngine:
 
         estimator = RecurrentLogistic(self.ds, pruned_domain, self.active_attributes)
         estimator.train(num_recur=1, num_epochs=3, batch_size=self.env['batch_size'])
+        # estimator = NaiveBayes(self.single_stats, self.raw_pair_stats, self.total, self.correlations, self.cor_strength)
+        # estimator.train()
 
         logging.info('generating weak labels from posterior model')
 
@@ -262,6 +264,7 @@ class DomainEngine:
             # update our memoized domain values for this row again
             row['domain'] = '|||'.join(domain_values)
             row['domain_size'] = len(domain_values)
+            row['weak_label_idx'] = domain_values.index(row['weak_label'])
             row['init_index'] = domain_values.index(row['init_value'])
 
             # Assign weak label if domain value exceeds our weak label threshold
