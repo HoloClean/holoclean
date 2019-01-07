@@ -11,7 +11,7 @@ from .estimators import RecurrentLogistic
 
 
 class DomainEngine:
-    def __init__(self, env, dataset, cor_strength = 0.1, sampling_prob=1.0, max_sample=5):
+    def __init__(self, env, dataset, sampling_prob=1.0, max_sample=5):
         """
         :param env: (dict) contains global settings such as verbose
         :param dataset: (Dataset) current dataset
@@ -25,12 +25,13 @@ class DomainEngine:
         self.ds = dataset
         self.topk = env["pruning_topk"]
         self.weak_label_thresh = env["weak_label_thresh"]
+        self.domain_prune_thresh = env["domain_prune_thresh"]
         self.setup_complete = False
         self.active_attributes = None
         self.domain = None
         self.total = None
         self.correlations = None
-        self.cor_strength = cor_strength
+        self.cor_strength = env["cor_strength"]
         self.sampling_prob = sampling_prob
         self.max_sample = max_sample
         self.single_stats = {}
@@ -153,6 +154,8 @@ class DomainEngine:
         get_corr_attributes returns attributes from self.correlations
         that are correlated with attr with magnitude at least self.cor_strength
         (init parameter).
+
+        :param thres: (float) correlation threshold (absolute) for returned attributes.
         """
         if attr not in self.correlations:
             return []
@@ -201,18 +204,18 @@ class DomainEngine:
             app = []
             for attr in self.active_attributes:
                 # TODO(richardwu): relax domain prune here: simply take all
-                # values with at least one co-occurrence
+                # values with at least one co-occurrence. This can be
+                # simulated by setting cor_strength = 0.0
                 init_value, dom = self.get_domain_cell(attr, row)
                 init_value_idx = dom.index(init_value)
                 # we will use an Estimator model for weak labelling below, which requires
                 # the full pruned domain first
                 weak_label = init_value
                 weak_label_idx = init_value_idx
-                fixed = CellStatus.not_set.value
                 if len(dom) > 1:
                     cid = self.ds.get_cell_id(tid, attr)
                     app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_":vid, "domain": "|||".join(dom),  "domain_size": len(dom),
-                                "init_value": init_value, "init_index": init_value_idx, "weak_label": weak_label, "weak_label_idx": weak_label_idx, "fixed": fixed})
+                                "init_value": init_value, "init_index": init_value_idx, "weak_label": weak_label, "weak_label_idx": weak_label_idx, "fixed": CellStatus.NOT_SET.value})
                     vid += 1
                 else:
                     add_domain = self.get_random_domain(attr,init_value)
@@ -222,7 +225,7 @@ class DomainEngine:
                         cid = self.ds.get_cell_id(tid, attr)
                         app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_": vid, "domain": "|||".join(dom),
                                     "domain_size": len(dom),
-                                    "init_value": init_value, "init_index": init_value_idx, "weak_label": init_value, "weak_label_idx": init_value_idx, "fixed": CellStatus.single_value.value})
+                                    "init_value": init_value, "init_index": init_value_idx, "weak_label": init_value, "weak_label_idx": init_value_idx, "fixed": CellStatus.SINGLE_VALUE.value})
                         vid += 1
             cells.extend(app)
         domain_df = pd.DataFrame(data=cells)
@@ -251,9 +254,15 @@ class DomainEngine:
             domain_values = row['domain'].split('|||')
             preds = estimator.predict_pp(records_by_tid[row['_tid_']], row['attribute'], domain_values)
 
-
-            #TODO(richardwu): use predictions to select final set of possible values / final domain
-            # will need to recompute init_index as well
+            # prune domain if any of the values are above our domain_prune_thresh
+            domain_values = [pred[0] for pred in preds if pred[1] >= self.domain_prune_thresh] or domain_values
+            # ensure the initial value is included
+            if row['init_value'] not in domain_values:
+                domain_values.append(row['init_value'])
+            # update our memoized domain values for this row again
+            row['domain'] = '|||'.join(domain_values)
+            row['domain_size'] = len(domain_values)
+            row['init_index'] = domain_values.index(row['init_value'])
 
             # Assign weak label if domain value exceeds our weak label threshold
             weak_label, weak_label_prob = max(preds, key=lambda pred: pred[1])
@@ -263,7 +272,7 @@ class DomainEngine:
                 weak_label_idx = domain_values.index(weak_label)
                 row['weak_label'] = weak_label
                 row['weak_label_idx'] = weak_label_idx
-                row['fixed'] = CellStatus.weak_label.value
+                row['fixed'] = CellStatus.WEAK_LABEL.value
 
             updated_domain_df.append(row)
 

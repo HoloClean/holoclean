@@ -20,9 +20,9 @@ class AuxTables(Enum):
     inf_values_dom = 7
 
 class CellStatus(Enum):
-    not_set        = 0
-    weak_label     = 1
-    single_value   = 2
+    NOT_SET        = 0
+    WEAK_LABEL     = 1
+    SINGLE_VALUE   = 2
 
 class Dataset:
     """

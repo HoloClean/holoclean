@@ -100,6 +100,18 @@ arguments = [
       'default': 0.90,
       'type': float,
       'help': 'Threshold of posterior probability to assign weak labels.'}),
+    (('-wlt', '--domain-prune-thresh'),
+     {'metavar': 'DOMAIN_PRUNE_THRESH',
+      'dest': 'domain_prune_thresh',
+      'default': 0.1,
+      'type': float,
+      'help': 'Threshold of posterior probability required for value to be included in pruned domain.'}),
+    (('-wlt', '--cor-strength'),
+     {'metavar': 'COR_STRENGTH',
+      'dest': 'cor_strength',
+      'default': 0.1,
+      'type': float,
+      'help': 'Correlation threshold (absolute) when selecting correlated attributes for domain pruning.'}),
 ]
 
 # Flags for Holoclean mode

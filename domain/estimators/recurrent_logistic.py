@@ -66,6 +66,10 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         self.num_train_features = sum(feat.num_features() for feat in self.train_featurizers)
 
     def _update_training_data(self):
+        """
+        _update_training_data (re-)constructs the self._X and self._Y training
+        tensors from self.cur_df (DataFrame of current values).
+        """
 
         # Each row corresponds to a possible value for a given attribute and given TID
         self._X = torch.zeros(self.n_samples, self.num_train_features)

@@ -22,6 +22,16 @@ class FeaturizedDataset:
             featurizer.feature_names())
             for tensor, featurizer in zip(tensors, featurizers)]
         tensor = torch.cat(tensors,2)
+        # DEBUGING
+        self.debugging = {}
+        print("========== DEBUGGING ==========")
+        for i, t in enumerate(tensors):
+            debug = t[9324, :, :].numpy()
+            feat = featurizers[i].name
+            self.debugging[feat] = {}
+            self.debugging[feat]['size'] = debug.shape
+            self.debugging[feat]['weights'] = debug
+
         self.tensor = tensor
         # TODO: remove after we validate it is not needed.
         self.in_features = self.tensor.shape[2]
@@ -40,7 +50,7 @@ class FeaturizedDataset:
         logging.debug("Generating weak labels.")
         query = 'SELECT _vid_, weak_label_idx, fixed FROM %s AS t1 LEFT JOIN %s AS t2 ' \
                 'ON t1._cid_ = t2._cid_ WHERE t2._cid_ is NULL OR t1.fixed != %d;' % (
-        AuxTables.cell_domain.name, AuxTables.dk_cells.name, CellStatus.not_set.value)
+        AuxTables.cell_domain.name, AuxTables.dk_cells.name, CellStatus.NOT_SET.value)
         res = self.ds.engine.execute_query(query)
         if len(res) == 0:
             raise Exception("No weak labels available. Reduce pruning threshold.")
@@ -104,7 +114,7 @@ class FeaturizedDataset:
 
     def get_infer_data(self, infer_labeled):
         if infer_labeled:
-            infer_idx = (self.labels_type <= CellStatus.single_value.value).nonzero()[:, 0]
+            infer_idx = (self.labels_type <= CellStatus.SINGLE_VALUE.value).nonzero()[:, 0]
             X_infer = self.tensor.index_select(0, infer_idx)
             mask_infer = self.var_class_mask.index_select(0, infer_idx)
         else:
