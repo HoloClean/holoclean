@@ -113,6 +113,9 @@ class FeaturizedDataset:
         return X_train, Y_train, mask_train
 
     def get_infer_data(self, infer_labeled):
+        """
+        :param infer_labeled: (bool) infer also for cells that have been used with weak labels
+        """
         if infer_labeled:
             infer_idx = (self.labels_type <= CellStatus.SINGLE_VALUE.value).nonzero()[:, 0]
             X_infer = self.tensor.index_select(0, infer_idx)

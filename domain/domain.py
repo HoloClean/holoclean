@@ -15,8 +15,6 @@ class DomainEngine:
         """
         :param env: (dict) contains global settings such as verbose
         :param dataset: (Dataset) current dataset
-        :param cor_strength: (float) correlation magnitude threshold for determining domain values
-            from correlated co-attributes
         :param sampling_prob: (float) probability of using a random sample if domain cannot be determined
             from correlated co-attributes
         :param max_sample: (int) maximum # of domain values from a random sample
@@ -26,6 +24,7 @@ class DomainEngine:
         self.topk = env["pruning_topk"]
         self.weak_label_thresh = env["weak_label_thresh"]
         self.domain_prune_thresh = env["domain_prune_thresh"]
+        self.max_domain = env["max_domain"]
         self.setup_complete = False
         self.active_attributes = None
         self.domain = None
@@ -239,10 +238,10 @@ class DomainEngine:
             pruned_domain[row['_tid_']] =  pruned_domain.get(row['_tid_'], {})
             pruned_domain[row['_tid_']][row['attribute']] = row['domain'].split('|||')
 
-        estimator = RecurrentLogistic(self.ds, pruned_domain, self.active_attributes)
-        estimator.train(num_recur=1, num_epochs=3, batch_size=self.env['batch_size'])
-        # estimator = NaiveBayes(self.single_stats, self.raw_pair_stats, self.total, self.correlations, self.cor_strength)
-        # estimator.train()
+        # estimator = RecurrentLogistic(self.ds, pruned_domain, self.active_attributes)
+        # estimator.train(num_recur=1, num_epochs=3, batch_size=self.env['batch_size'])
+        estimator = NaiveBayes(self.single_stats, self.raw_pair_stats, self.total, self.correlations, self.cor_strength)
+        estimator.train()
 
         logging.info('generating weak labels from posterior model')
 
@@ -257,7 +256,10 @@ class DomainEngine:
             preds = estimator.predict_pp(records_by_tid[row['_tid_']], row['attribute'], domain_values)
 
             # prune domain if any of the values are above our domain_prune_thresh
-            domain_values = [pred[0] for pred in preds if pred[1] >= self.domain_prune_thresh] or domain_values
+            preds = [[val, proba] for val, proba in preds if proba >= self.domain_prune_thresh] or preds
+            # cap the maximum # of domain values to self.max_domain
+            domain_values = [val for val, proba in sorted(preds, key=lambda pred: pred[1], reverse=True)[:self.max_domain]]
+
             # ensure the initial value is included
             if row['init_value'] not in domain_values:
                 domain_values.append(row['init_value'])

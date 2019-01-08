@@ -28,10 +28,13 @@ class TestHolocleanRepair(unittest.TestCase):
         # 4. Repair errors utilizing the defined features.
         hc.setup_domain()
         featurizers = [InitAttFeaturizer(), InitSimFeaturizer(), FreqFeaturizer(), OccurFeaturizer(), LangModelFeat(), ConstraintFeat()]
-        hc.repair_errors(featurizers)
+
+        infer_labeled = True
+
+        hc.repair_errors(featurizers, infer_labeled)
 
         # 5. Evaluate the correctness of the results.
-        hc.evaluate('../testdata/hospital_clean.csv', 'tid', 'attribute', 'correct_val')
+        hc.evaluate('../testdata/hospital_clean.csv', 'tid', 'attribute', 'correct_val', infer_labeled)
 
 if __name__ == '__main__':
     unittest.main()

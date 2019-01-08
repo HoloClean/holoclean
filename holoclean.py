@@ -106,6 +106,12 @@ arguments = [
       'default': 0.1,
       'type': float,
       'help': 'Threshold of posterior probability required for value to be included in pruned domain.'}),
+    (('-wlt', '--max-domain'),
+     {'metavar': 'MAX_DOMAIN',
+      'dest': 'max_domain',
+      'default': 100,
+      'type': int,
+      'help': 'Maximum number of possible values to include in the pruned domain for a given cell.'}),
     (('-wlt', '--cor-strength'),
      {'metavar': 'COR_STRENGTH',
       'dest': 'cor_strength',
@@ -256,7 +262,7 @@ class Session:
         logging.info(status)
         logging.debug('Time to setup the domain: %.2f secs'%domain_time)
 
-    def repair_errors(self, featurizers, infer_labeled=True):
+    def repair_errors(self, featurizers, infer_labeled):
         status, feat_time = self.repair_engine.setup_featurized_ds(featurizers)
         logging.info(status)
         logging.debug('Time to featurize data: %.2f secs'%feat_time)
@@ -281,7 +287,7 @@ class Session:
             logging.debug('Time to store featurizer weights: %.2f secs' % time)
             return status
 
-    def evaluate(self, fpath, tid_col, attr_col, val_col, na_values=None):
+    def evaluate(self, fpath, tid_col, attr_col, val_col, infer_labeled, na_values=None):
         """
         evaluate generates an evaluation report with metrics (e.g. precision,
         recall) given a test set.
@@ -291,12 +297,13 @@ class Session:
         :param attr_col: (str) column in CSV that corresponds to the attribute.
         :param val_col: (str) column in CSV that corresponds to correct value
             for the current TID and attribute (i.e. cell).
+        :param infer_labeled: (bool) whether weak label cells were also inferred for or repaired.
         """
         name = self.ds.raw_data.name + '_clean'
         status, load_time = self.eval_engine.load_data(name, fpath, tid_col, attr_col, val_col, na_values=na_values)
         logging.info(status)
         logging.debug('Time to evaluate repairs: %.2f secs', load_time)
-        status, report_time, report_list = self.eval_engine.eval_report()
+        status, report_time, report_list = self.eval_engine.eval_report(infer_labeled)
         logging.info(status)
         logging.debug('Time to generate report: %.2f secs' % report_time)
         return report_list

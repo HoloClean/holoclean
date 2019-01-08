@@ -13,6 +13,7 @@ hc = holoclean.HoloClean(
     pruning_topk=0.0,
     weak_label_thresh=0.90,
     domain_prune_thresh=0.10,
+    max_domain=100,
     cor_strength=0.0,
     epochs=20,
     weight_decay=0.1,
@@ -41,8 +42,10 @@ featurizers = [
     FreqFeaturizer(),
     ConstraintFeat()
 ]
-hc.repair_errors(featurizers)
 
+infer_labeled = True
+
+hc.repair_errors(featurizers, infer_labeled)
 
 # 5. Evaluate the correctness of the results.
-hc.evaluate('../testdata/hospital_clean.csv', 'tid', 'attribute', 'correct_val')
+hc.evaluate('../testdata/hospital_clean.csv', 'tid', 'attribute', 'correct_val', infer_labeled)
