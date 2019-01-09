@@ -32,3 +32,16 @@ class Estimator:
         :return: list of tuples (value, proba) for each value in :param values:
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def predict_pp_batch(self, raw_records_by_tid, cell_domain_rows):
+        """
+        predict_pp_batch is like predict_pp but with a batch of cells.
+
+        :param raw_records_by_tid: (dict) maps TID to its corresponding row (record) in the raw data
+        :param cell_domain_rows: (list[pd.record]) list of records from the cell domain DF. Each
+            record should include the field '_tid_', 'attribute', and 'domain'
+
+        :return: list of list of tuples (value, proba) (one list per cell/row in cell_domain_rows)
+        """
+        raise NotImplementedError

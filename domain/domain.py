@@ -259,6 +259,7 @@ class DomainEngine:
         for preds, row in tqdm(zip(preds_by_cell, domain_records)):
             # prune domain if any of the values are above our domain_prune_thresh
             preds = [[val, proba] for val, proba in preds if proba >= self.domain_prune_thresh] or preds
+
             # cap the maximum # of domain values to self.max_domain
             domain_values = [val for val, proba in sorted(preds, key=lambda pred: pred[1], reverse=True)[:self.max_domain]]
 
@@ -282,6 +283,8 @@ class DomainEngine:
                 row['fixed'] = CellStatus.WEAK_LABEL.value
 
             updated_domain_df.append(row)
+
+        pd.DataFrame(debug_df).to_pickle('debug_hospital_nb.pkl')
 
         # update our cell domain df with our new updated domain
         domain_df = pd.DataFrame.from_records(updated_domain_df, columns=updated_domain_df[0].dtype.names).drop('index', axis=1).sort_values('_vid_')
