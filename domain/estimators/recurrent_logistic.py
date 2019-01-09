@@ -176,6 +176,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
             # Main training loop
             for epoch_idx in range(1, num_epochs+1):
                 logging.info("RecurrentLogistic: epoch %d", epoch_idx)
+                batch_cnt = 0
                 for batch_X, batch_Y in tqdm(DataLoader(torch_ds, batch_size=batch_size)):
                     batch_pred = self.forward(batch_X)
                     batch_loss = self._loss(batch_pred, batch_Y.reshape(-1,1))
@@ -183,6 +184,8 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
                     self.zero_grad()
                     batch_loss.backward()
                     self._optimizer.step()
+                    batch_cnt+=1
+                logging.info('RecurrentLogistic: average batch loss is %.3f', sum(batch_losses[-1*batch_cnt:]) / batch_cnt)
                 # TODO(richardwu): update cur_df with predictions
 
         return batch_losses
@@ -197,6 +200,29 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         pred_X = self._gen_test_tensor(row, attr, values)
         pred_Y = self.forward(pred_X)
         return list(zip(values, map(float, pred_Y)))
+
+    def predict_pp_batch(self, raw_records_by_tid, cell_domain_rows):
+        """
+        :param raw_records_by_tid: (dict) maps TID to its corresponding row (record) in the raw data
+        :param cell_domain_rows: (list[pd.record]) list of records from the cell domain DF
+        """
+        logging.info('RecurrentLogistic: constructing batch feature tensor for %d cells...', cell_domain_rows.shape[0])
+        X_tensors = []
+        for row in tqdm(cell_domain_rows):
+            X_tensors.append(self._gen_test_tensor(raw_records_by_tid[row['_tid_']], row['attribute'], row['domain'].split('|||')))
+        pred_X = torch.cat(X_tensors, dim=0)
+        logging.info('RecurrentLogistic: predicting posterior probabilities for batch feature tensor...')
+        pred_Y = self.forward(pred_X)
+
+        cur_idx = 0
+        logging.info('RecurrentLogistic: segmenting predictions by cell...')
+        probs_by_row = []
+        for row in cell_domain_rows:
+            # Create list of (value, proba) for each cell
+            probs_by_row.append(list(zip(row['domain'].split('|||'),
+                map(float, pred_Y[cur_idx:cur_idx+row['domain_size']]))))
+            cur_idx += row['domain_size']
+        return probs_by_row
 
 
 class Featurizer:

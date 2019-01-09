@@ -12,7 +12,7 @@ from repair.featurize import LangModelFeat
 hc = holoclean.HoloClean(
     pruning_topk=0.0,
     weak_label_thresh=0.90,
-    domain_prune_thresh=0.10,
+    domain_prune_thresh=0,
     max_domain=100,
     cor_strength=0.0,
     epochs=20,

@@ -238,23 +238,25 @@ class DomainEngine:
             pruned_domain[row['_tid_']] =  pruned_domain.get(row['_tid_'], {})
             pruned_domain[row['_tid_']][row['attribute']] = row['domain'].split('|||')
 
-        # estimator = RecurrentLogistic(self.ds, pruned_domain, self.active_attributes)
-        # estimator.train(num_recur=1, num_epochs=3, batch_size=self.env['batch_size'])
-        estimator = NaiveBayes(self.single_stats, self.raw_pair_stats, self.total, self.correlations, self.cor_strength)
-        estimator.train()
+        estimator = RecurrentLogistic(self.ds, pruned_domain, self.active_attributes)
+        estimator.train(num_recur=1, num_epochs=3, batch_size=self.env['batch_size'])
 
         logging.info('generating weak labels from posterior model')
 
         # raw records indexed by tid
-        records_by_tid = {row['_tid_']: row for row in records}
+        raw_records_by_tid = {row['_tid_']: row for row in records}
+
+        logging.info('predicting posterior probabilities in batch...')
+        tic = time.clock()
+        domain_records = domain_df.to_records()
+        preds_by_cell = estimator.predict_pp_batch(raw_records_by_tid, domain_records)
+        logging.info('DONE predictions in %.2f secs, re-constructing cell domain...', time.clock() - tic)
+
         # iterate through raw/current data and generate posterior probabilities for
         # weak labelling
         num_weak_labels = 0
         updated_domain_df = []
-        for row in tqdm(domain_df.to_records()):
-            domain_values = row['domain'].split('|||')
-            preds = estimator.predict_pp(records_by_tid[row['_tid_']], row['attribute'], domain_values)
-
+        for preds, row in tqdm(zip(preds_by_cell, domain_records)):
             # prune domain if any of the values are above our domain_prune_thresh
             preds = [[val, proba] for val, proba in preds if proba >= self.domain_prune_thresh] or preds
             # cap the maximum # of domain values to self.max_domain
@@ -281,9 +283,10 @@ class DomainEngine:
 
             updated_domain_df.append(row)
 
+        # update our cell domain df with our new updated domain
         domain_df = pd.DataFrame.from_records(updated_domain_df, columns=updated_domain_df[0].dtype.names).drop('index', axis=1).sort_values('_vid_')
 
-        logging.info('weak labels assigned: %d', num_weak_labels)
+        logging.info('number of weak labels assigned: %d', num_weak_labels)
 
         logging.info('DONE generating domain and weak labels')
         return domain_df
