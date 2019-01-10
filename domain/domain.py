@@ -7,7 +7,7 @@ import random
 import math
 
 from dataset import AuxTables, CellStatus
-from .estimators import RecurrentLogistic, NaiveBayes
+from .estimators import RecurrentLogistic
 
 
 class DomainEngine:
@@ -283,8 +283,6 @@ class DomainEngine:
                 row['fixed'] = CellStatus.WEAK_LABEL.value
 
             updated_domain_df.append(row)
-
-        pd.DataFrame(debug_df).to_pickle('debug_hospital_nb.pkl')
 
         # update our cell domain df with our new updated domain
         domain_df = pd.DataFrame.from_records(updated_domain_df, columns=updated_domain_df[0].dtype.names).drop('index', axis=1).sort_values('_vid_')

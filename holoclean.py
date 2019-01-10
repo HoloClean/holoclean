@@ -103,7 +103,7 @@ arguments = [
     (('-wlt', '--domain-prune-thresh'),
      {'metavar': 'DOMAIN_PRUNE_THRESH',
       'dest': 'domain_prune_thresh',
-      'default': 0.1,
+      'default': 0,
       'type': float,
       'help': 'Threshold of posterior probability required for value to be included in pruned domain.'}),
     (('-wlt', '--max-domain'),
