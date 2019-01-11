@@ -257,6 +257,11 @@ class DomainEngine:
         num_weak_labels = 0
         updated_domain_df = []
         for preds, row in tqdm(zip(preds_by_cell, domain_records)):
+            # no need to modify single value cells
+            if row['fixed'] == CellStatus.SINGLE_VALUE.value:
+                updated_domain_df.append(row)
+                continue
+
             # prune domain if any of the values are above our domain_prune_thresh
             preds = [[val, proba] for val, proba in preds if proba >= self.domain_prune_thresh] or preds
 
@@ -274,6 +279,7 @@ class DomainEngine:
 
             # Assign weak label if domain value exceeds our weak label threshold
             weak_label, weak_label_prob = max(preds, key=lambda pred: pred[1])
+
             if weak_label_prob >= self.weak_label_thresh:
                 num_weak_labels+=1
 

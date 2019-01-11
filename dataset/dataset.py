@@ -103,10 +103,12 @@ class Dataset:
             # Use '_nan_' to represent NULL values
             df.fillna('_nan_', inplace=True)
 
-            # Call to store to database
+            logging.info("Loaded %d rows with %d cells", self.raw_data.df.shape[0], self.raw_data.df.shape[0] * self.raw_data.df.shape[1])
 
+            # Call to store to database
             self.raw_data.store_to_db(self.engine.engine)
             status = 'DONE Loading {fname}'.format(fname=os.path.basename(fpath))
+
 
             # Generate indexes on attribute columns for faster queries
             for attr in self.raw_data.get_attributes():
