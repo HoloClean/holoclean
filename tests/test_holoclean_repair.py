@@ -22,7 +22,7 @@ class TestHolocleanRepair(unittest.TestCase):
             cor_strength=0.0,
             epochs=20,
             weight_decay=0.1,
-            threads=20,
+            threads=4,
             batch_size=32,
             verbose=True,
             timeout=3*60000,
