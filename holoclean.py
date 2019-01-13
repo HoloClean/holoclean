@@ -263,6 +263,10 @@ class Session:
         logging.debug('Time to setup the domain: %.2f secs'%domain_time)
 
     def repair_errors(self, featurizers, infer_labeled):
+        """
+        :param infer_labeled: (bool) if false, only infers value for error/DK cells. Otherwise
+        infers for all cells.
+        """
         status, feat_time = self.repair_engine.setup_featurized_ds(featurizers)
         logging.info(status)
         logging.debug('Time to featurize data: %.2f secs'%feat_time)

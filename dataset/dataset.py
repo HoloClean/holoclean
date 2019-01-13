@@ -273,7 +273,8 @@ class Dataset:
 
     def get_inferred_values(self):
         tic = time.clock()
-        query = "SELECT t1._tid_, t1.attribute, domain[inferred_assignment + 1] as rv_value " \
+        # index into domain with inferred_val_idx + 1 since SQL arrays begin at index 1.
+        query = "SELECT t1._tid_, t1.attribute, domain[inferred_val_idx + 1] as rv_value " \
                 "FROM " \
                 "(SELECT _tid_, attribute, " \
                 "_vid_, init_value, string_to_array(regexp_replace(domain, \'[{\"\"}]\', \'\', \'gi\'), \'|||\') as domain " \
