@@ -122,8 +122,7 @@ class ConstraintFeat(Featurizer):
         queries = []
         predicates = constraint.predicates
         for k in range(len(predicates)):
-            orig_preds = predicates[:k] + predicates[(k+1):]
-            orig_cnf = " AND ".join([pred.cnf_form for pred in orig_preds])
+            orig_cnf = self._orig_cnf(predicates, k)
             rv_attr, op, rv_val = self.relax_unary_predicate(predicates[k])
             query = unary_template.substitute(init_table=self.init_table_name, pos_values=AuxTables.pos_values.name,
                                               orig_predicates=orig_cnf, rv_attr=rv_attr, operation=op, rv_val=rv_val)
@@ -134,7 +133,7 @@ class ConstraintFeat(Featurizer):
         queries = []
         predicates = constraint.predicates
         for k in range(len(predicates)):
-            orig_cnf = self._orig_cnf(self, predicates, k)
+            orig_cnf = self._orig_cnf(predicates, k)
             isBinary, join_rel, other_rel = self.get_binary_predicate_join_rel(predicates[k])
             if not isBinary:
                 rv_attr, op, rv_val = self.relax_unary_predicate(predicates[k])
