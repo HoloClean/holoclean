@@ -112,3 +112,6 @@ class OccurFeaturizer(Featurizer):
                     if rv_val in rv_domain_idx:
                         tensor[0][rv_domain_idx[rv_val]][attr_idx] = prob
         return tensor
+
+    def feature_names(self):
+        return self.all_attrs

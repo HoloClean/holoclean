@@ -21,8 +21,7 @@ class ViolationDetector(Detector):
         tbl = self.ds.raw_data.name
         queries = []
         attrs = []
-        for c_key in self.constraints:
-            c = self.constraints[c_key]
+        for c in self.constraints:
             q = self.to_sql(tbl, c)
             queries.append(q)
             attrs.append(c.components)

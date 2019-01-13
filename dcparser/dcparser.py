@@ -18,7 +18,7 @@ class Parser:
         self.env = env
         self.ds = dataset
         self.dc_strings = []
-        self.dcs = {}
+        self.dcs = []
 
     def load_denial_constraints(self, fpath):
         """
@@ -39,7 +39,7 @@ class Parser:
                 if not line.isspace():
                     line = line.rstrip()
                     self.dc_strings.append(line)
-                    self.dcs[line] = (DenialConstraint(line,attrs))
+                    self.dcs.append(DenialConstraint(line,attrs))
             status = 'DONE Loading DCs from {fname}'.format(fname=os.path.basename(fpath))
         except Exception:
             logging.error('loading constraints for file %s', os.path.basename(fpath))

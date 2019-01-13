@@ -74,7 +74,7 @@ class RepairModel:
     def __init__(self, env, feat_info, output_dim, bias=False):
         self.env = env
         torch.manual_seed(self.env['seed'])
-        # A list of tuples (is_featurizer_learnable, featurizer_output_size, init_weight)
+        # A list of tuples (name, is_featurizer_learnable, featurizer_output_size, init_weight, feature_names (list))
         self.feat_info = feat_info
         self.output_dim = output_dim
         self.model = TiedLinear(feat_info, output_dim, bias)
@@ -148,7 +148,9 @@ class RepairModel:
         report = ""
         for i, f in enumerate(feat_info):
             this_weight = self.model.weight_list[i].data.numpy()[0]
-            weight_str = " | ".join(map(str, np.around(this_weight,3)))
+            weight_str = "\n".join("{name} {weight}".format(name=name, weight=weight)
+                for name, weight in
+                zip(f.feature_names, map(str, np.around(this_weight,3))))
             feat_name = f.name
             feat_size = f.size
             max_w = max(this_weight)
@@ -156,7 +158,7 @@ class RepairModel:
             mean_w = float(np.mean(this_weight))
             abs_mean_w = float(np.mean(np.absolute(this_weight)))
             # create report
-            report += "featurizer %s,size %d,max %.4f,min %.4f,avg %.4f,abs_avg %.4f,weight %s\n" % (
+            report += "featurizer %s,size %d,max %.4f,min %.4f,avg %.4f,abs_avg %.4f,weights:\n%s\n" % (
                 feat_name, feat_size, max_w, min_w, mean_w, abs_mean_w, weight_str
             )
             # create dictionary

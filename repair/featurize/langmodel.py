@@ -10,10 +10,11 @@ class LangModelFeat(Featurizer):
     def specific_setup(self):
         self.name = 'LangModelFeat'
         self.emb_size = 10
-        self.attrs_number = len(self.ds.attr_to_idx)
+        self.all_attrs = self.ds.get_attributes()
+        self.attrs_number = len(self.all_attrs)
         self.attr_language_model = {}
         raw_data = self.ds.get_raw_data()
-        for attr in self.ds.attr_to_idx:
+        for attr in self.all_attrs:
             attr_corpus = list(zip(raw_data[attr].tolist()))
             model = FastText(attr_corpus, min_count=1, size=self.emb_size)
             self.attr_language_model[attr] = model
@@ -38,3 +39,6 @@ class LangModelFeat(Featurizer):
         tensors = [self.gen_feat_tensor(res, self.classes) for res in results]
         combined = torch.cat(tensors)
         return combined
+
+    def feature_names(self):
+        return ["{}_emb_{}".format(attr, emb_idx) for attr in self.all_attrs for emb_idx in range(self.emb_size)]

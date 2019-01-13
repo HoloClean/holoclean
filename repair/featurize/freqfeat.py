@@ -7,6 +7,7 @@ from .featurizer import Featurizer
 class FreqFeaturizer(Featurizer):
     def specific_setup(self):
         self.name = 'FreqFeaturizer'
+        self.all_attrs = self.ds.get_attributes()
         self.attrs_number = len(self.ds.attr_to_idx)
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total
@@ -29,3 +30,6 @@ class FreqFeaturizer(Featurizer):
         tensors = [self.gen_feat_tensor(res, self.classes) for res in results]
         combined = torch.cat(tensors)
         return combined
+
+    def feature_names(self):
+        return self.all_attrs
