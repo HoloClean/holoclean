@@ -39,7 +39,7 @@ arguments = [
       'dest': 'threads',
       'default': 20,
       'type': int,
-      'help': 'How many threads to use for parallel execution.'}),
+      'help': 'How many threads to use for parallel execution. If <= 1, then no pool workers are used.'}),
     (('-dbt', '--timeout'),
      {'metavar': 'TIMEOUT',
       'dest': 'timeout',
@@ -136,7 +136,12 @@ flags = [
         {'default': False,
          'dest': 'print_fw',
          'action': 'store_true',
-         'help': 'print the weights of featurizers'})
+         'help': 'print the weights of featurizers'}),
+    (tuple(['--debug-mode']),
+        {'default': False,
+         'dest': 'debug_mode',
+         'action': 'store_true',
+         'help': 'dump a bunch of debug information to debug\/'}),
 ]
 
 

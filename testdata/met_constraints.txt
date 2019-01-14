@@ -1,0 +1,14 @@
+t1&t2&EQ(t1.Region,t2.Region)&IQ(t1.City,t2.City)
+t1&t2&EQ(t1.Region,t2.Region)&IQ(t1.State,t2.State)
+t1&t2&EQ(t1.Region,t2.Region)&IQ(t1.Country,t2.Country)
+t1&t2&EQ(t1.Subregion,t2.Subregion)&IQ(t1.City,t2.City)
+t1&t2&EQ(t1.Subregion,t2.Subregion)&IQ(t1.State,t2.State)
+t1&t2&EQ(t1.Subregion,t2.Subregion)&IQ(t1.Country,t2.Country)
+t1&t2&EQ(t1.River,t2.River)&IQ(t1.Country,t2.Country)
+t1&t2&EQ(t1.Reign,t2.Reign)&IQ(t1.City,t2.City)
+t1&t2&EQ(t1.Reign,t2.Reign)&IQ(t1.State,t2.State)
+t1&t2&EQ(t1.Reign,t2.Reign)&IQ(t1.Country,t2.Country)
+t1&t2&EQ(t1.Reign,t2.Reign)&IQ(t1.Dynasty,t2.Dynasty)
+t1&t2&EQ(t1.Reign,t2.Reign)&IQ(t1.Period,t2.Period)
+
+

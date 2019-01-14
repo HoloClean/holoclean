@@ -15,7 +15,8 @@ class Featurizer:
         self.ds = dataset
         self.total_vars = total_vars
         self.classes = classes
-        self.pool = Pool(processes)
+        # only create a pool if processes > 1
+        self._pool = Pool(processes) if processes > 1 else None
         self.setup_done = True
         self.specific_setup()
 
@@ -39,3 +40,9 @@ class Featurizer:
         this featurizer produces.
         """
         raise NotImplementedError
+
+    def _apply_func(self, func, collection):
+        if self._pool is None:
+            return list(map(func, collection))
+        return self._pool.map(func, collection)
+

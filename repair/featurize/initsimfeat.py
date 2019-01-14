@@ -35,7 +35,7 @@ class InitSimFeaturizer(Featurizer):
         map_input = []
         for res in results:
             map_input.append((res[0],self.attr_to_idx[res[1]],res[2]))
-        tensors = self.pool.map(partial(gen_feat_tensor, classes=self.classes, total_attrs=self.total_attrs), map_input)
+        tensors = self._apply_func(partial(gen_feat_tensor, classes=self.classes, total_attrs=self.total_attrs), map_input)
         combined = torch.cat(tensors)
         return combined
 

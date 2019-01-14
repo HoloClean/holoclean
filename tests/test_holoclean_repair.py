@@ -22,7 +22,7 @@ class TestHolocleanRepair(unittest.TestCase):
             cor_strength=0.0,
             epochs=20,
             weight_decay=0.1,
-            threads=4,
+            threads=1,
             batch_size=32,
             verbose=True,
             timeout=3*60000,
@@ -40,7 +40,14 @@ class TestHolocleanRepair(unittest.TestCase):
 
         # 4. Repair errors utilizing the defined features.
         hc.setup_domain()
-        featurizers = [InitAttFeaturizer(), InitSimFeaturizer(), FreqFeaturizer(), OccurFeaturizer(), LangModelFeat(), ConstraintFeat()]
+        featurizers = [
+            InitAttFeaturizer(),
+            InitSimFeaturizer(),
+            FreqFeaturizer(),
+            OccurAttrFeaturizer(),
+            LangModelFeat(),
+            ConstraintFeat()
+            ]
 
         infer_labeled = True
 

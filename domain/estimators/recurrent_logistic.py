@@ -45,7 +45,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         self.test_featurizers = [feat.copy() for feat in self.train_featurizers]
 
         # pytorch logistic regression model
-        self._W = torch.nn.Parameter(torch.zeros(len(self.attrs),1))
+        self._W = torch.nn.Parameter(torch.zeros(self.num_features,1))
         torch.nn.init.xavier_uniform_(self._W)
         self._B = torch.nn.Parameter(torch.Tensor([1e-6]))
         self._loss = torch.nn.BCELoss()
@@ -58,12 +58,14 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
 
         # Featurizers used for training
         self.train_featurizers = [
-                CooccurFeaturizer(self.cur_df, self.attrs)
+                # CooccurFeaturizer can be expressed as a linear combination of CooccurAttrFeaturizer: redundant
+                CooccurFeaturizer(self.cur_df, self.attrs),
+                # CooccurAttrFeaturizer(self.cur_df, self.attrs),
                 ]
         # initialize featurizers
         [feat.setup() for feat in self.train_featurizers]
 
-        self.num_train_features = sum(feat.num_features() for feat in self.train_featurizers)
+        self.num_features = sum(feat.num_features() for feat in self.train_featurizers)
 
     def _update_training_data(self):
         """
@@ -72,7 +74,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         """
 
         # Each row corresponds to a possible value for a given attribute and given TID
-        self._X = torch.zeros(self.n_samples, self.num_train_features)
+        self._X = torch.zeros(self.n_samples, self.num_features)
         self._Y = torch.zeros(self.n_samples)
 
         logging.info('RecurrentLogistic: featurizing training data')
@@ -322,6 +324,58 @@ class CooccurFeaturizer(Featurizer):
         Makes a copy of this featurizer.
         """
         temp = CooccurFeaturizer(self.data_df.copy(), [a for a in self.attrs])
+        temp.freq = copy.deepcopy(self.freq)
+        temp.cooccur_freq = copy.deepcopy(self.cooccur_freq)
+        return temp
+
+class CooccurAttrFeaturizer(CooccurFeaturizer):
+    """
+    CooccurAttrFeaturizer is like CooccurFeaturizer but breaks down each co-occur
+    feature on a pairwise attr1 X attr2 basis, instead of one co-occur feature
+    per attribute.
+    """
+    def __init__(self, data_df, attrs):
+        """
+        :param data_df: (pandas.DataFrame) contains the data to compute co-occurrence features for.
+        :param attrs: attributes in columns of :param data_df: to compute feautres for.
+        """
+        super(CooccurAttrFeaturizer, self).__init__(data_df, attrs)
+        self.attr_to_idx = {attr: idx for idx, attr in enumerate(self.attrs)}
+        self.n_attrs = len(self.attrs)
+
+    def num_features(self):
+        return len(self.attrs) * len(self.attrs)
+
+    def create_tensor(self, row, attr, values):
+        """
+        :param row: (namedtuple or dict) current initial values
+        :param attr: (str) attribute of row (i.e. cell) the :param values: correspond to
+            and the cell to generate a feature tensor for.
+        :param values: (list[str]) values to generate
+        """
+        tensor = torch.zeros(len(values), len(self.attrs) * len(self.attrs))
+        for val_idx, val in enumerate(values):
+            for other_attr_idx, other_attr in enumerate(self.attrs):
+                if attr == other_attr:
+                    continue
+
+                # calculate p(val | other_val)
+                # there may not be co-occurrence frequencies for some value pairs since
+                # our possible values were from correlation with only
+                # one other attribute
+                cooccur = self.cooccur_freq[attr][other_attr][val].get(row[other_attr], 0)
+                freq = self.freq[other_attr][row[other_attr]]
+
+                feat_idx = self.attr_to_idx[attr] * self.n_attrs + other_attr_idx
+
+                tensor[val_idx,feat_idx] = float(cooccur) / float(freq)
+        return tensor
+
+    def copy(self):
+        """
+        Makes a copy of this featurizer.
+        """
+        temp = CooccurAttrFeaturizer(self.data_df.copy(), [a for a in self.attrs])
         temp.freq = copy.deepcopy(self.freq)
         temp.cooccur_freq = copy.deepcopy(self.cooccur_freq)
         return temp

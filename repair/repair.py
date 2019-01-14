@@ -1,3 +1,4 @@
+import logging
 import pandas as pd
 import time
 
@@ -32,6 +33,7 @@ class RepairEngine:
     def fit_repair_model(self):
         tic = time.clock()
         X_train, Y_train, mask_train = self.feat_dataset.get_training_data()
+        logging.info('training with %d training examples (cells)', X_train.shape[0])
         self.repair_model.fit_model(X_train, Y_train, mask_train)
         toc = time.clock()
         status = "DONE training repair model."

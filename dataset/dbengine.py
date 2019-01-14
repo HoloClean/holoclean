@@ -12,9 +12,8 @@ create_table_template = Template('CREATE TABLE $tab_name AS ($stmt)')
 
 class DBengine:
     def __init__(self, user, pwd, db, host='localhost', port=5432, pool_size=20, timeout=60000):
-        self.POOL_MAX = pool_size
         self.timeout = timeout
-        self.pool = Pool(self.POOL_MAX)
+        self._pool = Pool(pool_size) if pool_size > 1 else None
         url = 'postgresql+psycopg2://{}:{}@{}:{}/{}?client_encoding=utf8'
         url = url.format(user, pwd, host, port, db)
         self.conn = url
@@ -27,8 +26,7 @@ class DBengine:
     def execute_queries(self, queries):
         logging.debug('Preparing to execute %d queries.', len(queries))
         tic = time.clock()
-        # TODO(python3): Modify pool to context manager (with statement)
-        results = self.pool.map(partial(_execute_query, conn_args=self.conn_args), [(idx, q) for idx, q in enumerate(queries)])
+        results = self._apply_func(partial(_execute_query, conn_args=self.conn_args), [(idx, q) for idx, q in enumerate(queries)])
         toc = time.clock()
         logging.debug('Time to execute %d queries: %.2f secs', len(queries), toc-tic)
         return results
@@ -37,8 +35,7 @@ class DBengine:
     def execute_queries_w_backup(self, queries):
         logging.debug('Preparing to execute %d queries.', len(queries))
         tic = time.clock()
-        # TODO(python3): Modify pool to context manager (with statement)
-        results = self.pool.map(
+        results = self._apply_func(
             partial(_execute_query_w_backup, conn_args=self.conn_args, timeout=self.timeout),
             [(idx, q) for idx, q in enumerate(queries)])
         toc = time.clock()
@@ -89,6 +86,11 @@ class DBengine:
         logging.debug('Time to create index: %.2f secs', toc-tic)
         return result
 
+    def _apply_func(self, func, collection):
+        if self._pool is None:
+            return list(map(func, collection))
+        return self._pool.map(func, collection)
+
 def _execute_query(args, conn_args):
     query_id = args[0]
     query = args[1]
@@ -131,4 +133,3 @@ def _execute_query_w_backup(args, conn_args, timeout):
     toc = time.clock()
     logging.debug('Time to execute query with id %d: %.2f secs', query_id, toc - tic)
     return res
-

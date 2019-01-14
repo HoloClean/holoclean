@@ -56,8 +56,7 @@ class ConstraintFeat(Featurizer):
     def create_tensor(self):
         queries = self.generate_relaxed_sql()
         results = self.ds.engine.execute_queries_w_backup(queries)
-        # tensors = self.pool.map(partial(gen_feat_tensor, total_vars=self.total_vars, classes=self.classes), results)
-        tensors = list(map(partial(gen_feat_tensor, total_vars=self.total_vars, classes=self.classes), results))
+        tensors = self._apply_func(partial(gen_feat_tensor, total_vars=self.total_vars, classes=self.classes), results)
         combined = torch.cat(tensors,2)
         combined = F.normalize(combined, p=2, dim=1)
         return combined

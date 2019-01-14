@@ -3,6 +3,8 @@ import torch
 from tqdm import tqdm
 from collections import namedtuple
 from dataset import AuxTables, CellStatus
+import pandas as pd
+import numpy as np
 
 FeatInfo = namedtuple('FeatInfo', ['name', 'size', 'learnable', 'init_weight', 'feature_names'])
 
@@ -24,6 +26,14 @@ class FeaturizedDataset:
         tensor = torch.cat(tensors,2)
 
         self.tensor = tensor
+
+        if self.env['debug_mode']:
+            weights_df = pd.DataFrame(self.tensor.reshape(-1, self.tensor.shape[-1]).numpy())
+            weights_df.columns = ["{}::{}".format(f.name, featname) for f in featurizers for featname in f.feature_names()]
+            weights_df.insert(0, 'vid', np.floor_divide(np.arange(weights_df.shape[0]), self.tensor.shape[1]) + 1)
+            weights_df.insert(1, 'val_idx', np.tile(np.arange(self.tensor.shape[1]), self.tensor.shape[0]))
+            weights_df.to_pickle('debug/{}_train_features.pkl'.format(self.ds.id))
+
         # TODO: remove after we validate it is not needed.
         self.in_features = self.tensor.shape[2]
         self.weak_labels, self.labels_type = self.generate_weak_labels()
@@ -39,6 +49,7 @@ class FeaturizedDataset:
             variable/VID.
         """
         logging.debug("Generating weak labels.")
+        # Trains with clean cells AND cells that have been weak labelled.
         query = 'SELECT _vid_, weak_label_idx, fixed FROM %s AS t1 LEFT JOIN %s AS t2 ' \
                 'ON t1._cid_ = t2._cid_ WHERE t2._cid_ is NULL OR t1.fixed != %d;' % (
         AuxTables.cell_domain.name, AuxTables.dk_cells.name, CellStatus.NOT_SET.value)
