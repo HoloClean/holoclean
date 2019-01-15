@@ -6,6 +6,9 @@ from .featurizer import Featurizer
 from dataset import AuxTables
 
 class OccurFeaturizer(Featurizer):
+    """
+    OccurFeaturizer is DEPRECATED. Please use OccurAttrFeaturizer.
+    """
     def specific_setup(self):
         self.name = 'OccurFeaturizer'
         if not self.setup_done:

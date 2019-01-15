@@ -48,6 +48,7 @@ class DomainEngine:
         self.setup_attributes()
         domain = self.generate_domain()
         self.store_domains(domain)
+        del domain
         status = "DONE with domain preparation."
         toc = time.time()
         return status, toc - tic
@@ -290,6 +291,9 @@ class DomainEngine:
 
             updated_domain_df.append(row)
 
+        del domain_records
+        del domain_df
+        del preds_by_cell
         # update our cell domain df with our new updated domain
         domain_df = pd.DataFrame.from_records(updated_domain_df, columns=updated_domain_df[0].dtype.names).drop('index', axis=1).sort_values('_vid_')
 

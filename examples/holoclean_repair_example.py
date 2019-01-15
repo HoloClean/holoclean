@@ -3,10 +3,8 @@ from detect import NullDetector, ViolationDetector
 from repair.featurize import InitAttFeaturizer
 from repair.featurize import InitSimFeaturizer
 from repair.featurize import FreqFeaturizer
-from repair.featurize import OccurFeaturizer
 from repair.featurize import OccurAttrFeaturizer
 from repair.featurize import ConstraintFeat
-from repair.featurize import LangModelFeat
 
 
 # 1. Setup a HoloClean session.
@@ -39,9 +37,7 @@ hc.setup_domain()
 featurizers = [
     InitAttFeaturizer(),
     InitSimFeaturizer(),
-    OccurFeaturizer(),
     OccurAttrFeaturizer(),
-    LangModelFeat(),
     FreqFeaturizer(),
     ConstraintFeat()
 ]

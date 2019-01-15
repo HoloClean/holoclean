@@ -11,12 +11,13 @@ class Featurizer:
         self.learnable = learnable
         self.init_weight = init_weight
 
-    def setup_featurizer(self, dataset, total_vars, classes, processes=20):
+    def setup_featurizer(self, dataset, total_vars, classes, processes=20, batch_size=32):
         self.ds = dataset
         self.total_vars = total_vars
         self.classes = classes
         # only create a pool if processes > 1
         self._pool = Pool(processes) if processes > 1 else None
+        self._batch_size = batch_size
         self.setup_done = True
         self.specific_setup()
 
@@ -44,5 +45,5 @@ class Featurizer:
     def _apply_func(self, func, collection):
         if self._pool is None:
             return list(map(func, collection))
-        return self._pool.map(func, collection)
+        return self._pool.map(func, collection, min(self._batch_size, len(collection)))
 

@@ -2,13 +2,11 @@ import unittest
 
 import holoclean
 from detect import NullDetector, ViolationDetector
-from repair.featurize import InitFeaturizer
 from repair.featurize import InitAttFeaturizer
 from repair.featurize import InitSimFeaturizer
 from repair.featurize import FreqFeaturizer
-from repair.featurize import OccurFeaturizer
+from repair.featurize import OccurAttrFeaturizer
 from repair.featurize import ConstraintFeat
-from repair.featurize import LangModelFeat
 
 
 class TestHolocleanRepair(unittest.TestCase):
@@ -45,7 +43,6 @@ class TestHolocleanRepair(unittest.TestCase):
             InitSimFeaturizer(),
             FreqFeaturizer(),
             OccurAttrFeaturizer(),
-            LangModelFeat(),
             ConstraintFeat()
             ]
 

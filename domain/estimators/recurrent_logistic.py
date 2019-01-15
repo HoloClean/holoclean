@@ -253,6 +253,9 @@ class Featurizer:
 
 
 class CooccurFeaturizer(Featurizer):
+    """
+    CooccurFeaturizer is DEPRECATED. Please use CooccurAttrFeaturizer.
+    """
     def __init__(self, data_df, attrs):
         """
         :param data_df: (pandas.DataFrame) contains the data to compute co-occurrence features for.
