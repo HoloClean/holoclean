@@ -4,8 +4,8 @@ import holoclean
 from detect import NullDetector, ViolationDetector
 from repair.featurize import InitAttFeaturizer
 from repair.featurize import InitSimFeaturizer
-from repair.featurize import FreqFeaturizer
 from repair.featurize import OccurAttrFeaturizer
+from repair.featurize import FreqFeaturizer
 from repair.featurize import ConstraintFeat
 
 
@@ -28,7 +28,7 @@ class TestHolocleanRepair(unittest.TestCase):
         ).session
 
         # 2. Load training data and denial constraints.
-        hc.load_data('hospital', '../testdata/hospital.csv')
+        hc.load_data('hospital_100', '../testdata/hospital_100.csv')
         hc.load_dcs('../testdata/hospital_constraints_att.txt')
         hc.ds.set_constraints(hc.get_dcs())
 
@@ -41,8 +41,8 @@ class TestHolocleanRepair(unittest.TestCase):
         featurizers = [
             InitAttFeaturizer(),
             InitSimFeaturizer(),
-            FreqFeaturizer(),
             OccurAttrFeaturizer(),
+            FreqFeaturizer(),
             ConstraintFeat()
             ]
 
@@ -51,7 +51,7 @@ class TestHolocleanRepair(unittest.TestCase):
         hc.repair_errors(featurizers, infer_labeled)
 
         # 5. Evaluate the correctness of the results.
-        hc.evaluate('../testdata/hospital_clean.csv', 'tid', 'attribute', 'correct_val', infer_labeled)
+        hc.evaluate('../testdata/hospital_100_clean.csv', 'tid', 'attribute', 'correct_val', infer_labeled)
 
 if __name__ == '__main__':
     unittest.main()

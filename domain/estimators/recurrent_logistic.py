@@ -58,9 +58,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
 
         # Featurizers used for training
         self.train_featurizers = [
-                # CooccurFeaturizer can be expressed as a linear combination of CooccurAttrFeaturizer: redundant
-                CooccurFeaturizer(self.cur_df, self.attrs),
-                # CooccurAttrFeaturizer(self.cur_df, self.attrs),
+                CooccurAttrFeaturizer(self.cur_df, self.attrs),
                 ]
         # initialize featurizers
         [feat.setup() for feat in self.train_featurizers]
