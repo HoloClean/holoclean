@@ -7,18 +7,28 @@ from .featurizer import Featurizer
 from dataset import AuxTables
 from dcparser.constraint import is_symmetric
 
+# unary_template is used for constraints where the current predicate
+# used for detecting violations in pos_values have a reference to only
+# one relation's (e.g. t1) attribute on one side and a fixed constant
+# value on the other side of the comparison.
 unary_template = Template('SELECT _vid_, val_id, count(*) violations ' \
                            'FROM $init_table as t1, $pos_values as t2 ' \
                            'WHERE t1._tid_ = t2._tid_ AND t2.attribute = \'$rv_attr\' '\
                              'AND $orig_predicates AND t2.rv_val $operation $rv_val '\
                            'GROUP BY _vid_, val_id')
 
+# binary_template is used for constraints where the current predicate
+# used for detecting violations in pos_values have a reference to both
+# relations (t1, t2) i.e. no constant value in predicate.
 binary_template = Template ('SELECT _vid_, val_id, count(*) violations '\
                           'FROM $init_table as t1, $init_table as t2, $pos_values as t3 '\
                           'WHERE t1._tid_ != t2._tid_ AND $join_rel._tid_ = t3._tid_ AND t3.attribute = \'$rv_attr\' '\
                              'AND $orig_predicates AND t3.rv_val $operation $rv_val '\
                           'GROUP BY _vid_, val_id')
 
+# ex_binary_template is used as a fallback for binary_template in case
+# binary_template takes too long to query. Instead of counting the # of violations
+# this returns simply a 0-1 indicator if the possible value violates the constraint.
 ex_binary_template = Template ('SELECT _vid_, val_id, 1 violations '\
                           'FROM $init_table as $join_rel, $pos_values as t3 '\
                           'WHERE $join_rel._tid_ = t3._tid_ AND t3.attribute = \'$rv_attr\' '\
@@ -54,9 +64,8 @@ class ConstraintFeat(Featurizer):
 
     def generate_relaxed_sql(self):
         query_list = []
-        for key in self.constraints:
+        for c in self.constraints:
             # Check tuples in constraint
-            c = self.constraints[key]
             unary = len(c.tuple_names)==1
             if unary:
                 queries = self.gen_unary_queries(c)
@@ -113,8 +122,7 @@ class ConstraintFeat(Featurizer):
         queries = []
         predicates = constraint.predicates
         for k in range(len(predicates)):
-            orig_preds = predicates[:k] + predicates[(k+1):]
-            orig_cnf = " AND ".join([pred.cnf_form for pred in orig_preds])
+            orig_cnf = self._orig_cnf(predicates, k)
             rv_attr, op, rv_val = self.relax_unary_predicate(predicates[k])
             query = unary_template.substitute(init_table=self.init_table_name, pos_values=AuxTables.pos_values.name,
                                               orig_predicates=orig_cnf, rv_attr=rv_attr, operation=op, rv_val=rv_val)
@@ -125,8 +133,7 @@ class ConstraintFeat(Featurizer):
         queries = []
         predicates = constraint.predicates
         for k in range(len(predicates)):
-            orig_preds = predicates[:k] + predicates[(k+1):]
-            orig_cnf = " AND ".join([pred.cnf_form for pred in orig_preds])
+            orig_cnf = self._orig_cnf(predicates, k)
             isBinary, join_rel, other_rel = self.get_binary_predicate_join_rel(predicates[k])
             if not isBinary:
                 rv_attr, op, rv_val = self.relax_unary_predicate(predicates[k])
@@ -138,10 +145,12 @@ class ConstraintFeat(Featurizer):
             else:
                 for idx, rel in enumerate(join_rel):
                     rv_attr, op, rv_val = self.relax_binary_predicate(predicates[k], idx)
+                    # count # of queries
                     query = binary_template.substitute(init_table=self.init_table_name,
                                                        pos_values=AuxTables.pos_values.name, join_rel=rel,
                                                        orig_predicates=orig_cnf, rv_attr=rv_attr, operation=op,
                                                        rv_val=rv_val)
+                    # fallback 0-1 query instead of count
                     ex_query = ex_binary_template.substitute(init_table=self.init_table_name,
                                                        pos_values=AuxTables.pos_values.name, join_rel=rel,
                                                        orig_predicates=orig_cnf, rv_attr=rv_attr, operation=op,
@@ -149,4 +158,19 @@ class ConstraintFeat(Featurizer):
                     queries.append((query, ex_query))
         return queries
 
+    def _orig_cnf(self, predicates, idx):
+        """
+        _orig_cnf returns the CNF form of the predicates that does not include
+        the predicate at index :param idx:.
+
+        This CNF is usually used for the left relation when counting violations.
+        """
+        orig_preds = predicates[:idx] + predicates[(idx+1):]
+        orig_cnf = " AND ".join([pred.cnf_form for pred in orig_preds])
+        return orig_cnf
+
+    def feature_names(self):
+        return ["fixed pred: {}, violation pred: {}".format(self._orig_cnf(constraint.predicates, idx), constraint.predicates[idx].cnf_form)
+            for constraint in self.constraints
+            for idx in range(len(constraint.predicates))]
 

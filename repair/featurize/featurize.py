@@ -4,7 +4,7 @@ from tqdm import tqdm
 from collections import namedtuple
 from dataset import AuxTables
 
-FeatInfo = namedtuple('FeatInfo', ['name', 'size', 'learnable', 'init_weight'])
+FeatInfo = namedtuple('FeatInfo', ['name', 'size', 'learnable', 'init_weight', 'feature_names'])
 
 class FeaturizedDataset:
     def __init__(self, dataset, env, featurizers):
@@ -15,7 +15,12 @@ class FeaturizedDataset:
         for f in featurizers:
             f.setup_featurizer(self.ds, self.total_vars, self.classes, self.processes)
         tensors = [f.create_tensor() for f in featurizers]
-        self.featurizer_info = [FeatInfo(featurizers[i].name, t.size()[2], featurizers[i].learnable, featurizers[i].init_weight) for i, t in enumerate(tensors)]
+        self.featurizer_info = [FeatInfo(featurizer.name,
+            tensor.size()[2],
+            featurizer.learnable,
+            featurizer.init_weight,
+            featurizer.feature_names())
+            for tensor, featurizer in zip(tensors, featurizers)]
         tensor = torch.cat(tensors,2)
         self.tensor = tensor
         # TODO: remove after we validate it is not needed.

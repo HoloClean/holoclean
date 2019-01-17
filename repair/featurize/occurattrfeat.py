@@ -8,7 +8,7 @@ from dataset import AuxTables
 
 class OccurAttrFeaturizer(Featurizer):
     def specific_setup(self):
-        self.name = 'OccurFeaturizer'
+        self.name = 'OccurAttrFeaturizer'
         if not self.setup_done:
             raise Exception('Featurizer %s is not properly setup.'%self.name)
         self.all_attrs = self.ds.get_attributes()
@@ -71,3 +71,6 @@ class OccurAttrFeaturizer(Featurizer):
                             index = rv_attr_idx * self.attrs_number + attr_idx
                             tensor[0][rv_domain_idx[rv_val]][index] = prob
         return tensor
+
+    def feature_names(self):
+        return ["{} X {}".format(attr1, attr2) for attr1 in self.all_attrs for attr2 in self.all_attrs]

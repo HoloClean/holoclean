@@ -23,3 +23,6 @@ class InitFeaturizer(Featurizer):
         tensors = self.pool.map(partial(gen_feat_tensor, classes=self.classes), results)
         combined = torch.cat(tensors)
         return combined
+
+    def feature_names(self):
+        return ["is_init"]

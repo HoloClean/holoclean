@@ -15,6 +15,7 @@ def gen_feat_tensor(input, classes, total_attrs):
 class InitAttFeaturizer(Featurizer):
     def specific_setup(self):
         self.name = 'InitAttFeaturizer'
+        self.all_attrs = self.ds.get_attributes()
         self.attr_to_idx = self.ds.attr_to_idx
         self.total_attrs = len(self.ds.attr_to_idx)
 
@@ -27,3 +28,6 @@ class InitAttFeaturizer(Featurizer):
         tensors = self.pool.map(partial(gen_feat_tensor, classes=self.classes, total_attrs=self.total_attrs), map_input)
         combined = torch.cat(tensors)
         return combined
+
+    def feature_names(self):
+        return self.all_attrs

@@ -31,3 +31,11 @@ class Featurizer:
         :return PyTorch Tensor
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def feature_names(self):
+        """
+        Returns list of human-readable description/names for each feature
+        this featurizer produces.
+        """
+        raise NotImplementedError
