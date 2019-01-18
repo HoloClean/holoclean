@@ -56,8 +56,7 @@ class ConstraintFeat(Featurizer):
     def create_tensor(self):
         queries = self.generate_relaxed_sql()
         results = self.ds.engine.execute_queries_w_backup(queries)
-        # tensors = self.pool.map(partial(gen_feat_tensor, total_vars=self.total_vars, classes=self.classes), results)
-        tensors = list(map(partial(gen_feat_tensor, total_vars=self.total_vars, classes=self.classes), results))
+        tensors = self._apply_func(partial(gen_feat_tensor, total_vars=self.total_vars, classes=self.classes), results)
         combined = torch.cat(tensors,2)
         combined = F.normalize(combined, p=2, dim=1)
         return combined
@@ -87,7 +86,9 @@ class ConstraintFeat(Featurizer):
         """
         attr =  predicate.components[0][1]
         op = predicate.operation
-        const = '"{}"'.format(predicate.components[1])
+        comp = predicate.components[1]
+        # do not quote literals/constants in comparison
+        const = comp if comp.startswith('\'') else '"{}"'.format(comp)
         return attr, op, const
 
     def relax_binary_predicate(self, predicate, rel_idx):

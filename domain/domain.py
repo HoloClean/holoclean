@@ -4,17 +4,17 @@ import time
 from tqdm import tqdm
 import itertools
 import random
+import math
 
-from dataset import AuxTables
+from dataset import AuxTables, CellStatus
+from .estimators import RecurrentLogistic
 
 
 class DomainEngine:
-    def __init__(self, env, dataset, cor_strength = 0.1, sampling_prob=0.3, max_sample=5):
+    def __init__(self, env, dataset, sampling_prob=1.0, max_sample=5):
         """
         :param env: (dict) contains global settings such as verbose
         :param dataset: (Dataset) current dataset
-        :param cor_strength: (float) correlation magnitude threshold for determining domain values
-            from correlated co-attributes
         :param sampling_prob: (float) probability of using a random sample if domain cannot be determined
             from correlated co-attributes
         :param max_sample: (int) maximum # of domain values from a random sample
@@ -22,12 +22,15 @@ class DomainEngine:
         self.env = env
         self.ds = dataset
         self.topk = env["pruning_topk"]
+        self.weak_label_thresh = env["weak_label_thresh"]
+        self.domain_prune_thresh = env["domain_prune_thresh"]
+        self.max_domain = env["max_domain"]
         self.setup_complete = False
         self.active_attributes = None
         self.domain = None
         self.total = None
         self.correlations = None
-        self.cor_strength = cor_strength
+        self.cor_strength = env["cor_strength"]
         self.sampling_prob = sampling_prob
         self.max_sample = max_sample
         self.single_stats = {}
@@ -45,6 +48,7 @@ class DomainEngine:
         self.setup_attributes()
         domain = self.generate_domain()
         self.store_domains(domain)
+        del domain
         status = "DONE with domain preparation."
         toc = time.time()
         return status, toc - tic
@@ -93,6 +97,7 @@ class DomainEngine:
         self.total = total
         self.single_stats = single_stats
         tic = time.clock()
+        self.raw_pair_stats = pair_stats
         self.pair_stats = self._topk_pair_stats(pair_stats)
         toc = time.clock()
         prep_time = toc - tic
@@ -144,18 +149,20 @@ class DomainEngine:
             raise Exception("No attribute contains erroneous cells.")
         return set(itertools.chain(*result))
 
-    def get_corr_attributes(self, attr):
+    def get_corr_attributes(self, attr, thres):
         """
         get_corr_attributes returns attributes from self.correlations
         that are correlated with attr with magnitude at least self.cor_strength
         (init parameter).
+
+        :param thres: (float) correlation threshold (absolute) for returned attributes.
         """
         if attr not in self.correlations:
             return []
 
         d_temp = self.correlations[attr]
         d_temp = d_temp.abs()
-        cor_attrs = [rec[0] for rec in d_temp[d_temp > self.cor_strength].iteritems() if rec[0] != attr]
+        cor_attrs = [rec[0] for rec in d_temp[d_temp > thres].iteritems() if rec[0] != attr]
         return cor_attrs
 
     def generate_domain(self):
@@ -196,12 +203,19 @@ class DomainEngine:
             tid = row['_tid_']
             app = []
             for attr in self.active_attributes:
+                # TODO(richardwu): relax domain prune here: simply take all
+                # values with at least one co-occurrence. This can be
+                # simulated by setting cor_strength = 0.0
                 init_value, dom = self.get_domain_cell(attr, row)
                 init_value_idx = dom.index(init_value)
+                # we will use an Estimator model for weak labelling below, which requires
+                # the full pruned domain first
+                weak_label = init_value
+                weak_label_idx = init_value_idx
                 if len(dom) > 1:
                     cid = self.ds.get_cell_id(tid, attr)
                     app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_":vid, "domain": "|||".join(dom),  "domain_size": len(dom),
-                                "init_value": init_value, "init_index": init_value_idx, "fixed":0})
+                                "init_value": init_value, "init_index": init_value_idx, "weak_label": weak_label, "weak_label_idx": weak_label_idx, "fixed": CellStatus.NOT_SET.value})
                     vid += 1
                 else:
                     add_domain = self.get_random_domain(attr,init_value)
@@ -211,11 +225,81 @@ class DomainEngine:
                         cid = self.ds.get_cell_id(tid, attr)
                         app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_": vid, "domain": "|||".join(dom),
                                     "domain_size": len(dom),
-                                    "init_value": init_value, "init_index": init_value_idx, "fixed": 1})
+                                    "init_value": init_value, "init_index": init_value_idx, "weak_label": init_value, "weak_label_idx": init_value_idx, "fixed": CellStatus.SINGLE_VALUE.value})
                         vid += 1
             cells.extend(app)
         domain_df = pd.DataFrame(data=cells)
-        logging.info('DONE generating domain')
+
+        logging.info('generating posteriors for domain values using RecurrentLogistic model')
+
+        # Use pruned domain from correlated attributes above for Logistic
+        # model
+        pruned_domain = {}
+        for row in domain_df[['_tid_', 'attribute', 'domain']].to_records():
+            pruned_domain[row['_tid_']] =  pruned_domain.get(row['_tid_'], {})
+            pruned_domain[row['_tid_']][row['attribute']] = row['domain'].split('|||')
+
+        estimator = RecurrentLogistic(self.ds, pruned_domain, self.active_attributes)
+        estimator.train(num_recur=1, num_epochs=3, batch_size=self.env['batch_size'])
+
+        logging.info('generating weak labels from posterior model')
+
+        # raw records indexed by tid
+        raw_records_by_tid = {row['_tid_']: row for row in records}
+
+        logging.info('predicting posterior probabilities in batch...')
+        tic = time.clock()
+        domain_records = domain_df.to_records()
+        preds_by_cell = estimator.predict_pp_batch(raw_records_by_tid, domain_records)
+        logging.info('DONE predictions in %.2f secs, re-constructing cell domain...', time.clock() - tic)
+
+        # iterate through raw/current data and generate posterior probabilities for
+        # weak labelling
+        num_weak_labels = 0
+        updated_domain_df = []
+        for preds, row in tqdm(zip(preds_by_cell, domain_records)):
+            # no need to modify single value cells
+            if row['fixed'] == CellStatus.SINGLE_VALUE.value:
+                updated_domain_df.append(row)
+                continue
+
+            # prune domain if any of the values are above our domain_prune_thresh
+            preds = [[val, proba] for val, proba in preds if proba >= self.domain_prune_thresh] or preds
+
+            # cap the maximum # of domain values to self.max_domain
+            domain_values = [val for val, proba in sorted(preds, key=lambda pred: pred[1], reverse=True)[:self.max_domain]]
+
+            # ensure the initial value is included
+            if row['init_value'] not in domain_values:
+                domain_values.append(row['init_value'])
+            # update our memoized domain values for this row again
+            row['domain'] = '|||'.join(domain_values)
+            row['domain_size'] = len(domain_values)
+            row['weak_label_idx'] = domain_values.index(row['weak_label'])
+            row['init_index'] = domain_values.index(row['init_value'])
+
+            # Assign weak label if domain value exceeds our weak label threshold
+            weak_label, weak_label_prob = max(preds, key=lambda pred: pred[1])
+
+            if weak_label_prob >= self.weak_label_thresh:
+                num_weak_labels+=1
+
+                weak_label_idx = domain_values.index(weak_label)
+                row['weak_label'] = weak_label
+                row['weak_label_idx'] = weak_label_idx
+                row['fixed'] = CellStatus.WEAK_LABEL.value
+
+            updated_domain_df.append(row)
+
+        del domain_records
+        del domain_df
+        del preds_by_cell
+        # update our cell domain df with our new updated domain
+        domain_df = pd.DataFrame.from_records(updated_domain_df, columns=updated_domain_df[0].dtype.names).drop('index', axis=1).sort_values('_vid_')
+
+        logging.info('number of weak labels assigned: %d', num_weak_labels)
+
+        logging.info('DONE generating domain and weak labels')
         return domain_df
 
     def get_domain_cell(self, attr, row):
@@ -241,7 +325,7 @@ class DomainEngine:
         """
 
         domain = set([])
-        correlated_attributes = self.get_corr_attributes(attr)
+        correlated_attributes = self.get_corr_attributes(attr, self.cor_strength)
         # Iterate through all attributes correlated at least self.cor_strength ('cond_attr')
         # and take the top K co-occurrence values for 'attr' with the current
         # row's 'cond_attr' value.

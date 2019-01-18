@@ -62,7 +62,10 @@ class EvalEngine:
         load_time = toc - tic
         return status, load_time
 
-    def evaluate_repairs(self):
+    def evaluate_repairs(self, infer_labeled):
+        """
+        :param infer_labeled: (bool) whether weak label cells were inferred for/repaired
+        """
         self.compute_total_repairs()
         self.compute_total_repairs_grdt()
         self.compute_total_errors()
@@ -70,15 +73,18 @@ class EvalEngine:
         self.compute_correct_repairs()
         prec = self.compute_precision()
         rec = self.compute_recall()
-        rep_recall = self.compute_repairing_recall()
+        rep_recall = self.compute_repairing_recall(infer_labeled)
         f1 = self.compute_f1()
-        rep_f1 = self.compute_repairing_f1()
+        rep_f1 = self.compute_repairing_f1(infer_labeled)
         return prec, rec, rep_recall, f1, rep_f1
 
-    def eval_report(self):
+    def eval_report(self, infer_labeled):
+        """
+        :param infer_labeled: (bool) whether weak label cells were inferred for/repaired
+        """
         tic = time.clock()
         try:
-            prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
+            prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs(infer_labeled)
             report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
                       prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors, self.correct_repairs, self.total_repairs, self.total_repairs_grdt)
             report_list = [prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
@@ -167,7 +173,15 @@ class EvalEngine:
             return 0
         return self.correct_repairs / self.total_errors
 
-    def compute_repairing_recall(self):
+    def compute_repairing_recall(self, infer_labeled):
+        """
+        :param infer_labeled: (bool) whether weak label cells were inferred for/repaired
+        """
+        # If cells with weak labels (used for training) were also repaired/inferred,
+        # we must use all errors instead of just the errors amongst "detected" dk cells.
+        if infer_labeled:
+            return self.compute_recall()
+
         if self.detected_errors == 0:
             return 0
         return self.correct_repairs / self.detected_errors
@@ -183,8 +197,11 @@ class EvalEngine:
         f1 = 2*(prec*rec)/(prec+rec)
         return f1
 
-    def compute_repairing_f1(self):
+    def compute_repairing_f1(self, infer_labeled):
+        """
+        :param infer_labeled: (bool) whether weak label cells were inferred for/repaired
+        """
         prec = self.compute_precision()
-        rec = self.compute_repairing_recall()
+        rec = self.compute_repairing_recall(infer_labeled)
         f1 = 2*(prec*rec)/(prec+rec)
         return f1

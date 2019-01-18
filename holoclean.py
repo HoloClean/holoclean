@@ -39,7 +39,7 @@ arguments = [
       'dest': 'threads',
       'default': 20,
       'type': int,
-      'help': 'How many threads to use for parallel execution.'}),
+      'help': 'How many threads to use for parallel execution. If <= 1, then no pool workers are used.'}),
     (('-dbt', '--timeout'),
      {'metavar': 'TIMEOUT',
       'dest': 'timeout',
@@ -73,13 +73,13 @@ arguments = [
     (('-e', '--epochs'),
      {'metavar': 'LEARNING_EPOCHS',
       'dest': 'epochs',
-      'default': 100,
+      'default': 20,
       'type': float,
       'help': 'Number of epochs used for training.'}),
     (('-w', '--weight_decay'),
      {'metavar': 'WEIGHT_DECAY',
       'dest':  'weight_decay',
-      'default': 0.0,
+      'default': 0.1,
       'type': float,
       'help': 'Weight decay across iterations.'}),
     (('-m', '--momentum'),
@@ -93,7 +93,31 @@ arguments = [
       'dest': 'batch_size',
       'default': 1,
       'type': int,
-      'help': 'The batch size during training.'})
+      'help': 'The batch size during training.'}),
+    (('-wlt', '--weak-label-thresh'),
+     {'metavar': 'WEAK_LABEL_THRESH',
+      'dest': 'weak_label_thresh',
+      'default': 0.90,
+      'type': float,
+      'help': 'Threshold of posterior probability to assign weak labels.'}),
+    (('-wlt', '--domain-prune-thresh'),
+     {'metavar': 'DOMAIN_PRUNE_THRESH',
+      'dest': 'domain_prune_thresh',
+      'default': 0,
+      'type': float,
+      'help': 'Threshold of posterior probability required for value to be included in pruned domain.'}),
+    (('-wlt', '--max-domain'),
+     {'metavar': 'MAX_DOMAIN',
+      'dest': 'max_domain',
+      'default': 100,
+      'type': int,
+      'help': 'Maximum number of possible values to include in the pruned domain for a given cell.'}),
+    (('-wlt', '--cor-strength'),
+     {'metavar': 'COR_STRENGTH',
+      'dest': 'cor_strength',
+      'default': 0.1,
+      'type': float,
+      'help': 'Correlation threshold (absolute) when selecting correlated attributes for domain pruning.'}),
 ]
 
 # Flags for Holoclean mode
@@ -112,7 +136,12 @@ flags = [
         {'default': False,
          'dest': 'print_fw',
          'action': 'store_true',
-         'help': 'print the weights of featurizers'})
+         'help': 'print the weights of featurizers'}),
+    (tuple(['--debug-mode']),
+        {'default': False,
+         'dest': 'debug_mode',
+         'action': 'store_true',
+         'help': 'dump a bunch of debug information to debug\/'}),
 ]
 
 
@@ -238,7 +267,11 @@ class Session:
         logging.info(status)
         logging.debug('Time to setup the domain: %.2f secs'%domain_time)
 
-    def repair_errors(self, featurizers):
+    def repair_errors(self, featurizers, infer_labeled):
+        """
+        :param infer_labeled: (bool) if false, only infers value for error/DK cells. Otherwise
+        infers for all cells.
+        """
         status, feat_time = self.repair_engine.setup_featurized_ds(featurizers)
         logging.info(status)
         logging.debug('Time to featurize data: %.2f secs'%feat_time)
@@ -248,7 +281,7 @@ class Session:
         status, fit_time = self.repair_engine.fit_repair_model()
         logging.info(status)
         logging.debug('Time to fit repair model: %.2f secs'%fit_time)
-        status, infer_time = self.repair_engine.infer_repairs()
+        status, infer_time = self.repair_engine.infer_repairs(infer_labeled)
         logging.info(status)
         logging.debug('Time to infer correct cell values: %.2f secs'%infer_time)
         status, time = self.ds.get_inferred_values()
@@ -263,7 +296,7 @@ class Session:
             logging.debug('Time to store featurizer weights: %.2f secs' % time)
             return status
 
-    def evaluate(self, fpath, tid_col, attr_col, val_col, na_values=None):
+    def evaluate(self, fpath, tid_col, attr_col, val_col, infer_labeled, na_values=None):
         """
         evaluate generates an evaluation report with metrics (e.g. precision,
         recall) given a test set.
@@ -273,12 +306,13 @@ class Session:
         :param attr_col: (str) column in CSV that corresponds to the attribute.
         :param val_col: (str) column in CSV that corresponds to correct value
             for the current TID and attribute (i.e. cell).
+        :param infer_labeled: (bool) whether weak label cells were also inferred for or repaired.
         """
         name = self.ds.raw_data.name + '_clean'
         status, load_time = self.eval_engine.load_data(name, fpath, tid_col, attr_col, val_col, na_values=na_values)
         logging.info(status)
         logging.debug('Time to evaluate repairs: %.2f secs', load_time)
-        status, report_time, report_list = self.eval_engine.eval_report()
+        status, report_time, report_list = self.eval_engine.eval_report(infer_labeled)
         logging.info(status)
         logging.debug('Time to generate report: %.2f secs' % report_time)
         return report_list

@@ -20,4 +20,5 @@ dist/
 lib/
 info/
 
-
+# Holoclean specific files
+debug/

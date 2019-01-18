@@ -3,25 +3,28 @@ from detect import NullDetector, ViolationDetector
 from repair.featurize import InitAttFeaturizer
 from repair.featurize import InitSimFeaturizer
 from repair.featurize import FreqFeaturizer
-from repair.featurize import OccurFeaturizer
+from repair.featurize import OccurAttrFeaturizer
 from repair.featurize import ConstraintFeat
-from repair.featurize import LangModelFeat
 
 
 # 1. Setup a HoloClean session.
 hc = holoclean.HoloClean(
-    pruning_topk=0.1,
-    epochs=30,
-    weight_decay=0.01,
-    threads=20,
-    batch_size=1,
+    pruning_topk=0.0,
+    weak_label_thresh=0.90,
+    domain_prune_thresh=0,
+    max_domain=100,
+    cor_strength=0.0,
+    epochs=20,
+    weight_decay=0.1,
+    threads=1,
+    batch_size=32,
     verbose=True,
     timeout=3*60000,
     print_fw=True
 ).session
 
 # 2. Load training data and denial constraints.
-hc.load_data('hospital', '../testdata/hospital.csv')
+hc.load_data('hospital_100', '../testdata/hospital_100.csv')
 hc.load_dcs('../testdata/hospital_constraints_att.txt')
 hc.ds.set_constraints(hc.get_dcs())
 
@@ -32,15 +35,16 @@ hc.detect_errors(detectors)
 # 4. Repair errors utilizing the defined features.
 hc.setup_domain()
 featurizers = [
-    InitAttFeaturizer(learnable=False),
+    InitAttFeaturizer(),
     InitSimFeaturizer(),
+    OccurAttrFeaturizer(),
     FreqFeaturizer(),
-    OccurFeaturizer(),
-    LangModelFeat(),
     ConstraintFeat()
-]
-hc.repair_errors(featurizers)
+    ]
 
+infer_labeled = False
+
+hc.repair_errors(featurizers, infer_labeled)
 
 # 5. Evaluate the correctness of the results.
-hc.evaluate('../testdata/hospital_clean.csv', 'tid', 'attribute', 'correct_val')
+hc.evaluate('../testdata/hospital_100_clean.csv', 'tid', 'attribute', 'correct_val', infer_labeled)

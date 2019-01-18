@@ -1,0 +1,2 @@
+t1&EQ(t1.Sex,"female")&EQ(t1.Relationship,"husband")
+t1&EQ(t1.Sex,"male")&EQ(t1.Relationship,"wife")

@@ -7,27 +7,7 @@ import pandas as pd
 
 from .dbengine import DBengine
 from .table import Table, Source
-
-
-def _dictify(frame):
-    """
-    _dictify converts a frame with columns
-
-      col1    | col2    | .... | coln   | value
-      ...
-    to a dictionary that maps values valX from colX
-
-    { val1 -> { val2 -> { ... { valn -> value } } } }
-    """
-    ret = {}
-    for row in frame.values:
-        cur_level = ret
-        for elem in row[:-2]:
-            if elem not in cur_level:
-                cur_level[elem] = {}
-            cur_level = cur_level[elem]
-        cur_level[row[-2]] = row[-1]
-    return ret
+from utils import dictify_df
 
 
 class AuxTables(Enum):
@@ -38,6 +18,11 @@ class AuxTables(Enum):
     cell_distr     = 5
     inf_values_idx = 6
     inf_values_dom = 7
+
+class CellStatus(Enum):
+    NOT_SET        = 0
+    WEAK_LABEL     = 1
+    SINGLE_VALUE   = 2
 
 class Dataset:
     """
@@ -118,10 +103,12 @@ class Dataset:
             # Use '_nan_' to represent NULL values
             df.fillna('_nan_', inplace=True)
 
-            # Call to store to database
+            logging.info("Loaded %d rows with %d cells", self.raw_data.df.shape[0], self.raw_data.df.shape[0] * self.raw_data.df.shape[1])
 
+            # Call to store to database
             self.raw_data.store_to_db(self.engine.engine)
             status = 'DONE Loading {fname}'.format(fname=os.path.basename(fpath))
+
 
             # Generate indexes on attribute columns for faster queries
             for attr in self.raw_data.get_attributes():
@@ -271,7 +258,7 @@ class Dataset:
             <count>: frequency (# of entities) where first_attr: <first_val> AND second_attr: <second_val>
         """
         tmp_df = self.get_raw_data()[[first_attr,second_attr]].groupby([first_attr,second_attr]).size().reset_index(name="count")
-        return _dictify(tmp_df)
+        return dictify_df(tmp_df)
 
     def get_domain_info(self):
         """
@@ -286,7 +273,8 @@ class Dataset:
 
     def get_inferred_values(self):
         tic = time.clock()
-        query = "SELECT t1._tid_, t1.attribute, domain[inferred_assignment + 1] as rv_value " \
+        # index into domain with inferred_val_idx + 1 since SQL arrays begin at index 1.
+        query = "SELECT t1._tid_, t1.attribute, domain[inferred_val_idx + 1] as rv_value " \
                 "FROM " \
                 "(SELECT _tid_, attribute, " \
                 "_vid_, init_value, string_to_array(regexp_replace(domain, \'[{\"\"}]\', \'\', \'gi\'), \'|||\') as domain " \
@@ -303,7 +291,7 @@ class Dataset:
         tic = time.clock()
         init_records = self.raw_data.df.sort_values(['_tid_']).to_records(index=False)
         t = self.aux_table[AuxTables.inf_values_dom]
-        repaired_vals = _dictify(t.df.reset_index())
+        repaired_vals = dictify_df(t.df.reset_index())
         for tid in repaired_vals:
             for attr in repaired_vals[tid]:
                 init_records[tid][attr] = repaired_vals[tid][attr]
