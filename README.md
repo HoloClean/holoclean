@@ -86,7 +86,7 @@ $ sh Anaconda-2.3.0-Linux-x86_64.sh
 
 ##### MacOS
 
-Follow instructions [here](https://conda.io/docs/user-guide/install/macos.html) to install
+Follow instructions [here](https://conda.io/projects/conda/en/latest/user-guide/install/macos.html) to install
 Anaconda (NOT miniconda).
 
 ##### Create a conda environment
