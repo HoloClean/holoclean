@@ -22,4 +22,4 @@ before_script:
   - psql -U postgres -d holo -c 'ALTER SCHEMA public OWNER TO holocleanuser;'
 
 script:
-  - cd examples && ./start_example.sh
+  - cd tests && ./start_test.sh

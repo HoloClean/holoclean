@@ -1,6 +1,6 @@
 def dictify_df(frame):
     """
-    _dictify_df converts a frame with columns
+    dictify_df converts a frame with columns
 
       col1    | col2    | .... | coln   | value
       ...

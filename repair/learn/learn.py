@@ -1,9 +1,10 @@
 import logging
 import math
+
 import torch
-from torch.nn import Parameter, ParameterList
-from torch.autograd import Variable
 from torch import optim
+from torch.autograd import Variable
+from torch.nn import Parameter, ParameterList
 from torch.nn.functional import softmax
 from tqdm import tqdm
 import numpy as np
@@ -15,7 +16,7 @@ class TiedLinear(torch.nn.Module):
     (output) classes that takes as input a tensor X with dimensions
         (batch size) X (output_dim) X (in_features)
         where:
-            output_dim is the disired output dimension/# of classes
+            output_dim is the desired output dimension/# of classes
             in_features are the features with shared weights across the classes
     """
 
@@ -56,7 +57,7 @@ class TiedLinear(torch.nn.Module):
             self.B = torch.cat([t.expand(self.output_dim, -1) for t in self.bias_list],-1)
 
     def forward(self, X, index, mask):
-        # Concats different featurizer weights - need to call during every pass
+        # Concatenates different featurizer weights - need to call during every pass.
         self.concat_weights()
         output = X.mul(self.W)
         if self.bias_flag:
@@ -96,8 +97,7 @@ class RepairModel:
             num_batches = n_examples // batch_size
             for k in range(num_batches):
                 start, end = k * batch_size, (k + 1) * batch_size
-                cost += self.__train__(loss, optimizer, X_train[start:end], Y_train[start:end],
-                                   mask_train[start:end])
+                cost += self.__train__(loss, optimizer, X_train[start:end], Y_train[start:end], mask_train[start:end])
             if self.env['verbose']:
                 # Compute and print accuracy at the end of epoch
                 grdt = Y_train.numpy().flatten()
@@ -149,19 +149,19 @@ class RepairModel:
         for i, f in enumerate(feat_info):
             this_weight = self.model.weight_list[i].data.numpy()[0]
             weight_str = "\n".join("{name} {weight}".format(name=name, weight=weight)
-                for name, weight in
-                zip(f.feature_names, map(str, np.around(this_weight,3))))
+                                   for name, weight in
+                                   zip(f.feature_names, map(str, np.around(this_weight, 3))))
             feat_name = f.name
             feat_size = f.size
             max_w = max(this_weight)
             min_w = min(this_weight)
             mean_w = float(np.mean(this_weight))
             abs_mean_w = float(np.mean(np.absolute(this_weight)))
-            # create report
+            # Create report
             report += "featurizer %s,size %d,max %.4f,min %.4f,avg %.4f,abs_avg %.4f,weights:\n%s\n" % (
                 feat_name, feat_size, max_w, min_w, mean_w, abs_mean_w, weight_str
             )
-            # create dictionary
+            # Wrap in a dictionary.
             self.featurizer_weights[feat_name] = {
                 'max': max_w,
                 'min': min_w,

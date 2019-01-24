@@ -1,12 +1,15 @@
-import logging
-import torch
-from tqdm import tqdm
 from collections import namedtuple
-from dataset import AuxTables, CellStatus
-import pandas as pd
+import logging
+
+from tqdm import tqdm
 import numpy as np
+import pandas as pd
+import torch
+
+from dataset import AuxTables, CellStatus
 
 FeatInfo = namedtuple('FeatInfo', ['name', 'size', 'learnable', 'init_weight', 'feature_names'])
+
 
 class FeaturizedDataset:
     def __init__(self, dataset, env, featurizers):
@@ -18,12 +21,12 @@ class FeaturizedDataset:
             f.setup_featurizer(self.ds, self.total_vars, self.classes, self.processes, self.env['batch_size'])
         tensors = [f.create_tensor() for f in featurizers]
         self.featurizer_info = [FeatInfo(featurizer.name,
-            tensor.size()[2],
-            featurizer.learnable,
-            featurizer.init_weight,
-            featurizer.feature_names())
-            for tensor, featurizer in zip(tensors, featurizers)]
-        tensor = torch.cat(tensors,2)
+                                         tensor.size()[2],
+                                         featurizer.learnable,
+                                         featurizer.init_weight,
+                                         featurizer.feature_names())
+                                for tensor, featurizer in zip(tensors, featurizers)]
+        tensor = torch.cat(tensors, 2)
 
         self.tensor = tensor
 
@@ -48,11 +51,14 @@ class FeaturizedDataset:
             contains the domain index of the initial value for the i-th
             variable/VID.
         """
-        logging.debug("Generating weak labels.")
+        logging.debug("Generating weak labels...")
         # Trains with clean cells AND cells that have been weak labelled.
-        query = 'SELECT _vid_, weak_label_idx, fixed FROM %s AS t1 LEFT JOIN %s AS t2 ' \
-                'ON t1._cid_ = t2._cid_ WHERE t2._cid_ is NULL OR t1.fixed != %d;' % (
-        AuxTables.cell_domain.name, AuxTables.dk_cells.name, CellStatus.NOT_SET.value)
+        query = 'SELECT _vid_, weak_label_idx, fixed ' \
+                'FROM {} AS t1 LEFT JOIN {} AS t2 ON t1._cid_ = t2._cid_ ' \
+                'WHERE t2._cid_ is NULL ' \
+                '   OR t1.fixed != {};'.format(AuxTables.cell_domain.name,
+                                               AuxTables.dk_cells.name,
+                                               CellStatus.NOT_SET.value)
         res = self.ds.engine.execute_query(query)
         if len(res) == 0:
             raise Exception("No weak labels available. Reduce pruning threshold.")

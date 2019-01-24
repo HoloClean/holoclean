@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 
+
 class Estimator:
     """
     Estimator is an abstract class for posterior estimators that estimate
