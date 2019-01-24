@@ -8,6 +8,9 @@ from detect import DetectEngine
 from repair import RepairEngine
 from evaluate import EvalEngine
 
+logging.basicConfig(format="%(asctime)s - [%(levelname)5s] - %(message)s", datefmt='%H:%M:%S')
+
+
 # Arguments for HoloClean
 arguments = [
     (('-u', '--db_user'),
@@ -223,8 +226,7 @@ class Session:
         root_logger.setLevel(root_level)
         gensim_logger.setLevel(gensim_level)
 
-    def load_data(self, name, fpath, na_values=None,
-            entity_col=None, src_col=None):
+    def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None):
         """
         load_data takes the filepath to a CSV file to load as the initial dataset.
 
@@ -239,10 +241,13 @@ class Session:
             specifies the column containing the source for each "mention" of an
             entity.
         """
-        status, load_time = self.ds.load_data(name, fpath, na_values=na_values,
-                entity_col=entity_col, src_col=src_col)
+        status, load_time = self.ds.load_data(name,
+                                              fpath,
+                                              na_values=na_values,
+                                              entity_col=entity_col,
+                                              src_col=src_col)
         logging.info(status)
-        logging.debug('Time to load dataset: %.2f secs'%load_time)
+        logging.debug('Time to load dataset: %.2f secs' % load_time)
 
     def load_dcs(self, fpath):
         """
@@ -252,7 +257,7 @@ class Session:
         """
         status, load_time = self.dc_parser.load_denial_constraints(fpath)
         logging.info(status)
-        logging.debug('Time to load dirty data: %.2f secs'%load_time)
+        logging.debug('Time to load dirty data: %.2f secs' % load_time)
 
     def get_dcs(self):
         return self.dc_parser.get_dcs()

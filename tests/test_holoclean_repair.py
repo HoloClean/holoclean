@@ -9,7 +9,8 @@ from repair.featurize import FreqFeaturizer
 from repair.featurize import ConstraintFeat
 
 
-class TestHolocleanRepair(unittest.TestCase):
+class TestHoloCleanRepair(unittest.TestCase):
+
     def test_hospital(self):
         # 1. Setup a HoloClean session.
         hc = holoclean.HoloClean(
@@ -44,7 +45,7 @@ class TestHolocleanRepair(unittest.TestCase):
             OccurAttrFeaturizer(),
             FreqFeaturizer(),
             ConstraintFeat()
-            ]
+        ]
 
         infer_labeled = True
 
@@ -52,6 +53,7 @@ class TestHolocleanRepair(unittest.TestCase):
 
         # 5. Evaluate the correctness of the results.
         hc.evaluate('../testdata/hospital_100_clean.csv', 'tid', 'attribute', 'correct_val', infer_labeled)
+
 
 if __name__ == '__main__':
     unittest.main()

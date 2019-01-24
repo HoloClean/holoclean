@@ -55,17 +55,17 @@ class DomainEngine:
 
     def find_correlations(self):
         """
-        find_correlations memoizes to self.correlations a DataFrame containing
+        find_correlations memoizes to self.correlations; a DataFrame containing
         the pairwise correlations between attributes (values are treated as
         discrete categories).
         """
         df = self.ds.get_raw_data()[self.ds.get_attributes()].copy()
-        # convert dataset to categories/factors
+        # Convert dataset to categories/factors.
         for attr in df.columns:
             df[attr] = df[attr].astype('category').cat.codes
-        # drop columns with only one value and tid column
+        # Drop columns with only one value and tid column.
         df = df.loc[:, (df != 0).any(axis=0)]
-        # Computer correlation across attributes
+        # Compute correlation across attributes.
         m_corr = df.corr()
         self.correlations = m_corr
 
@@ -97,7 +97,6 @@ class DomainEngine:
         self.total = total
         self.single_stats = single_stats
         tic = time.clock()
-        self.raw_pair_stats = pair_stats
         self.pair_stats = self._topk_pair_stats(pair_stats)
         toc = time.clock()
         prep_time = toc - tic
@@ -143,7 +142,7 @@ class DomainEngine:
         These attributes correspond only to attributes that contain at least
         one potentially erroneous cell.
         """
-        query = 'SELECT DISTINCT attribute as attribute FROM %s'%AuxTables.dk_cells.name
+        query = 'SELECT DISTINCT attribute as attribute FROM %s' % AuxTables.dk_cells.name
         result = self.ds.engine.execute_query(query)
         if not result:
             raise Exception("No attribute contains erroneous cells.")
@@ -167,7 +166,7 @@ class DomainEngine:
 
     def generate_domain(self):
         """
-        Generate the domain for each cell in the active attributes as well
+        Generates the domain for each cell in the active attributes as well
         as assigns variable IDs (_vid_) (increment key from 0 onwards, depends on
         iteration order of rows/entities in raw data and attributes.
 
@@ -184,7 +183,7 @@ class DomainEngine:
             _cid_: cell ID (unique for every entity-attribute)
             _vid_: variable ID (1-1 correspondence with _cid_)
             attribute: attribute name
-            domain: ||| seperated string of domain values
+            domain: ||| separated string of domain values
             domain_size: length of domain
             init_value: initial value for this cell
             init_value_idx: domain index of init_value
@@ -194,7 +193,7 @@ class DomainEngine:
         if not self.setup_complete:
             raise Exception(
                 "Call <setup_attributes> to setup active attributes. Error detection should be performed before setup.")
-        # Iterate over dataset rows
+        # Iterate over dataset rows.
         cells = []
         vid = 0
         records = self.ds.get_raw_data().to_records()
@@ -204,50 +203,66 @@ class DomainEngine:
             app = []
             for attr in self.active_attributes:
                 # TODO(richardwu): relax domain prune here: simply take all
-                # values with at least one co-occurrence. This can be
-                # simulated by setting cor_strength = 0.0
+                #   values with at least one co-occurrence. This can be
+                #   simulated by setting cor_strength = 0.0
                 init_value, dom = self.get_domain_cell(attr, row)
                 init_value_idx = dom.index(init_value)
-                # we will use an Estimator model for weak labelling below, which requires
-                # the full pruned domain first
+                # We will use an Estimator model for weak labelling below, which requires
+                # the full pruned domain first.
                 weak_label = init_value
                 weak_label_idx = init_value_idx
                 if len(dom) > 1:
                     cid = self.ds.get_cell_id(tid, attr)
-                    app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_":vid, "domain": "|||".join(dom),  "domain_size": len(dom),
-                                "init_value": init_value, "init_index": init_value_idx, "weak_label": weak_label, "weak_label_idx": weak_label_idx, "fixed": CellStatus.NOT_SET.value})
+                    app.append({"_tid_": tid,
+                                "attribute": attr,
+                                "_cid_": cid,
+                                "_vid_": vid,
+                                "domain": "|||".join(dom),
+                                "domain_size": len(dom),
+                                "init_value": init_value,
+                                "init_index": init_value_idx,
+                                "weak_label": weak_label,
+                                "weak_label_idx": weak_label_idx,
+                                "fixed": CellStatus.NOT_SET.value})
                     vid += 1
                 else:
-                    add_domain = self.get_random_domain(attr,init_value)
-                    # Check if attribute has more than one unique values
+                    add_domain = self.get_random_domain(attr, init_value)
+                    # Check if attribute has more than one unique values.
                     if len(add_domain) > 0:
-                        dom.extend(self.get_random_domain(attr,init_value))
+                        dom.extend(self.get_random_domain(attr, init_value))
                         cid = self.ds.get_cell_id(tid, attr)
-                        app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_": vid, "domain": "|||".join(dom),
+                        app.append({"_tid_": tid,
+                                    "attribute": attr,
+                                    "_cid_": cid,
+                                    "_vid_": vid,
+                                    "domain": "|||".join(dom),
                                     "domain_size": len(dom),
-                                    "init_value": init_value, "init_index": init_value_idx, "weak_label": init_value, "weak_label_idx": init_value_idx, "fixed": CellStatus.SINGLE_VALUE.value})
+                                    "init_value": init_value,
+                                    "init_index": init_value_idx,
+                                    "weak_label": init_value,
+                                    "weak_label_idx": init_value_idx,
+                                    "fixed": CellStatus.SINGLE_VALUE.value})
                         vid += 1
             cells.extend(app)
         domain_df = pd.DataFrame(data=cells)
 
-        logging.info('generating posteriors for domain values using RecurrentLogistic model')
+        logging.info('Generating posteriors for domain values using RecurrentLogistic model...')
 
-        # Use pruned domain from correlated attributes above for Logistic
-        # model
+        # Use pruned domain from correlated attributes above for Logistic model.
         pruned_domain = {}
         for row in domain_df[['_tid_', 'attribute', 'domain']].to_records():
-            pruned_domain[row['_tid_']] =  pruned_domain.get(row['_tid_'], {})
+            pruned_domain[row['_tid_']] = pruned_domain.get(row['_tid_'], {})
             pruned_domain[row['_tid_']][row['attribute']] = row['domain'].split('|||')
 
         estimator = RecurrentLogistic(self.ds, pruned_domain, self.active_attributes)
         estimator.train(num_recur=1, num_epochs=3, batch_size=self.env['batch_size'])
 
-        logging.info('generating weak labels from posterior model')
+        logging.info('Generating weak labels from posterior model...')
 
         # raw records indexed by tid
         raw_records_by_tid = {row['_tid_']: row for row in records}
 
-        logging.info('predicting posterior probabilities in batch...')
+        logging.info('Predicting posterior probabilities in batch...')
         tic = time.clock()
         domain_records = domain_df.to_records()
         preds_by_cell = estimator.predict_pp_batch(raw_records_by_tid, domain_records)
@@ -342,19 +357,19 @@ class DomainEngine:
                     domain.update(candidates)
                 except KeyError as missing_val:
                     if not pd.isnull(row[attr]):
-                        # error since co-occurrence must be at least 1 (since
+                        # Error since co-occurrence must be at least 1 (since
                         # the current row counts as one co-occurrence).
-                        logging.error('missing value: {}'.format(missing_val))
+                        logging.error('Missing value: {}'.format(missing_val))
                         raise
 
-        # Remove _nan_ if added due to correlated attributes
+        # Remove _nan_ if added due to correlated attributes.
         domain.discard('_nan_')
         # Add initial value in domain
         if pd.isnull(row[attr]):
-            domain.update(set(['_nan_']))
+            domain.update({'_nan_'})
             init_value = '_nan_'
         else:
-            domain.update(set([row[attr]]))
+            domain.update({row[attr]})
             init_value = row[attr]
         return init_value, list(domain)
 

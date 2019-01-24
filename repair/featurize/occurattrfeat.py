@@ -1,3 +1,5 @@
+import logging
+
 import pandas as pd
 import torch
 from tqdm import tqdm
@@ -34,7 +36,7 @@ class OccurAttrFeaturizer(Featurizer):
         sorted_domain = t.df.reset_index().sort_values(by=['_vid_'])[['_tid_','attribute','_vid_','domain']]
         records = sorted_domain.to_records()
         for row in tqdm(list(records)):
-            #Get tuple from raw_dataset
+            # Get tuple from raw_dataset.
             tid = row['_tid_']
             tuple = self.raw_data_dict[tid]
             feat_tensor = self.gen_feat_tensor(row, tuple)

@@ -206,10 +206,12 @@ class Dataset:
             2. self.single_attr_stats ({ attribute -> { value -> count } })
               the frequency (# of entities) of a given attribute-value
             3. self.pair_attr_stats ({ attr1 -> { attr2 -> {val1 -> {val2 -> count } } } })
-              where DataFrame contains 3 columns:
-                <attr1>: all possible values for attr1 ('val1')
-                <attr2>: all values for attr2 that appeared at least once with <val1> ('val2')
-                <count>: frequency (# of entities) where attr1: val1 AND attr2: val2
+              the statistics for each pair of attributes, attr1 and attr2, where:
+                <attr1>: first attribute
+                <attr2>: second attribute
+                <val1>: all values of <attr1>
+                <val2>: values of <attr2> that appear at least once with <val1>.
+                <count>: frequency (# of entities) where attr1=val1 AND attr2=val2
         """
         if not self.stats_ready:
             self.collect_stats()
@@ -229,12 +231,12 @@ class Dataset:
               <count>: frequency (# of entities) where attr1: val1 AND attr2: val2
             Also known as co-occurrence count.
         """
-
+        logging.info("Collecting single/pair-wise statistics...")
         self.total_tuples = self.get_raw_data().shape[0]
-        # Single attribute-value frequency
+        # Single attribute-value frequency.
         for attr in self.get_attributes():
             self.single_attr_stats[attr] = self.get_stats_single(attr)
-        # Co-occurence frequency
+        # Compute co-occurrence frequencies.
         for cond_attr in self.get_attributes():
             self.pair_attr_stats[cond_attr] = {}
             for trg_attr in self.get_attributes():
@@ -243,7 +245,7 @@ class Dataset:
 
     def get_stats_single(self, attr):
         """
-        Returns a dictionary where the keys possible values for :param attr: and
+        Returns a dictionary where the keys are domain values for :param attr: and
         the values contain the frequency count of that value for this attribute.
         """
         # need to decode values into unicode strings since we do lookups via
@@ -254,10 +256,10 @@ class Dataset:
         """
         Returns a dictionary {first_val -> {second_val -> count } } where:
             <first_val>: all possible values for first_attr
-            <second_val>: all values for second_attr that appeared at least once with <first_val>
-            <count>: frequency (# of entities) where first_attr: <first_val> AND second_attr: <second_val>
+            <second_val>: all values for second_attr that appear at least once with <first_val>
+            <count>: frequency (# of entities) where first_attr=<first_val> AND second_attr=<second_val>
         """
-        tmp_df = self.get_raw_data()[[first_attr,second_attr]].groupby([first_attr,second_attr]).size().reset_index(name="count")
+        tmp_df = self.get_raw_data()[[first_attr, second_attr]].groupby([first_attr, second_attr]).size().reset_index(name="count")
         return dictify_df(tmp_df)
 
     def get_domain_info(self):
@@ -303,5 +305,3 @@ class Dataset:
         toc = time.clock()
         total_time = toc - tic
         return status, total_time
-
-
