@@ -13,7 +13,7 @@ from dcparser.constraint import is_symmetric
 # one relation's (e.g. t1) attribute on one side and a fixed constant
 # value on the other side of the comparison.
 unary_template = Template('SELECT _vid_, val_id, count(*) violations '
-                          'FROM   $init_table as t1, $pos_values as t2 '
+                          'FROM   "$init_table" as t1, $pos_values as t2 '
                           'WHERE  t1._tid_ = t2._tid_ '
                           '  AND t2.attribute = \'$rv_attr\' '
                           '  AND  $orig_predicates '
@@ -24,7 +24,7 @@ unary_template = Template('SELECT _vid_, val_id, count(*) violations '
 # used for detecting violations in pos_values have a reference to both
 # relations (t1, t2) i.e. no constant value in predicate.
 binary_template = Template('SELECT _vid_, val_id, count(*) violations '
-                           'FROM   $init_table as t1, $init_table as t2, $pos_values as t3 '
+                           'FROM   "$init_table" as t1, "$init_table" as t2, $pos_values as t3 '
                            'WHERE  t1._tid_ != t2._tid_ '
                            '  AND $join_rel._tid_ = t3._tid_ '
                            '  AND t3.attribute = \'$rv_attr\' '
@@ -36,11 +36,11 @@ binary_template = Template('SELECT _vid_, val_id, count(*) violations '
 # binary_template takes too long to query. Instead of counting the # of violations
 # this returns simply a 0-1 indicator if the possible value violates the constraint.
 ex_binary_template = Template('SELECT _vid_, val_id, 1 violations '
-                              'FROM   $init_table as $join_rel, $pos_values as t3 '
+                              'FROM   "$init_table" as $join_rel, $pos_values as t3 '
                               'WHERE  $join_rel._tid_ = t3._tid_ '
                               '  AND t3.attribute = \'$rv_attr\' '
                               '  AND EXISTS (SELECT $other_rel._tid_ '
-                              '              FROM $init_table AS $other_rel '
+                              '              FROM "$init_table" AS $other_rel '
                               '              WHERE $join_rel._tid_ != $other_rel._tid_ '
                               '                AND $orig_predicates '
                               '                AND t3.rv_val $operation $rv_val)')

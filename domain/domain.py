@@ -30,6 +30,7 @@ class DomainEngine:
         self.domain = None
         self.total = None
         self.correlations = None
+        self._corr_attrs = {}
         self.cor_strength = env["cor_strength"]
         self.sampling_prob = sampling_prob
         self.max_sample = max_sample
@@ -48,7 +49,6 @@ class DomainEngine:
         self.setup_attributes()
         domain = self.generate_domain()
         self.store_domains(domain)
-        del domain
         status = "DONE with domain preparation."
         toc = time.time()
         return status, toc - tic
@@ -96,11 +96,10 @@ class DomainEngine:
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total
         self.single_stats = single_stats
+        logging.debug("preparing TOP K co-occurring statistics...")
         tic = time.clock()
         self.pair_stats = self._topk_pair_stats(pair_stats)
-        toc = time.clock()
-        prep_time = toc - tic
-        logging.debug("DONE with pair stats preparation in %.2f secs", prep_time)
+        logging.debug("DONE with TOP K co-occurring statistics in %.2f secs", time.clock() - tic)
         self.setup_complete = True
 
     def _topk_pair_stats(self, pair_stats):
@@ -156,13 +155,16 @@ class DomainEngine:
 
         :param thres: (float) correlation threshold (absolute) for returned attributes.
         """
-        if attr not in self.correlations:
-            return []
+        # Not memoized: find correlated attributes from correlation dataframe.
+        if attr not in self._corr_attrs:
+            self._corr_attrs[attr] = []
 
-        d_temp = self.correlations[attr]
-        d_temp = d_temp.abs()
-        cor_attrs = [rec[0] for rec in d_temp[d_temp > thres].iteritems() if rec[0] != attr]
-        return cor_attrs
+            if attr in self.correlations:
+                d_temp = self.correlations[attr]
+                d_temp = d_temp.abs()
+                self._corr_attrs[attr] = [rec[0] for rec in d_temp[d_temp > thres].iteritems() if rec[0] != attr]
+
+        return self._corr_attrs[attr]
 
     def generate_domain(self):
         """
@@ -193,6 +195,9 @@ class DomainEngine:
         if not self.setup_complete:
             raise Exception(
                 "Call <setup_attributes> to setup active attributes. Error detection should be performed before setup.")
+
+        logging.debug('generating initial set of un-pruned domain values...')
+        tic = time.clock()
         # Iterate over dataset rows.
         cells = []
         vid = 0
@@ -245,29 +250,31 @@ class DomainEngine:
                         vid += 1
             cells.extend(app)
         domain_df = pd.DataFrame(data=cells)
+        logging.debug('DONE generating initial set of domain values in %.2f', time.clock() - tic)
 
-        logging.info('Generating posteriors for domain values using RecurrentLogistic model...')
-
-        # Use pruned domain from correlated attributes above for Logistic model.
+        # Run pruned domain values from correlated attributes above through
+        # posterior model for a naive probability estimation.
+        logging.debug('training posterior model for estimating domain value probabilities...')
+        tic = time.clock()
         pruned_domain = {}
         for row in domain_df[['_tid_', 'attribute', 'domain']].to_records():
             pruned_domain[row['_tid_']] = pruned_domain.get(row['_tid_'], {})
             pruned_domain[row['_tid_']][row['attribute']] = row['domain'].split('|||')
-
         estimator = RecurrentLogistic(self.ds, pruned_domain, self.active_attributes)
         estimator.train(num_recur=1, num_epochs=3, batch_size=self.env['batch_size'])
+        logging.debug('DONE training posterior model in %.2fs', time.clock() - tic)
 
-        logging.info('Generating weak labels from posterior model...')
-
+        # Predict probabilities for all pruned domain values.
+        logging.debug('predicting domain value probabilities from posterior model...')
+        tic = time.clock()
         # raw records indexed by tid
         raw_records_by_tid = {row['_tid_']: row for row in records}
-
-        logging.info('Predicting posterior probabilities in batch...')
-        tic = time.clock()
         domain_records = domain_df.to_records()
         preds_by_cell = estimator.predict_pp_batch(raw_records_by_tid, domain_records)
-        logging.info('DONE predictions in %.2f secs, re-constructing cell domain...', time.clock() - tic)
+        logging.debug('DONE predictions in %.2f secs, re-constructing cell domain...', time.clock() - tic)
 
+        logging.debug('re-assembling final cell domain table...')
+        tic = time.clock()
         # iterate through raw/current data and generate posterior probabilities for
         # weak labelling
         num_weak_labels = 0
@@ -306,15 +313,13 @@ class DomainEngine:
 
             updated_domain_df.append(row)
 
-        del domain_records
-        del domain_df
-        del preds_by_cell
         # update our cell domain df with our new updated domain
         domain_df = pd.DataFrame.from_records(updated_domain_df, columns=updated_domain_df[0].dtype.names).drop('index', axis=1).sort_values('_vid_')
+        logging.debug('DONE assembling cell domain table in %.2f', time.clock() - tic)
 
-        logging.info('number of weak labels assigned: %d', num_weak_labels)
+        logging.info('number of (additional) weak labels assigned from posterior model: %d', num_weak_labels)
 
-        logging.info('DONE generating domain and weak labels')
+        logging.debug('DONE generating domain and weak labels')
         return domain_df
 
     def get_domain_cell(self, attr, row):

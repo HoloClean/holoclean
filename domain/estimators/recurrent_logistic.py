@@ -3,6 +3,7 @@ import copy
 import logging
 
 import pandas as pd
+import time
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
@@ -40,7 +41,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         self.cur_df = self.ds.get_raw_data().copy()
 
         # Generate featurizers for this model.
-        self._update_featurizers()
+        self._update_featurizers(reuse_stats=True)
 
         # Make a copy of the initial featurizers for prediction/test set
         # i.e., we want to use our original co-occurrence statistics.
@@ -53,15 +54,21 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         self._loss = torch.nn.BCELoss()
         self._optimizer = torch.optim.Adam(self.parameters())
 
-    def _update_featurizers(self):
+    def _update_featurizers(self, reuse_stats=False):
         """
         Reinitialize featurizers that depend on updated current values.
+
+        :param reuse_stats: (bool) reuses frequency and co-occurrence statistics from
+            raw Dataset instead of re-computing.
         """
 
         # Featurizers used for training.
-        self.train_featurizers = [
-            CooccurAttrFeaturizer(self.cur_df, self.attrs),
-        ]
+        freq, cooccur_freq = None, None
+        if reuse_stats:
+            _, freq, cooccur_freq = self.ds.get_statistics()
+
+        self.train_featurizers = [CooccurAttrFeaturizer(self.cur_df,
+                    self.attrs, freq=freq, cooccur_freq=cooccur_freq)]
         # Initialize featurizers.
         [feat.setup() for feat in self.train_featurizers]
 
@@ -76,7 +83,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         self._X = torch.zeros(self.n_samples, self.num_features)
         self._Y = torch.zeros(self.n_samples)
 
-        logging.info('RecurrentLogistic: featurizing training data')
+        logging.debug('RecurrentLogistic: featurizing training data...')
 
         sample_idx = 0
         domain_idx_df = []
@@ -102,7 +109,14 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
 
                 sample_idx += len(domain_vals)
 
-        # Map index (along first dimension) in self._X and self._Y to domain values.
+        """
+        Map index (along first dimension) in self._X and self._Y to domain
+        values, that is the dataframe has columns:
+            (Index)     |    _tid_      |   attr    |   val
+
+        where the (Index)-th row of self._X/self._Y corresponds to the
+        possible/domain value with _tid_, attr, and val.
+        """
         self._domain_idx_df = pd.DataFrame(domain_idx_df)
 
     def _gen_train_tensor(self, row, attr, values):
@@ -172,11 +186,11 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
             self._update_training_data()
             torch_ds = TensorDataset(self._X, self._Y)
 
-            logging.info("RecurrentLogistic: training, recur iteration: %d", recur_idx)
+            logging.debug("RecurrentLogistic: training, recur iteration: %d", recur_idx)
 
             # Main training loop.
             for epoch_idx in range(1, num_epochs+1):
-                logging.info("RecurrentLogistic: epoch %d", epoch_idx)
+                logging.debug("RecurrentLogistic: epoch %d", epoch_idx)
                 batch_cnt = 0
                 for batch_X, batch_Y in tqdm(DataLoader(torch_ds, batch_size=batch_size)):
                     batch_pred = self.forward(batch_X)
@@ -186,7 +200,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
                     batch_loss.backward()
                     self._optimizer.step()
                     batch_cnt += 1
-                logging.info('RecurrentLogistic: average batch loss is %.3f', sum(batch_losses[-1 * batch_cnt:]) / batch_cnt)
+                logging.debug('RecurrentLogistic: average batch loss is %f', sum(batch_losses[-1 * batch_cnt:]) / batch_cnt)
                 # TODO(richardwu): update cur_df with predictions
 
         return batch_losses
@@ -208,23 +222,26 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         :param raw_records_by_tid: (dict) maps TID to its corresponding row (record) in the raw data
         :param cell_domain_rows: (list[pd.record]) list of records from the cell domain DF
         """
-        logging.info('RecurrentLogistic: constructing batch feature tensor for %d cells...', cell_domain_rows.shape[0])
+        logging.debug('RecurrentLogistic: constructing feature tensor for %d cells...', cell_domain_rows.shape[0])
         X_tensors = []
         for row in tqdm(cell_domain_rows):
             X_tensors.append(self._gen_test_tensor(raw_records_by_tid[row['_tid_']],
                                                    row['attribute'], row['domain'].split('|||')))
+        logging.debug('RecurrentLogistic: DONE featurization.')
         pred_X = torch.cat(X_tensors, dim=0)
-        logging.info('RecurrentLogistic: predicting posterior probabilities for batch feature tensor...')
+        logging.debug('RecurrentLogistic: predicting posterior probabilities for tensors...')
         pred_Y = self.forward(pred_X)
+        logging.debug('RecurrentLogistic: DONE prediction.')
 
         cur_idx = 0
-        logging.info('RecurrentLogistic: segmenting predictions by cell...')
+        logging.debug('RecurrentLogistic: segmenting predictions by cell...')
         probs_by_row = []
-        for row in cell_domain_rows:
+        for row in tqdm(cell_domain_rows):
             # Create list of (value, proba) for each cell.
             probs_by_row.append(list(zip(row['domain'].split('|||'),
                 map(float, pred_Y[cur_idx:cur_idx+row['domain_size']]))))
             cur_idx += row['domain_size']
+        logging.debug('RecurrentLogistic: DONE segmentation.')
         return probs_by_row
 
 
@@ -254,34 +271,54 @@ class Featurizer:
 
 
 class CooccurFeaturizer(Featurizer):
+    name = 'CooccurFeaturizer'
+
     """
     CooccurFeaturizer is DEPRECATED. Please use CooccurAttrFeaturizer.
     """
-    def __init__(self, data_df, attrs):
+    def __init__(self, data_df, attrs, freq=None, cooccur_freq=None):
         """
         :param data_df: (pandas.DataFrame) contains the data to compute co-occurrence features for.
         :param attrs: attributes in columns of :param data_df: to compute feautres for.
+        :param freq: (dict { attr: { val: count } } }) if not None, uses these
+            frequency statistics instead of computing it from data_df.
+        :param cooccur_freq: (dict { attr1: { attr2: { val1: { val2: count } } } })
+            if not None, uses these co-occurrence statistics instead of
+            computing it from data_df.
         """
         self.data_df = data_df
         self.attrs = attrs
+        self.freq = freq
+        self.cooccur_freq = cooccur_freq
 
     def num_features(self):
         return len(self.attrs)
 
     def setup(self):
-        # Frequencies of values per each attribute
-        self.freq = {}
-        for attr in self.attrs:
-            self.freq[attr] = self._get_freq(attr)
+        logging.debug("%s: setting up co-occurrence statistics...", self.name)
+        tic = time.clock()
 
-        # Co-occurrence counts per each attribute pair (and value pair)
-        self.cooccur_freq = {}
-        for attr1 in self.attrs:
-            self.cooccur_freq[attr1] = {}
-            for attr2 in self.attrs:
-                if attr1 == attr2:
-                    continue
-                self.cooccur_freq[attr1][attr2] = self._get_cooccur_freq(attr1, attr2)
+        if self.freq is None:
+            logging.debug("%s: re-using frequency statistics passed in")
+        else:
+            # Frequencies of values per each attribute
+            self.freq = {}
+            for attr in self.attrs:
+                self.freq[attr] = self._get_freq(attr)
+
+        if self.cooccur_freq is None:
+            logging.debug("%s: re-using co-occurrence statistics passed in")
+        else:
+            # Co-occurrence counts per each attribute pair (and value pair)
+            self.cooccur_freq = {}
+            for attr1 in self.attrs:
+                self.cooccur_freq[attr1] = {}
+                for attr2 in self.attrs:
+                    if attr1 == attr2:
+                        continue
+                    self.cooccur_freq[attr1][attr2] = self._get_cooccur_freq(attr1, attr2)
+
+        logging.debug("%s: co-occurrence statistics computed in %.2fs", self.name, time.clock() - tic)
 
     def create_tensor(self, row, attr, values):
         """
@@ -334,17 +371,25 @@ class CooccurFeaturizer(Featurizer):
 
 
 class CooccurAttrFeaturizer(CooccurFeaturizer):
+    name = 'CooccurAttrFeaturizer'
+
     """
     CooccurAttrFeaturizer is like CooccurFeaturizer but breaks down each co-occur
     feature on a pairwise attr1 X attr2 basis, instead of one co-occur feature
     per attribute.
     """
-    def __init__(self, data_df, attrs):
+    def __init__(self, data_df, attrs, freq=None, cooccur_freq=None):
         """
         :param data_df: (pandas.DataFrame) contains the data to compute co-occurrence features for.
         :param attrs: attributes in columns of :param data_df: to compute feautres for.
+        :param freq: (dict { attr: { val: count } } }) if not None, uses these
+            frequency statistics instead of computing it from data_df.
+        :param cooccur_freq: (dict { attr1: { attr2: { val1: { val2: count } } } })
+            if not None, uses these co-occurrence statistics instead of
+            computing it from data_df.
         """
-        super(CooccurAttrFeaturizer, self).__init__(data_df, attrs)
+        super(CooccurAttrFeaturizer, self).__init__(data_df, attrs,
+                freq=freq, cooccur_freq=cooccur_freq)
         self.attr_to_idx = {attr: idx for idx, attr in enumerate(self.attrs)}
         self.n_attrs = len(self.attrs)
 
