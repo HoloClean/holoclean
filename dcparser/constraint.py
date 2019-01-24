@@ -1,16 +1,17 @@
 import logging
 
-operationsArr = ['<>', '<=', '>=', '=', '<', '>', ]
+operationsArr = ['<>', '<=', '>=', '=', '<', '>']
 operationSign = ['IQ', 'LTE', 'GTE', 'EQ', 'LT', 'GT']
 
 def is_symmetric(operation):
-    if operation in set(['<>','=']):
+    if operation in set(['<>', '=']):
         return True
     return False
 
 def contains_operation(string):
     """
-    Method to check if a given string contains one of the operation signs
+    Method to check if a given string contains one of the operation signs.
+    
     :param string: given string
     :return: operation index in list of pre-defined list of operations or
     Null if string does not contain any
@@ -22,15 +23,15 @@ def contains_operation(string):
 
 class DenialConstraint:
     """
-    Class that defines the denial constraints
+    Class that defines the denial constraints.
     """
-
     def __init__(self, dc_string, schema):
         """
-        Constructing denial constraint object
+        Constructing denial constraint object.
         This class contains a list of predicates and the tuple_names which define a Denial Constraint
-        :param dc_string: string for denial constraint
-        :param schema: list of attribute
+
+        :param dc_string: (str) string for denial constraint
+        :param schema: (list[str]) list of attribute
         """
         dc_string = dc_string.replace('"', "'")
         split = dc_string.split('&')
@@ -61,14 +62,11 @@ class DenialConstraint:
         # Create CNF form of the DC
         cnf_forms = [predicate.cnf_form for predicate in self.predicates]
         self.cnf_form = " AND ".join(cnf_forms)
-        return
-
 
 class Predicate:
     """
-    This class represents predicates
+    This class represents predicates.
     """
-
     def __init__(self, predicate_string, tuple_names, schema):
         """
         Constructing predicate object by setting self.cnf_form to e.g. t1."Attribute" = t2."Attribute".
@@ -99,16 +97,15 @@ class Predicate:
             if i < len(self.components) - 1:
                 self.cnf_form += self.operation
         logging.info("DONE parsing predicate: %s", predicate_string)
-        return
 
     def parse_components(self, predicate_string):
         """
         Parses the components of given predicate string
         Example: 'EQ(t1.ZipCode,t2.ZipCode)' returns [['t1', 'ZipCode'], ['t2','ZipCode']]
+
         :param predicate_string: predicate string
         :return: list of predicate components
         """
-
         # HC currently only supports DCs with two tuples per predicate
         # so raise an exception if a different number present
         num_tuples = len(predicate_string.split(','))

@@ -26,9 +26,8 @@ class CellStatus(Enum):
 
 class Dataset:
     """
-    This class keeps all dataframes and tables for a HC session
+    This class keeps all dataframes and tables for a HC session.
     """
-
     def __init__(self, name, env):
         self.id = name
         self.raw_data = None
@@ -109,7 +108,6 @@ class Dataset:
             self.raw_data.store_to_db(self.engine.engine)
             status = 'DONE Loading {fname}'.format(fname=os.path.basename(fpath))
 
-
             # Generate indexes on attribute columns for faster queries
             for attr in self.raw_data.get_attributes():
                 # Generate index on attribute
@@ -117,7 +115,6 @@ class Dataset:
 
             # Create attr_to_idx dictionary (assign unique index for each attribute)
             # and attr_count (total # of attributes)
-
             self.attr_to_idx = {attr: idx for idx, attr in enumerate(self.raw_data.get_attributes())}
             self.attr_count = len(self.attr_to_idx)
         except Exception:
@@ -196,7 +193,6 @@ class Dataset:
         Cell ID: _tid_ * (# of attributes) + attr_idx
         """
         vid = tuple_id*self.attr_count + self.attr_to_idx[attr_name]
-
         return vid
 
     def get_statistics(self):
@@ -229,7 +225,6 @@ class Dataset:
               <count>: frequency (# of entities) where attr1: val1 AND attr2: val2
             Also known as co-occurrence count.
         """
-
         self.total_tuples = self.get_raw_data().shape[0]
         # Single attribute-value frequency
         for attr in self.get_attributes():
@@ -264,7 +259,6 @@ class Dataset:
         """
         Returns (number of random variables, count of distinct values across all attributes).
         """
-
         query = 'SELECT count(_vid_), max(domain_size) FROM %s'%AuxTables.cell_domain.name
         res = self.engine.execute_query(query)
         total_vars = int(res[0][0])
@@ -303,5 +297,3 @@ class Dataset:
         toc = time.clock()
         total_time = toc - tic
         return status, total_time
-
-

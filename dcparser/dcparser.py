@@ -4,15 +4,14 @@ import time
 
 from .constraint import DenialConstraint
 
-
 class Parser:
     """
     This class creates interface for parsing denial constraints
     """
-
     def __init__(self, env, dataset):
         """
         Constructing parser interface object
+
         :param session: session object
         """
         self.env = env
@@ -23,6 +22,7 @@ class Parser:
     def load_denial_constraints(self, fpath):
         """
         Loads denial constraints from line-separated TXT file
+        
         :param fpath: filepath to TXT file containing denial constraints
         """
         tic = time.clock()

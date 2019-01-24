@@ -17,6 +17,14 @@ class ViolationDetector(Detector):
         self.constraints = dataset.constraints
 
     def detect_noisy_cells(self):
+        """
+        Returns a pandas.DataFrame containing all cells that
+         violate denial constraints contained in self.dataset.
+
+        :return: pandas.DataFrame with columns:
+            _tid_: entity ID
+            attribute: attribute violating any denial constraint.
+        """
         # Convert  Constraints to SQL queries
         tbl = self.ds.raw_data.name
         queries = []
