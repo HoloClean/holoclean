@@ -28,28 +28,7 @@ It requires PostgreSQL version 9.4 or higher.
 We describe how to install PostgreSQL and configure it for HoloClean
 (creating a database, a user, and setting the required permissions).
 
-#### Option 1: Using a Docker Container
-If you are familiar with docker, an easy way to start using
-HoloClean is to start a PostgreSQL docker container.
-
-To start a PostgreSQL docker container, run the following command:
-
-```bash
-docker run --name pghc \
-    -e POSTGRES_DB=holo -e POSTGRES_USER=holocleanuser -e POSTGRES_PASSWORD=abcd1234 \
-    -p 5432:5432 \
-    -d postgres:11
-```
-
-which starts a backend server and creates a database with the required permissions.
-
-You can then use `docker start pghc` and `docker stop pghc` to start/stop the container.
-
-
-Note the port number which may conflict with existing PostgreSQL servers.
-Read more about this docker image [here](https://hub.docker.com/_/postgres/). 
-
-#### Option 2: Native installation of PostgreSQL
+#### Option 1: Native installation of PostgreSQL
 
 A native installation of PostgreSQL runs faster than docker containers.
 We explain how to install PostgreSQL then how to configure it for HoloClean use.
@@ -91,6 +70,27 @@ DROP DATABASE holo;
 CREATE DATABASE holo;
 ```
 
+#### Option 2: Using a Docker Container
+If you are familiar with docker, an easy way to start using
+HoloClean is to start a PostgreSQL docker container.
+
+To start a PostgreSQL docker container, run the following command:
+
+```bash
+docker run --name pghc \
+    -e POSTGRES_DB=holo -e POSTGRES_USER=holocleanuser -e POSTGRES_PASSWORD=abcd1234 \
+    -p 5432:5432 \
+    -d postgres:11
+```
+
+which starts a backend server and creates a database with the required permissions.
+
+You can then use `docker start pghc` and `docker stop pghc` to start/stop the container.
+
+
+Note the port number which may conflict with existing PostgreSQL servers.
+Read more about this docker image [here](https://hub.docker.com/_/postgres/). 
+
 ### 2. Setting up HoloClean
 HoloClean runs on Python 2.7 or 3.6+. We recommend running it from within
 a virtual environment.
@@ -114,7 +114,7 @@ $ sh Anaconda-2.3.0-Linux-x86_64.sh
 * macOS, please follow the instructions [here](https://conda.io/projects/conda/en/latest/user-guide/install/macos.html) to install
 Anaconda (not miniconda).
 
-Second, create a conda environment (python 2.7 or 3.6).
+Second, create a conda environment (python 2.7 or 3.6+).
 For example, to create a *Python 3.6* conda environment, run:
 
 ```bash
@@ -129,11 +129,11 @@ $ source activate hc36
 
 ##### Option 2: Set up a virtual environment using pip and Virtualenv
 
-If you are familiar with `Virtualenv`, you can use it to create 
-a virtual environment. Note that this process is different for Python 2 and 3.
+If you are familiar with `virtualenv`, you can use it to create 
+a virtual environment.
 
-For **Python 2.7**, create a new **Python 2.7** environment
-with your preferred Virtualenv wrapper, for example:
+For Python 3.6, create a new environment
+with your preferred virtualenv wrapper, for example:
 
 * [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/en/latest/) (Bourne-shells)
 * [virtualfish](https://virtualfish.readthedocs.io/en/latest/) (fish-shell)
@@ -145,19 +145,17 @@ Either follow instructions [here](https://virtualenv.pypa.io/en/stable/installat
 $ pip install virtualenv
 ```
 
-Then, create a `Virtualenv` environment by creating a new directory for a **Python 2.7** virtualenv environment
+Then, create a `virtualenv` environment by creating a new directory for a Python 3.6 virtualenv environment
 ```bash
-$ mkdir -p hc27
-$ virtualenv --python=python hc27
+$ mkdir -p hc36
+$ virtualenv --python=python3.6 hc36
 ```
-where `python` is a valid reference to a python executable.
+where `python3.6` is a valid reference to a Python 3.6 executable.
 
 Activate the environment
 ```bash
-$ source hc27/bin/activate
+$ source hc36/bin/activate
 ```
-
-You can read more about `venv`, the virtual environment of Python 3 [here](https://docs.python.org/3/tutorial/venv.html).
 
 #### Install the required python packages
 
