@@ -86,4 +86,3 @@ class Table:
         index_name = '{name}_{idx}'.format(name=self.name, idx=self.index_count)
         dbengine.create_db_index(index_name, self.name, attr_list)
         self.index_count += 1
-        return

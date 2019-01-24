@@ -13,6 +13,10 @@ create_table_template = Template('CREATE TABLE "$table" AS ($stmt)')
 
 
 class DBengine:
+    """
+    A wrapper class for postgresql engine.
+    Maintains connections and executes queries.
+    """
     def __init__(self, user, pwd, db, host='localhost', port=5432, pool_size=20, timeout=60000):
         self.timeout = timeout
         self._pool = Pool(pool_size) if pool_size > 1 else None
@@ -24,8 +28,12 @@ class DBengine:
         self.conn_args = con
         self.engine = sql.create_engine(url, client_encoding='utf8', pool_size=pool_size)
 
-    # Executes queries in parallel.
     def execute_queries(self, queries):
+        """
+        Executes :param queries: in parallel.
+
+        :param queries: (list[str]) list of SQL queries to be executed
+        """
         logging.debug('Preparing to execute %d queries.', len(queries))
         tic = time.clock()
         results = self._apply_func(partial(_execute_query, conn_args=self.conn_args), [(idx, q) for idx, q in enumerate(queries)])
@@ -33,8 +41,12 @@ class DBengine:
         logging.debug('Time to execute %d queries: %.2f secs', len(queries), toc-tic)
         return results
 
-    # Executes queries that have backups in parallel. Used in featurization.
     def execute_queries_w_backup(self, queries):
+        """
+        Executes :param queries: that have backups in parallel. Used in featurization.
+
+        :param queries: (list[str]) list of SQL queries to be executed
+        """
         logging.debug('Preparing to execute %d queries.', len(queries))
         tic = time.clock()
         results = self._apply_func(
@@ -44,8 +56,12 @@ class DBengine:
         logging.debug('Time to execute %d queries: %.2f secs', len(queries), toc-tic)
         return results
 
-    # Executes a single query using current connection.
     def execute_query(self, query):
+        """
+        Executes a single :param query: using current connection.
+
+        :param query: (str) SQL query to be executed
+        """
         tic = time.clock()
         conn = self.engine.connect()
         result = conn.execute(query).fetchall()
@@ -59,8 +75,8 @@ class DBengine:
         drop = drop_table_template.substitute(table=name)
         create = create_table_template.substitute(table=name, stmt=query)
         conn = self.engine.connect()
-        dropped = conn.execute(drop)
-        created = conn.execute(create)
+        conn.execute(drop)
+        conn.execute(create)
         conn.close()
         toc = time.clock()
         logging.debug('Time to create table: %.2f secs', toc-tic)
@@ -77,7 +93,6 @@ class DBengine:
         :param attr_list: (list[str]) list of attributes/columns to create index on
         """
         # We need to quote each attribute since Postgres auto-downcases unquoted column references
-
         quoted_attrs = map(lambda attr: '"{}"'.format(attr), attr_list)
         stmt = index_template.substitute(idx_title=name, table=table, attrs=','.join(quoted_attrs))
         tic = time.clock()
@@ -103,8 +118,6 @@ def _execute_query(args, conn_args):
     cur = con.cursor()
     cur.execute(query)
     res = cur.fetchall()
-    # con = engine.connect()
-    # res = con.execute(query).fetchall()
     con.close()
     toc = time.clock()
     logging.debug('Time to execute query with id %d: %.2f secs', query_id, (toc - tic))
