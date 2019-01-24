@@ -127,8 +127,6 @@ conda environment by running
 $ source activate hc36
 ```
 
-**NOTE: ensure your environment is activated throughout the installation process.**
-
 ##### Option 2: Set up a virtual environment using pip and Virtualenv
 
 If you are familiar with `Virtualenv`, you can use it to create 
@@ -161,9 +159,9 @@ $ source hc27/bin/activate
 
 You can read more about `venv`, the virtual environment of Python 3 [here](https://docs.python.org/3/tutorial/venv.html).
 
-**NOTE: ensure your environment is activated throughout the installation process.**
-
 #### Install the required python packages
+
+*Note: make sure that the environment is activated throughout the installation process.*
 
 In the project root directory, run the following to install the required packages.
 Note that this commands installs the packages within the activated virtual environment.
@@ -173,7 +171,7 @@ $ pip install -r requirements.txt
 ```
 
 
-**Note for macOS Users**\
+*Note for macOS Users:*\
 if you are on macOS, you may need to install XCode developer tools using the command `xcode-select --install`.
 
 
