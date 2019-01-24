@@ -20,7 +20,7 @@ class TestHoloCleanRepair(unittest.TestCase):
             threads=1,
             batch_size=32,
             verbose=True,
-            timeout=3*60000,
+            timeout=3 * 60000,
             print_fw=True
         ).session
 
@@ -44,10 +44,15 @@ class TestHoloCleanRepair(unittest.TestCase):
         ]
 
         infer_labeled = True
-        hc.repair_errors(featurizers, infer_labeled=infer_labeled)
-        # 5. Evaluate the correctness of the results.
 
-        hc.evaluate('../testdata/hospital_100_clean.csv', 'tid', 'attribute', 'correct_val', infer_labeled=infer_labeled)
+        hc.repair_errors(featurizers, infer_labeled=infer_labeled)
+
+        # 5. Evaluate the correctness of the results.
+        hc.evaluate(fpath='../testdata/hospital_100_clean.csv',
+                    tid_col='tid',
+                    attr_col='attribute',
+                    val_col='correct_val',
+                    infer_labeled=infer_labeled)
 
 
 if __name__ == '__main__':

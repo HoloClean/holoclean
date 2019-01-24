@@ -149,19 +149,19 @@ class RepairModel:
         for i, f in enumerate(feat_info):
             this_weight = self.model.weight_list[i].data.numpy()[0]
             weight_str = "\n".join("{name} {weight}".format(name=name, weight=weight)
-                for name, weight in
-                zip(f.feature_names, map(str, np.around(this_weight,3))))
+                                   for name, weight in
+                                   zip(f.feature_names, map(str, np.around(this_weight, 3))))
             feat_name = f.name
             feat_size = f.size
             max_w = max(this_weight)
             min_w = min(this_weight)
             mean_w = float(np.mean(this_weight))
             abs_mean_w = float(np.mean(np.absolute(this_weight)))
-            # create report
+            # Create report
             report += "featurizer %s,size %d,max %.4f,min %.4f,avg %.4f,abs_avg %.4f,weights:\n%s\n" % (
                 feat_name, feat_size, max_w, min_w, mean_w, abs_mean_w, weight_str
             )
-            # create dictionary
+            # Wrap in a dictionary.
             self.featurizer_weights[feat_name] = {
                 'max': max_w,
                 'min': min_w,
