@@ -67,8 +67,9 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         if reuse_stats:
             _, freq, cooccur_freq = self.ds.get_statistics()
 
-        self.train_featurizers = [CooccurAttrFeaturizer(self.cur_df,
-                    self.attrs, freq=freq, cooccur_freq=cooccur_freq)]
+        self.train_featurizers = [
+                CooccurAttrFeaturizer(self.cur_df, self.attrs, freq=freq, cooccur_freq=cooccur_freq),
+        ]
         # Initialize featurizers.
         [feat.setup() for feat in self.train_featurizers]
 
@@ -270,12 +271,14 @@ class Featurizer:
         raise NotImplementedError
 
 
-class CooccurFeaturizer(Featurizer):
-    name = 'CooccurFeaturizer'
+class CooccurAttrFeaturizer(Featurizer):
+    """
+    CooccurAttrFeaturizer computes the co-occurrence statistics for a cell
+    and its possible domain values with the other initial values in the tuple.
+    It breaks down each co-occurrence feature on a pairwise attr1 X attr2 basis.
+    """
+    name = 'CooccurAttrFeaturizer'
 
-    """
-    CooccurFeaturizer is DEPRECATED. Please use CooccurAttrFeaturizer.
-    """
     def __init__(self, data_df, attrs, freq=None, cooccur_freq=None):
         """
         :param data_df: (pandas.DataFrame) contains the data to compute co-occurrence features for.
@@ -290,9 +293,11 @@ class CooccurFeaturizer(Featurizer):
         self.attrs = attrs
         self.freq = freq
         self.cooccur_freq = cooccur_freq
+        self.attr_to_idx = {attr: idx for idx, attr in enumerate(self.attrs)}
+        self.n_attrs = len(self.attrs)
 
     def num_features(self):
-        return len(self.attrs)
+        return len(self.attrs) * len(self.attrs)
 
     def setup(self):
         logging.debug("%s: setting up co-occurrence statistics...", self.name)
@@ -327,82 +332,6 @@ class CooccurFeaturizer(Featurizer):
             and the cell to generate a feature tensor for.
         :param values: (list[str]) values to generate
         """
-        tensor = torch.zeros(len(values), len(self.attrs))
-        for val_idx, val in enumerate(values):
-            for attr_idx, other_attr in enumerate(self.attrs):
-                if attr == other_attr:
-                    continue
-
-                # calculate p(val | other_val)
-                # there may not be co-occurrence frequencies for some value pairs since
-                # our possible values were from correlation with only
-                # one other attribute
-                cooccur = self.cooccur_freq[attr][other_attr][val].get(row[other_attr], 0)
-                freq = self.freq[other_attr][row[other_attr]]
-
-                tensor[val_idx,attr_idx] = float(cooccur) / float(freq)
-        return tensor
-
-    def _get_freq(self, attr):
-        """
-        _get_freq returns a dictionary where the keys possible values for :param attr: and
-        the values contain the frequency count of that value for this attribute.
-        """
-        return self.data_df[[attr]].groupby([attr]).size().to_dict()
-
-    def _get_cooccur_freq(self, attr1, attr2):
-        """
-        _get_cooccur_freq returns a dictionary {val1 -> {val2 -> count } } where:
-            <val1>: all possible values for :param attr1:
-            <val2>: all values for :param attr2: that appeared at least once with <val1>
-            <count>: frequency (# of entities) where :param attr1 = <val1> AND :param attr2: = <val2>
-        """
-        tmp_df = self.data_df[[attr1,attr2]].groupby([attr1,attr2]).size().reset_index(name="count")
-        return dictify_df(tmp_df)
-
-    def copy(self):
-        """
-        Makes a copy of this featurizer.
-        """
-        temp = CooccurFeaturizer(self.data_df.copy(), [a for a in self.attrs])
-        temp.freq = copy.deepcopy(self.freq)
-        temp.cooccur_freq = copy.deepcopy(self.cooccur_freq)
-        return temp
-
-
-class CooccurAttrFeaturizer(CooccurFeaturizer):
-    name = 'CooccurAttrFeaturizer'
-
-    """
-    CooccurAttrFeaturizer is like CooccurFeaturizer but breaks down each co-occur
-    feature on a pairwise attr1 X attr2 basis, instead of one co-occur feature
-    per attribute.
-    """
-    def __init__(self, data_df, attrs, freq=None, cooccur_freq=None):
-        """
-        :param data_df: (pandas.DataFrame) contains the data to compute co-occurrence features for.
-        :param attrs: attributes in columns of :param data_df: to compute feautres for.
-        :param freq: (dict { attr: { val: count } } }) if not None, uses these
-            frequency statistics instead of computing it from data_df.
-        :param cooccur_freq: (dict { attr1: { attr2: { val1: { val2: count } } } })
-            if not None, uses these co-occurrence statistics instead of
-            computing it from data_df.
-        """
-        super(CooccurAttrFeaturizer, self).__init__(data_df, attrs,
-                freq=freq, cooccur_freq=cooccur_freq)
-        self.attr_to_idx = {attr: idx for idx, attr in enumerate(self.attrs)}
-        self.n_attrs = len(self.attrs)
-
-    def num_features(self):
-        return len(self.attrs) * len(self.attrs)
-
-    def create_tensor(self, row, attr, values):
-        """
-        :param row: (namedtuple or dict) current initial values
-        :param attr: (str) attribute of row (i.e. cell) the :param values: correspond to
-            and the cell to generate a feature tensor for.
-        :param values: (list[str]) values to generate
-        """
         tensor = torch.zeros(len(values), len(self.attrs) * len(self.attrs))
         for val_idx, val in enumerate(values):
             for other_attr_idx, other_attr in enumerate(self.attrs):
@@ -429,4 +358,21 @@ class CooccurAttrFeaturizer(CooccurFeaturizer):
         temp.freq = copy.deepcopy(self.freq)
         temp.cooccur_freq = copy.deepcopy(self.cooccur_freq)
         return temp
+
+    def _get_freq(self, attr):
+        """
+        _get_freq returns a dictionary where the keys possible values for :param attr: and
+        the values contain the frequency count of that value for this attribute.
+        """
+        return self.data_df[[attr]].groupby([attr]).size().to_dict()
+
+    def _get_cooccur_freq(self, attr1, attr2):
+        """
+        _get_cooccur_freq returns a dictionary {val1 -> {val2 -> count } } where:
+            <val1>: all possible values for :param attr1:
+            <val2>: all values for :param attr2: that appeared at least once with <val1>
+            <count>: frequency (# of entities) where :param attr1 = <val1> AND :param attr2: = <val2>
+        """
+        tmp_df = self.data_df[[attr1,attr2]].groupby([attr1,attr2]).size().reset_index(name="count")
+        return dictify_df(tmp_df)
 
