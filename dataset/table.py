@@ -29,8 +29,8 @@ class Table:
                 Source.SQL: :param table_query: and :param db_engine:, use result
                     from :param table_query:
 
-        :param fpath: (str) file path
-        :param df: (pandas.DataFrame) pandas dataframe
+        :param fpath: (str) File path to CSV file containing raw data
+        :param df: (pandas.DataFrame) DataFrame contain the raw ingested data
         :param db_conn: (SQLAlchemy connectable, str) db connection to use in importing
         :param table_query: (str) sql query to construct table from
         :param db_engine: (DBEngine) database engine object

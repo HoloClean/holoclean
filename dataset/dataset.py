@@ -19,10 +19,12 @@ class AuxTables(Enum):
     inf_values_idx = 6
     inf_values_dom = 7
 
+
 class CellStatus(Enum):
     NOT_SET        = 0
     WEAK_LABEL     = 1
     SINGLE_VALUE   = 2
+
 
 class Dataset:
     """
@@ -107,7 +109,6 @@ class Dataset:
             # Call to store to database
             self.raw_data.store_to_db(self.engine.engine)
             status = 'DONE Loading {fname}'.format(fname=os.path.basename(fpath))
-
 
             # Generate indexes on attribute columns for faster queries
             for attr in self.raw_data.get_attributes():
@@ -230,7 +231,7 @@ class Dataset:
               <count>: frequency (# of entities) where attr1: val1 AND attr2: val2
             Also known as co-occurrence count.
         """
-        logging.info("Collecting single/pair-wise statistics...")
+        logging.debug("Collecting single/pair-wise statistics...")
         self.total_tuples = self.get_raw_data().shape[0]
         # Single attribute-value frequency.
         for attr in self.get_attributes():

@@ -54,10 +54,11 @@ class FeaturizedDataset:
         logging.debug("Generating weak labels...")
         # Trains with clean cells AND cells that have been weak labelled.
         query = 'SELECT _vid_, weak_label_idx, fixed ' \
-                'FROM %s AS t1 LEFT JOIN %s AS t2 ON t1._cid_ = t2._cid_ ' \
+                'FROM {} AS t1 LEFT JOIN {} AS t2 ON t1._cid_ = t2._cid_ ' \
                 'WHERE t2._cid_ is NULL ' \
-                '   OR t1.fixed != %d;' % (
-                    AuxTables.cell_domain.name, AuxTables.dk_cells.name, CellStatus.NOT_SET.value)
+                '   OR t1.fixed != {};'.format(AuxTables.cell_domain.name,
+                                               AuxTables.dk_cells.name,
+                                               CellStatus.NOT_SET.value)
         res = self.ds.engine.execute_query(query)
         if len(res) == 0:
             raise Exception("No weak labels available. Reduce pruning threshold.")

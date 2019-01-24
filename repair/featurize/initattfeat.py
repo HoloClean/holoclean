@@ -15,9 +15,9 @@ def gen_feat_tensor(input, classes, total_attrs):
     return tensor
 
 
-class InitAttFeaturizer(Featurizer):
+class InitAttrFeaturizer(Featurizer):
     def specific_setup(self):
-        self.name = 'InitAttFeaturizer'
+        self.name = 'InitAttrFeaturizer'
         self.all_attrs = self.ds.get_attributes()
         self.attr_to_idx = self.ds.attr_to_idx
         self.total_attrs = len(self.ds.attr_to_idx)

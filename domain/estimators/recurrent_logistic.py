@@ -2,10 +2,10 @@ from abc import ABCMeta, abstractmethod
 import copy
 import logging
 
-from torch.utils.data import TensorDataset, DataLoader
-from tqdm import tqdm
 import pandas as pd
 import torch
+from torch.utils.data import TensorDataset, DataLoader
+from tqdm import tqdm
 
 from ..estimator import Estimator
 from utils import dictify_df
@@ -62,7 +62,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         self.train_featurizers = [
             CooccurAttrFeaturizer(self.cur_df, self.attrs),
         ]
-        # initialize featurizers.
+        # Initialize featurizers.
         [feat.setup() for feat in self.train_featurizers]
 
         self.num_features = sum(feat.num_features() for feat in self.train_featurizers)

@@ -1,7 +1,7 @@
 from functools import partial
+import logging
 from multiprocessing import Pool
 from string import Template
-import logging
 import time
 
 import psycopg2
@@ -107,7 +107,7 @@ def _execute_query(args, conn_args):
     # res = con.execute(query).fetchall()
     con.close()
     toc = time.clock()
-    logging.debug('Time to execute query with id %d: %.2f secs' % (query_id, (toc - tic)))
+    logging.debug('Time to execute query with id %d: %.2f secs', query_id, (toc - tic))
     return res
 
 

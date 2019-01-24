@@ -36,7 +36,7 @@ class TestHoloCleanRepair(unittest.TestCase):
         # 4. Repair errors utilizing the defined features.
         hc.setup_domain()
         featurizers = [
-            InitAttFeaturizer(),
+            InitAttrFeaturizer(),
             InitSimFeaturizer(),
             OccurAttrFeaturizer(),
             FreqFeaturizer(),

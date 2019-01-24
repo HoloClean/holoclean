@@ -142,7 +142,7 @@ class DomainEngine:
         These attributes correspond only to attributes that contain at least
         one potentially erroneous cell.
         """
-        query = 'SELECT DISTINCT attribute as attribute FROM %s' % AuxTables.dk_cells.name
+        query = 'SELECT DISTINCT attribute as attribute FROM {}'.format(AuxTables.dk_cells.name)
         result = self.ds.engine.execute_query(query)
         if not result:
             raise Exception("No attribute contains erroneous cells.")

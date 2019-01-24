@@ -1,6 +1,6 @@
-from string import Template
 import logging
 import os
+from string import Template
 import time
 
 import pandas as pd
@@ -105,24 +105,25 @@ class EvalEngine:
     def compute_total_repairs(self):
         query = "SELECT count(*) FROM " \
                 "  (SELECT _vid_ " \
-                "     FROM %s as t1, %s as t2 " \
+                "     FROM {} as t1, {} as t2 " \
                 "    WHERE t1._tid_ = t2._tid_ " \
                 "      AND t1.attribute = t2.attribute " \
-                "      AND t1.init_value != t2.rv_value) AS t" \
-                % (AuxTables.cell_domain.name, AuxTables.inf_values_dom.name)
+                "      AND t1.init_value != t2.rv_value) AS t".format(AuxTables.cell_domain.name,
+                                                                      AuxTables.inf_values_dom.name)
         res = self.ds.engine.execute_query(query)
         self.total_repairs = float(res[0][0])
 
     def compute_total_repairs_grdt(self):
         query = "SELECT count(*) FROM " \
                 "  (SELECT _vid_ " \
-                "   FROM   %s as t1, %s as t2, %s as t3 " \
+                "   FROM   {} as t1, {} as t2, {} as t3 " \
                 "   WHERE  t1._tid_ = t2._tid_ " \
                 "     AND  t1.attribute = t2.attribute " \
                 "     AND  t1.init_value != t2.rv_value " \
                 "     AND  t1._tid_ = t3._tid_ " \
-                "     AND  t1.attribute = t3._attribute_) AS t" \
-                % (AuxTables.cell_domain.name, AuxTables.inf_values_dom.name, self.clean_data.name)
+                "     AND  t1.attribute = t3._attribute_) AS t".format(AuxTables.cell_domain.name,
+                                                                       AuxTables.inf_values_dom.name,
+                                                                       self.clean_data.name)
         res = self.ds.engine.execute_query(query)
         self.total_repairs_grdt = float(res[0][0])
 
