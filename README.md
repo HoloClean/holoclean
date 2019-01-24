@@ -73,12 +73,12 @@ By default, HoloClean needs a database `holo` and a user `holocleanuser` with pe
 
 2. Create a database `holo` and user `holocleanuser`
 ```sql
-=> CREATE DATABASE holo;
-=> CREATE USER holocleanuser;
-=> ALTER USER holocleanuser WITH PASSWORD 'abcd1234';
-=> GRANT ALL PRIVILEGES ON DATABASE holo TO holocleanuser;
-=> \c holo
-=> ALTER SCHEMA public OWNER TO holocleanuser;
+CREATE DATABASE holo;
+CREATE USER holocleanuser;
+ALTER USER holocleanuser WITH PASSWORD 'abcd1234';
+GRANT ALL PRIVILEGES ON DATABASE holo TO holocleanuser;
+\c holo
+ALTER SCHEMA public OWNER TO holocleanuser;
 ```
 
 You can connect to the `holo` database from the PostgreSQL `psql` console by running
@@ -87,8 +87,8 @@ You can connect to the `holo` database from the PostgreSQL `psql` console by run
 HoloClean currently populates the database `holo` with auxiliary and meta tables.
 To clear the database simply connect as a `root` user or as `holocleanuser` and run
 ```sql
-=> DROP DATABASE holo;
-=> CREATE DATABASE holo;
+DROP DATABASE holo;
+CREATE DATABASE holo;
 ```
 
 ### 2. Setting up HoloClean
