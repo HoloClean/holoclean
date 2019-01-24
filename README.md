@@ -105,7 +105,7 @@ First, install Conda using one of the following methods:
 $ wget https://repo.continuum.io/archive/Anaconda-2.3.0-Linux-x86.sh
 $ sh Anaconda-2.3.0-Linux-x86.sh
 ```
-* Ubuntu *64-bit machines** run
+* Ubuntu *64-bit machines* run
 ```bash
 $ wget https://repo.continuum.io/archive/Anaconda-2.3.0-Linux-x86_64.sh
 $ sh Anaconda-2.3.0-Linux-x86_64.sh
