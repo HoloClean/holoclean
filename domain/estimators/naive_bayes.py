@@ -1,6 +1,9 @@
-from ..estimator import Estimator
 import math
+
 from tqdm import tqdm
+
+from ..estimator import Estimator
+
 
 class NaiveBayes(Estimator):
     """

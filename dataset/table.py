@@ -1,12 +1,14 @@
-import os
-import pandas as pd
 from enum import Enum
+
+import pandas as pd
+
 
 class Source(Enum):
     FILE = 1
     DF   = 2
     DB   = 3
     SQL  = 4
+
 
 class Table:
     """
@@ -17,7 +19,7 @@ class Table:
         """
         :param name: (str) name to assign to dataset.
         :param na_values: (str or list[str]) values to interpret as NULL.
-        :param exclude_attrs: (list[str]) list of columns to NOT treat as
+        :param exclude_attr_cols: (list[str]) list of columns to NOT treat as
             attributes during training/learning.
         :param src: (Source) type of source to load from. Note additional
             parameters MUST be provided for each specific source:
@@ -27,11 +29,11 @@ class Table:
                 Source.SQL: :param table_query: and :param db_engine:, use result
                     from :param table_query:
 
-        :param fpath: (str)
-        :param df: (pandas.DataFrame)
-        :param db_conn: (SQLAlchemy connectable, str)
-        :param table_query: (str)
-        :param db_engine: (DBEngine)
+        :param fpath: (str) file path
+        :param df: (pandas.DataFrame) pandas dataframe
+        :param db_conn: (SQLAlchemy connectable, str) db connection to use in importing
+        :param table_query: (str) sql query to construct table from
+        :param db_engine: (DBEngine) database engine object
         """
         self.name = name
         self.index_count = 0

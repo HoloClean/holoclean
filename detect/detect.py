@@ -1,6 +1,7 @@
 import logging
-import pandas as pd
 import time
+
+import pandas as pd
 
 from dataset import AuxTables
 

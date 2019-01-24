@@ -3,10 +3,12 @@ import logging
 operationsArr = ['<>', '<=', '>=', '=', '<', '>', ]
 operationSign = ['IQ', 'LTE', 'GTE', 'EQ', 'LT', 'GT']
 
+
 def is_symmetric(operation):
     if operation in set(['<>','=']):
         return True
     return False
+
 
 def contains_operation(string):
     """
@@ -19,6 +21,7 @@ def contains_operation(string):
         if string.find(operationSign[i]) != -1:
             return i
     return None
+
 
 class DenialConstraint:
     """

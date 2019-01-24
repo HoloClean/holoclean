@@ -1,7 +1,9 @@
+from functools import partial
+
+import torch
+
 from dataset import AuxTables
 from .featurizer import Featurizer
-from functools import partial
-import torch
 
 
 def gen_feat_tensor(input, classes, total_attrs):
@@ -11,6 +13,7 @@ def gen_feat_tensor(input, classes, total_attrs):
     tensor = -1.0*torch.ones(1,classes,total_attrs)
     tensor[0][init_idx][attr_idx] = 1.0
     return tensor
+
 
 class InitAttFeaturizer(Featurizer):
     def specific_setup(self):

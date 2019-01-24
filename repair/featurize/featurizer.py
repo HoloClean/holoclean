@@ -7,7 +7,7 @@ class Featurizer:
 
     def __init__(self, learnable=True, init_weight=1.0):
         self.name = None
-        self.setup_done =False
+        self.setup_done = False
         self.learnable = learnable
         self.init_weight = init_weight
 

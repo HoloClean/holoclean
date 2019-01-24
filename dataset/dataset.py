@@ -1,8 +1,8 @@
-import logging
-import time
 from enum import Enum
+import logging
 import os
 import time
+
 import pandas as pd
 
 from .dbengine import DBengine
@@ -86,8 +86,7 @@ class Dataset:
                 exclude_attr_cols.append(src_col)
 
             # Load raw CSV file/data into a Postgres table 'name' (param).
-            self.raw_data = Table(name, Source.FILE, na_values=na_values,
-                    exclude_attr_cols=exclude_attr_cols, fpath=fpath)
+            self.raw_data = Table(name, Source.FILE, na_values=na_values, exclude_attr_cols=exclude_attr_cols, fpath=fpath)
 
             df = self.raw_data.df
             # Add _tid_ column to dataset that uniquely identifies an entity.
