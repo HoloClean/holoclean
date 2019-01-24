@@ -9,7 +9,7 @@ from dataset import AuxTables
 from dataset.table import Table, Source
 
 errors_template = Template('SELECT count(*) ' \
-                           'FROM  $init_table as t1, $grdt_table as t2 ' \
+                           'FROM  "$init_table" as t1, "$grdt_table" as t2 ' \
                            'WHERE t1._tid_ = t2._tid_ ' \
                            '  AND t2._attribute_ = \'$attr\' ' \
                            '  AND t1."$attr" != t2._value_')
@@ -26,7 +26,7 @@ truth value.
 """
 correct_repairs_template = Template('SELECT COUNT(*) FROM '
                                     '  (SELECT t2._tid_, t2._attribute_, t2._value_ '
-                                    '     FROM $init_table as t1, $grdt_table as t2 '
+                                    '     FROM "$init_table" as t1, "$grdt_table" as t2 '
                                     '    WHERE t1._tid_ = t2._tid_ '
                                     '      AND t2._attribute_ = \'$attr\' '
                                     '      AND t1."$attr" != t2._value_ ) as errors, $inf_dom as repairs '
