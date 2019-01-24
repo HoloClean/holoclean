@@ -153,7 +153,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
 
     def forward(self, X):
         linear = X.matmul(self._W) + self._B
-        return torch.nn.functional.sigmoid(linear)
+        return torch.sigmoid(linear)
 
     def train(self, num_recur=1, num_epochs=3, batch_size=32):
         """
