@@ -5,9 +5,12 @@ from .detector import Detector
 
 class ErrorsLoaderDetector(Detector):
     """
-    Detector that loads a table of constant errors from csv.
+    Detector that loads a table of constant errors from csv with the columns:
+        _tid_: entity ID
+        attribute: attribute in violation
+        in the format _tid_, attribute
     """
-    def __init__(self, name, fpath):
+    def __init__(self, fpath, name='ErrorLoaderDetector'):
         """
         :param name: (str) name of the detector
         :param fpath: (str) path to csv file to load errors from.
