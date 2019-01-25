@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Set & move to home directory
+
+# Set required environment variables.
 source ../set_env.sh
 
 # Launch tests.
 echo "Launching tests..."
-python -m unittest discover .
+pytest
