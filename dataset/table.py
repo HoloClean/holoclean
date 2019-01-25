@@ -2,13 +2,11 @@ from enum import Enum
 
 import pandas as pd
 
-
 class Source(Enum):
     FILE = 1
     DF   = 2
     DB   = 3
     SQL  = 4
-
 
 class Table:
     """

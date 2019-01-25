@@ -1,9 +1,10 @@
 import unittest
 
 import holoclean
-from detect import NullDetector, ViolationDetector
+from detect import NullDetector, ViolationDetector, FixedDetector
 from repair.featurize import *
-
+from dataset import Source
+import pandas as pd
 
 class TestHoloCleanRepair(unittest.TestCase):
 
@@ -30,7 +31,10 @@ class TestHoloCleanRepair(unittest.TestCase):
         hc.ds.set_constraints(hc.get_dcs())
 
         # 3. Detect erroneous cells using these two detectors.
-        detectors = [NullDetector(), ViolationDetector()]
+        df = pd.DataFrame([(10, 'State')], columns=['_tid_', 'attribute'])
+        fixed_df_detector = FixedDetector('HospitalFixedDetector', 
+                Source.DF, df=df)
+        detectors = [NullDetector(), ViolationDetector(), fixed_df_detector]
         hc.detect_errors(detectors)
 
         # 4. Repair errors utilizing the defined features.
