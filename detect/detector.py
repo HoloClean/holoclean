@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 
+
 class Detector:
     """
     This class is an abstract class for general error detection,
