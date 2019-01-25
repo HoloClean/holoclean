@@ -16,7 +16,8 @@ class ErrorsLoaderDetector(Detector):
         :param fpath: (str) path to csv file to load errors from.
         """
         super(ErrorsLoaderDetector, self).__init__(name)
-        self.errors_df = pd.read_csv(fpath, dtype=str, encoding='utf-8')
+        self.errors_df = pd.read_csv(fpath, 
+                dtype={'_tid_': int, 'attribute': str}, encoding='utf-8')
         if list(self.errors_df) != ['_tid_', 'attribute']:
             raise Exception('Invalid input file for ErrorsLoaderDetector  %s' % name)
 
