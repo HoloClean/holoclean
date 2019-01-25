@@ -27,7 +27,7 @@ class Parser:
         """
         tic = time.clock()
         if not self.ds.raw_data:
-            status = 'NO dataset specified'
+            status = 'No dataset specified'
             toc = time.clock()
             return status, toc - tic
         attrs = self.ds.raw_data.get_attributes()
@@ -42,7 +42,7 @@ class Parser:
                     self.dcs.append(DenialConstraint(line,attrs))
             status = 'DONE Loading DCs from {fname}'.format(fname=os.path.basename(fpath))
         except Exception:
-            logging.error('loading constraints for file %s', os.path.basename(fpath))
+            logging.error('FAILED to load constraints from file %s', os.path.basename(fpath))
             raise
         toc = time.clock()
         return status, toc - tic

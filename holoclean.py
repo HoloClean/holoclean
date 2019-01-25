@@ -8,6 +8,9 @@ from detect import DetectEngine
 from repair import RepairEngine
 from evaluate import EvalEngine
 
+logging.basicConfig(format="%(asctime)s - [%(levelname)5s] - %(message)s", datefmt='%H:%M:%S')
+
+
 # Arguments for HoloClean
 arguments = [
     (('-u', '--db_user'),
@@ -223,8 +226,7 @@ class Session:
         root_logger.setLevel(root_level)
         gensim_logger.setLevel(gensim_level)
 
-    def load_data(self, name, fpath, na_values=None,
-            entity_col=None, src_col=None):
+    def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None):
         """
         load_data takes the filepath to a CSV file to load as the initial dataset.
 
@@ -239,10 +241,13 @@ class Session:
             specifies the column containing the source for each "mention" of an
             entity.
         """
-        status, load_time = self.ds.load_data(name, fpath, na_values=na_values,
-                entity_col=entity_col, src_col=src_col)
+        status, load_time = self.ds.load_data(name,
+                                              fpath,
+                                              na_values=na_values,
+                                              entity_col=entity_col,
+                                              src_col=src_col)
         logging.info(status)
-        logging.debug('Time to load dataset: %.2f secs'%load_time)
+        logging.debug('Time to load dataset: %.2f secs', load_time)
 
     def load_dcs(self, fpath):
         """
@@ -252,7 +257,7 @@ class Session:
         """
         status, load_time = self.dc_parser.load_denial_constraints(fpath)
         logging.info(status)
-        logging.debug('Time to load dirty data: %.2f secs'%load_time)
+        logging.debug('Time to load dirty data: %.2f secs', load_time)
 
     def get_dcs(self):
         return self.dc_parser.get_dcs()
@@ -260,12 +265,12 @@ class Session:
     def detect_errors(self, detect_list):
         status, detect_time = self.detect_engine.detect_errors(detect_list)
         logging.info(status)
-        logging.debug('Time to detect errors: %.2f secs'%detect_time)
+        logging.debug('Time to detect errors: %.2f secs', detect_time)
 
     def setup_domain(self):
         status, domain_time = self.domain_engine.setup()
         logging.info(status)
-        logging.debug('Time to setup the domain: %.2f secs'%domain_time)
+        logging.debug('Time to setup the domain: %.2f secs', domain_time)
 
     def repair_errors(self, featurizers, infer_labeled):
         """
@@ -274,26 +279,26 @@ class Session:
         """
         status, feat_time = self.repair_engine.setup_featurized_ds(featurizers)
         logging.info(status)
-        logging.debug('Time to featurize data: %.2f secs'%feat_time)
+        logging.debug('Time to featurize data: %.2f secs', feat_time)
         status, setup_time = self.repair_engine.setup_repair_model()
         logging.info(status)
-        logging.debug('Time to setup repair model: %.2f secs' % feat_time)
+        logging.debug('Time to setup repair model: %.2f secs', feat_time)
         status, fit_time = self.repair_engine.fit_repair_model()
         logging.info(status)
-        logging.debug('Time to fit repair model: %.2f secs'%fit_time)
+        logging.debug('Time to fit repair model: %.2f secs', fit_time)
         status, infer_time = self.repair_engine.infer_repairs(infer_labeled)
         logging.info(status)
-        logging.debug('Time to infer correct cell values: %.2f secs'%infer_time)
+        logging.debug('Time to infer correct cell values: %.2f secs', infer_time)
         status, time = self.ds.get_inferred_values()
         logging.info(status)
-        logging.debug('Time to collect inferred values: %.2f secs' % time)
+        logging.debug('Time to collect inferred values: %.2f secs', time)
         status, time = self.ds.get_repaired_dataset()
         logging.info(status)
-        logging.debug('Time to store repaired dataset: %.2f secs' % time)
+        logging.debug('Time to store repaired dataset: %.2f secs', time)
         if self.env['print_fw']:
             status, time = self.repair_engine.get_featurizer_weights()
             logging.info(status)
-            logging.debug('Time to store featurizer weights: %.2f secs' % time)
+            logging.debug('Time to store featurizer weights: %.2f secs', time)
             return status
 
     def evaluate(self, fpath, tid_col, attr_col, val_col, infer_labeled, na_values=None):
@@ -307,6 +312,7 @@ class Session:
         :param val_col: (str) column in CSV that corresponds to correct value
             for the current TID and attribute (i.e. cell).
         :param infer_labeled: (bool) whether weak label cells were also inferred for or repaired.
+        :param na_values: (Any) how na_values are represented in the data.
         """
         name = self.ds.raw_data.name + '_clean'
         status, load_time = self.eval_engine.load_data(name, fpath, tid_col, attr_col, val_col, na_values=na_values)
@@ -314,5 +320,5 @@ class Session:
         logging.debug('Time to evaluate repairs: %.2f secs', load_time)
         status, report_time, report_list = self.eval_engine.eval_report(infer_labeled)
         logging.info(status)
-        logging.debug('Time to generate report: %.2f secs' % report_time)
+        logging.debug('Time to generate report: %.2f secs', report_time)
         return report_list

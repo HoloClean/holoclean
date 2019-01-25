@@ -1,7 +1,13 @@
 import pandas as pd
+
 from .detector import Detector
 
+
 class NullDetector(Detector):
+    """
+    An error detector that treats null values as errors.
+    """
+
     def __init__(self, name='NullDetector'):
         super(NullDetector, self).__init__(name)
 

@@ -19,29 +19,39 @@ predictions, and insights form noisy, incomplete, and erroneous data.
 
 ## Installation
 
-### 1. Install Postgres
+HoloClean was tested on Python versions 2.7, 3.6, and 3.7. 
+It requires PostgreSQL version 9.4 or higher.
 
-#### Ubuntu
 
-Install Postgres by running
-```bash
+### 1. Install and configure PostgreSQL
+
+We describe how to install PostgreSQL and configure it for HoloClean
+(creating a database, a user, and setting the required permissions).
+
+#### Option 1: Native installation of PostgreSQL
+
+A native installation of PostgreSQL runs faster than docker containers.
+We explain how to install PostgreSQL then how to configure it for HoloClean use.
+
+##### a. Installing PostgreSQL
+
+On Ubuntu, install PostgreSQL by running
+`
 $ apt-get install postgresql postgresql-contrib
-```
+`
 
-#### MacOS
+For macOS, you can find the installation instructions on
+[https://www.postgresql.org/download/macosx/](https://www.postgresql.org/download/macosx/)
 
-Installation instructions can be found at
-[https://www.postgresql.org/download/macosx/](https://www.postgresql.org/download/macosx/).
+##### b. Setting up PostgreSQL for HoloClean
 
-### 2. Setup Postgres for HoloClean
+By default, HoloClean needs a database `holo` and a user `holocleanuser` with permissions on it.
 
-To start the Postgres console from your terminal
-```bash
-$ psql --user <username>    # you can omit --user <username> to use current user
-```
+1. Start the PostgreSQL `psql` console from the terminal using \
+`$ psql --user <username>`. You can omit `--user <username>` to use current user.
 
-We then create a database `holo` and user `holo` (default settings for HoloClean)
-```
+2. Create a database `holo` and user `holocleanuser`
+```sql
 CREATE DATABASE holo;
 CREATE USER holocleanuser;
 ALTER USER holocleanuser WITH PASSWORD 'abcd1234';
@@ -50,70 +60,84 @@ GRANT ALL PRIVILEGES ON DATABASE holo TO holocleanuser;
 ALTER SCHEMA public OWNER TO holocleanuser;
 ```
 
-In general, to connect to the `holo` database from the Postgres psql console
-```
-\c holo
-```
+You can connect to the `holo` database from the PostgreSQL `psql` console by running
+`psql -U holocleanuser -W holo`.
 
 HoloClean currently populates the database `holo` with auxiliary and meta tables.
-To clear the database simply connect as a root user or as `holocleanuser` and run
-```
+To clear the database simply connect as a `root` user or as `holocleanuser` and run
+```sql
 DROP DATABASE holo;
 CREATE DATABASE holo;
 ```
 
-### 3. Set up HoloClean
+#### Option 2: Using a Docker Container
+If you are familiar with docker, an easy way to start using
+HoloClean is to start a PostgreSQL docker container.
 
-#### Virtual Environment
+To start a PostgreSQL docker container, run the following command:
 
-##### Option 1: Set up a conda Virtual Environment
+```bash
+docker run --name pghc \
+    -e POSTGRES_DB=holo -e POSTGRES_USER=holocleanuser -e POSTGRES_PASSWORD=abcd1234 \
+    -p 5432:5432 \
+    -d postgres:11
+```
 
-Install Conda using one of the following methods
+which starts a backend server and creates a database with the required permissions.
 
-##### Ubuntu
+You can then use `docker start pghc` and `docker stop pghc` to start/stop the container.
 
-For **32-bit machines** run
+
+Note the port number which may conflict with existing PostgreSQL servers.
+Read more about this docker image [here](https://hub.docker.com/_/postgres/). 
+
+### 2. Setting up HoloClean
+HoloClean runs on Python 2.7 or 3.6+. We recommend running it from within
+a virtual environment.
+
+#### Creating a virtual environment for HoloClean
+##### Option 1: Conda Virtual Environment
+
+First, install Conda using one of the following methods:
+
+* Ubuntu *32-bit machines* run
 ```bash
 $ wget https://repo.continuum.io/archive/Anaconda-2.3.0-Linux-x86.sh
 $ sh Anaconda-2.3.0-Linux-x86.sh
 ```
-
-For **64-bit machines** run
+* Ubuntu *64-bit machines* run
 ```bash
 $ wget https://repo.continuum.io/archive/Anaconda-2.3.0-Linux-x86_64.sh
 $ sh Anaconda-2.3.0-Linux-x86_64.sh
 ```
 
-##### MacOS
+* macOS, please follow the instructions [here](https://conda.io/projects/conda/en/latest/user-guide/install/macos.html) to install
+Anaconda (not miniconda).
 
-Follow instructions [here](https://conda.io/projects/conda/en/latest/user-guide/install/macos.html) to install
-Anaconda (NOT miniconda).
-
-##### Create a conda environment
-
-Create a **Python 2.7** conda environment by running
+Second, create a conda environment (python 2.7 or 3.6+).
+For example, to create a *Python 3.6* conda environment, run:
 
 ```bash
-$ conda create -n holo_env python=2.7
+$ conda create -n hc36 python=3.6
 ```
 
 Upon starting/restarting your terminal session, you will need to activate your
 conda environment by running
 ```bash
-$ source activate holo_env
+$ source activate hc36
 ```
-
-**NOTE: ensure your environment is activated throughout the installation process.**
 
 ##### Option 2: Set up a virtual environment using pip and Virtualenv
 
-If you are familiar with Virtualenv, create a new **Python 2.7** environment
-with your preferred Virtualenv wrapper, for example:
+If you are familiar with `virtualenv`, you can use it to create 
+a virtual environment.
 
-- [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/en/latest/) (Bourne-shells)
-- [virtualfish](https://virtualfish.readthedocs.io/en/latest/) (fish-shell)
+For Python 3.6, create a new environment
+with your preferred virtualenv wrapper, for example:
 
-##### Install Virtualenv
+* [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/en/latest/) (Bourne-shells)
+* [virtualfish](https://virtualfish.readthedocs.io/en/latest/) (fish-shell)
+
 
 Either follow instructions [here](https://virtualenv.pypa.io/en/stable/installation/) or install via
 `pip`
@@ -121,23 +145,21 @@ Either follow instructions [here](https://virtualenv.pypa.io/en/stable/installat
 $ pip install virtualenv
 ```
 
-##### Create a Virtualenv environment
-
-Create a new directory for a **Python 2.7** virtualenv environment
+Then, create a `virtualenv` environment by creating a new directory for a Python 3.6 virtualenv environment
 ```bash
-$ mkdir -p holo_env
-$ virtualenv --python=python holo_env
+$ mkdir -p hc36
+$ virtualenv --python=python3.6 hc36
 ```
-where `python` is a valid reference to a python executable.
+where `python3.6` is a valid reference to a Python 3.6 executable.
 
 Activate the environment
 ```bash
-$ source bin/activate
+$ source hc36/bin/activate
 ```
 
-**NOTE: ensure your environment is activated throughout the installation process.**
+#### Install the required python packages
 
-##### Install the requirements of HoloClean
+*Note: make sure that the environment is activated throughout the installation process.*
 
 In the project root directory, run the following to install the required packages.
 Note that this commands installs the packages within the activated virtual environment.
@@ -146,12 +168,12 @@ Note that this commands installs the packages within the activated virtual envir
 $ pip install -r requirements.txt
 ```
 
-### Note about MacOS
 
-If you are on MacOS, you may need to install XCode developer tools using the command `xcode-select --install`.
+*Note for macOS Users:*\
+if you are on macOS, you may need to install XCode developer tools using the command `xcode-select --install`.
 
 
-## Usage
+## Running HoloClean
 
 See the code in `examples/holoclean_repair_example.py` for a documented usage of HoloClean.
 
@@ -161,4 +183,4 @@ $ cd examples
 $ ./start_example.sh
 ```
 
-The script sets up the python path environment for running holoclean.
+Notice that the script sets up the Python path environment to run HoloClean.

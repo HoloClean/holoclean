@@ -2,14 +2,11 @@ import unittest
 
 import holoclean
 from detect import NullDetector, ViolationDetector
-from repair.featurize import InitAttFeaturizer
-from repair.featurize import InitSimFeaturizer
-from repair.featurize import OccurAttrFeaturizer
-from repair.featurize import FreqFeaturizer
-from repair.featurize import ConstraintFeat
+from repair.featurize import *
 
 
-class TestHolocleanRepair(unittest.TestCase):
+class TestHoloCleanRepair(unittest.TestCase):
+
     def test_hospital(self):
         # 1. Setup a HoloClean session.
         hc = holoclean.HoloClean(
@@ -23,7 +20,7 @@ class TestHolocleanRepair(unittest.TestCase):
             threads=1,
             batch_size=32,
             verbose=True,
-            timeout=3*60000,
+            timeout=3 * 60000,
             print_fw=True
         ).session
 
@@ -39,19 +36,24 @@ class TestHolocleanRepair(unittest.TestCase):
         # 4. Repair errors utilizing the defined features.
         hc.setup_domain()
         featurizers = [
-            InitAttFeaturizer(),
+            InitAttrFeaturizer(),
             InitSimFeaturizer(),
             OccurAttrFeaturizer(),
             FreqFeaturizer(),
             ConstraintFeat()
-            ]
+        ]
 
         infer_labeled = True
 
-        hc.repair_errors(featurizers, infer_labeled)
+        hc.repair_errors(featurizers, infer_labeled=infer_labeled)
 
         # 5. Evaluate the correctness of the results.
-        hc.evaluate('../testdata/hospital_100_clean.csv', 'tid', 'attribute', 'correct_val', infer_labeled)
+        hc.evaluate(fpath='../testdata/hospital_100_clean.csv',
+                    tid_col='tid',
+                    attr_col='attribute',
+                    val_col='correct_val',
+                    infer_labeled=infer_labeled)
+
 
 if __name__ == '__main__':
     unittest.main()

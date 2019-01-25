@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 import copy
 import logging
+
 import pandas as pd
 import torch
 from torch.utils.data import TensorDataset, DataLoader
@@ -8,6 +9,7 @@ from tqdm import tqdm
 
 from ..estimator import Estimator
 from utils import dictify_df
+
 
 class RecurrentLogistic(Estimator, torch.nn.Module):
     """
@@ -19,7 +21,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
 
     def __init__(self, dataset, pruned_domain, active_attrs):
         """
-        :param dataset: (Dataset)
+        :param dataset: (Dataset) original dataset
         :param pruned_domain: (dict) of tid -> attr -> value for the domain
         :param active_attrs: (list[str]) attributes that have random values
         """
@@ -34,18 +36,18 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         # a training sample for.
         self.n_samples = sum(len(dom) for _, attrs in self.dom.items() for _, dom in attrs.items())
 
-        # make a copy of the raw data as our current data
+        # Make a copy of the raw data as our current data.
         self.cur_df = self.ds.get_raw_data().copy()
 
-        # generate featurizers
+        # Generate featurizers for this model.
         self._update_featurizers()
 
-        # make a copy of the initial featurizers for prediction/test set
-        # i.e. we want to use our original co-occurrence statistics
+        # Make a copy of the initial featurizers for prediction/test set
+        # i.e., we want to use our original co-occurrence statistics.
         self.test_featurizers = [feat.copy() for feat in self.train_featurizers]
 
-        # pytorch logistic regression model
-        self._W = torch.nn.Parameter(torch.zeros(self.num_features,1))
+        # Use pytorch logistic regression model.
+        self._W = torch.nn.Parameter(torch.zeros(self.num_features, 1))
         torch.nn.init.xavier_uniform_(self._W)
         self._B = torch.nn.Parameter(torch.Tensor([1e-6]))
         self._loss = torch.nn.BCELoss()
@@ -56,11 +58,11 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         Reinitialize featurizers that depend on updated current values.
         """
 
-        # Featurizers used for training
+        # Featurizers used for training.
         self.train_featurizers = [
-                CooccurAttrFeaturizer(self.cur_df, self.attrs),
-                ]
-        # initialize featurizers
+            CooccurAttrFeaturizer(self.cur_df, self.attrs),
+        ]
+        # Initialize featurizers.
         [feat.setup() for feat in self.train_featurizers]
 
         self.num_features = sum(feat.num_features() for feat in self.train_featurizers)
@@ -70,7 +72,6 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         _update_training_data (re-)constructs the self._X and self._Y training
         tensors from self.cur_df (DataFrame of current values).
         """
-
         # Each row corresponds to a possible value for a given attribute and given TID
         self._X = torch.zeros(self.n_samples, self.num_features)
         self._Y = torch.zeros(self.n_samples)
@@ -85,22 +86,23 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
             for attr in self.active_attrs:
                 domain_vals = self.dom[row['_tid_']][attr]
                 domain_idx_df += [{'_tid_': row['_tid_'],
-                    'attr': attr,
-                    'val': val} for val in domain_vals]
+                                   'attr': attr,
+                                   'val': val}
+                                  for val in domain_vals]
 
-                # Initialize our X matrix with features from featurizers
+                # Initialize our X matrix with features from featurizers.
                 feat_tensor = self._gen_train_tensor(row, attr, domain_vals)
                 assert(feat_tensor.shape[0] == len(domain_vals))
                 self._X[sample_idx:sample_idx+len(domain_vals)] = feat_tensor
 
-                # target label is our initial value
+                # Target label is our initial value.
                 if row[attr] in domain_vals:
                     init_val_idx = domain_vals.index(row[attr])
-                    self._Y[sample_idx+init_val_idx] = 1
+                    self._Y[sample_idx + init_val_idx] = 1
 
                 sample_idx += len(domain_vals)
 
-        # Map index (along first dimension) in self._X and self._Y to domain values
+        # Map index (along first dimension) in self._X and self._Y to domain values.
         self._domain_idx_df = pd.DataFrame(domain_idx_df)
 
     def _gen_train_tensor(self, row, attr, values):
@@ -151,21 +153,20 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
 
     def forward(self, X):
         linear = X.matmul(self._W) + self._B
-        return torch.nn.functional.sigmoid(linear)
+        return torch.sigmoid(linear)
 
     def train(self, num_recur=1, num_epochs=3, batch_size=32):
         """
+        Trains the LR model. Updates the current values with the maximum a posteriori after
+        each recurrent iteration.
         :param num_recur: (int) number of times to train model.
         :param num_epochs: (int) number of epochs PER recurrent iteration.
         :param batch_size: (int) size of batch in stochastic gradient descent.
-
-        We update the current values with the maximum a posteriori after each recurrent iteration.
         """
-
         batch_losses = []
-        for recur_idx in range(1, num_recur+1):
+        for recur_idx in range(1, num_recur + 1):
             # We need to update our statistics in featurizers on the 2nd and
-            # later iteration with our newest current values
+            # later iteration with our newest current values.
             if recur_idx > 1:
                 self._update_featurizers()
             self._update_training_data()
@@ -173,7 +174,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
 
             logging.info("RecurrentLogistic: training, recur iteration: %d", recur_idx)
 
-            # Main training loop
+            # Main training loop.
             for epoch_idx in range(1, num_epochs+1):
                 logging.info("RecurrentLogistic: epoch %d", epoch_idx)
                 batch_cnt = 0
@@ -184,8 +185,8 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
                     self.zero_grad()
                     batch_loss.backward()
                     self._optimizer.step()
-                    batch_cnt+=1
-                logging.info('RecurrentLogistic: average batch loss is %.3f', sum(batch_losses[-1*batch_cnt:]) / batch_cnt)
+                    batch_cnt += 1
+                logging.info('RecurrentLogistic: average batch loss is %.3f', sum(batch_losses[-1 * batch_cnt:]) / batch_cnt)
                 # TODO(richardwu): update cur_df with predictions
 
         return batch_losses
@@ -203,13 +204,15 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
 
     def predict_pp_batch(self, raw_records_by_tid, cell_domain_rows):
         """
+        Performs batch prediction.
         :param raw_records_by_tid: (dict) maps TID to its corresponding row (record) in the raw data
         :param cell_domain_rows: (list[pd.record]) list of records from the cell domain DF
         """
         logging.info('RecurrentLogistic: constructing batch feature tensor for %d cells...', cell_domain_rows.shape[0])
         X_tensors = []
         for row in tqdm(cell_domain_rows):
-            X_tensors.append(self._gen_test_tensor(raw_records_by_tid[row['_tid_']], row['attribute'], row['domain'].split('|||')))
+            X_tensors.append(self._gen_test_tensor(raw_records_by_tid[row['_tid_']],
+                                                   row['attribute'], row['domain'].split('|||')))
         pred_X = torch.cat(X_tensors, dim=0)
         logging.info('RecurrentLogistic: predicting posterior probabilities for batch feature tensor...')
         pred_Y = self.forward(pred_X)
@@ -218,7 +221,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         logging.info('RecurrentLogistic: segmenting predictions by cell...')
         probs_by_row = []
         for row in cell_domain_rows:
-            # Create list of (value, proba) for each cell
+            # Create list of (value, proba) for each cell.
             probs_by_row.append(list(zip(row['domain'].split('|||'),
                 map(float, pred_Y[cur_idx:cur_idx+row['domain_size']]))))
             cur_idx += row['domain_size']
@@ -328,6 +331,7 @@ class CooccurFeaturizer(Featurizer):
         temp.freq = copy.deepcopy(self.freq)
         temp.cooccur_freq = copy.deepcopy(self.cooccur_freq)
         return temp
+
 
 class CooccurAttrFeaturizer(CooccurFeaturizer):
     """

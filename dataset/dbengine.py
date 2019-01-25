@@ -1,14 +1,16 @@
-import logging
-import sqlalchemy as sql
-import time
-from string import Template
-from multiprocessing import Pool
 from functools import partial
+import logging
+from multiprocessing import Pool
+from string import Template
+import time
+
 import psycopg2
+import sqlalchemy as sql
 
 index_template = Template('CREATE INDEX $idx_title ON $table ($attr)')
 drop_table_template = Template('DROP TABLE IF EXISTS $tab_name')
 create_table_template = Template('CREATE TABLE $tab_name AS ($stmt)')
+
 
 class DBengine:
     """
@@ -88,7 +90,7 @@ class DBengine:
 
         :param name: (str) name of index
         :param table: (str) name of table
-        :param attr: (list[str]) list of attributes/columns to create index on
+        :param attr_list: (list[str]) list of attributes/columns to create index on
         """
         # We need to quote each attribute since Postgres auto-downcases unquoted column references
         quoted_attrs = map(lambda attr: '"{}"'.format(attr), attr_list)
@@ -106,6 +108,7 @@ class DBengine:
             return list(map(func, collection))
         return self._pool.map(func, collection)
 
+
 def _execute_query(args, conn_args):
     query_id = args[0]
     query = args[1]
@@ -117,8 +120,9 @@ def _execute_query(args, conn_args):
     res = cur.fetchall()
     con.close()
     toc = time.clock()
-    logging.debug('Time to execute query with id %d: %.2f secs' % (query_id, (toc - tic)))
+    logging.debug('Time to execute query with id %d: %.2f secs', query_id, (toc - tic))
     return res
+
 
 def _execute_query_w_backup(args, conn_args, timeout):
     query_id = args[0]
