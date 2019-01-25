@@ -211,7 +211,11 @@ class Dataset:
                 <count>: frequency (# of entities) where attr1=val1 AND attr2=val2
         """
         if not self.stats_ready:
+            logging.debug('computing frequency and co-occurrence statistics from raw data...')
+            tic = time.clock()
             self.collect_stats()
+            logging.debug('DONE computing statistics in %.2fs', time.clock() - tic)
+
         stats = (self.total_tuples, self.single_attr_stats, self.pair_attr_stats)
         self.stats_ready = True
         return stats
@@ -228,6 +232,7 @@ class Dataset:
               <count>: frequency (# of entities) where attr1: val1 AND attr2: val2
             Also known as co-occurrence count.
         """
+        logging.debug("Collecting single/pair-wise statistics...")
         self.total_tuples = self.get_raw_data().shape[0]
         # Single attribute-value frequency.
         for attr in self.get_attributes():

@@ -18,7 +18,8 @@ class NullDetector(Detector):
 
     def detect_noisy_cells(self):
         """
-        Returns a pandas.DataFrame containing all cells with NULL values.
+        detect_noisy_cells returns a pandas.DataFrame containing all cells with
+        NULL values.
 
         :return: pandas.DataFrame with columns:
             _tid_: entity ID

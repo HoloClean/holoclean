@@ -19,6 +19,7 @@ class FeaturizedDataset:
         self.processes = self.env['threads']
         for f in featurizers:
             f.setup_featurizer(self.ds, self.total_vars, self.classes, self.processes, self.env['batch_size'])
+        logging.debug('featurizing training data...')
         tensors = [f.create_tensor() for f in featurizers]
         self.featurizer_info = [FeatInfo(featurizer.name,
                                          tensor.size()[2],
@@ -27,8 +28,8 @@ class FeaturizedDataset:
                                          featurizer.feature_names())
                                 for tensor, featurizer in zip(tensors, featurizers)]
         tensor = torch.cat(tensors, 2)
-
         self.tensor = tensor
+        logging.debug('DONE featurization.')
 
         if self.env['debug_mode']:
             weights_df = pd.DataFrame(self.tensor.reshape(-1, self.tensor.shape[-1]).numpy())
@@ -39,8 +40,12 @@ class FeaturizedDataset:
 
         # TODO: remove after we validate it is not needed.
         self.in_features = self.tensor.shape[2]
+        logging.debug("generating weak labels...")
         self.weak_labels, self.labels_type = self.generate_weak_labels()
+        logging.debug("DONE generating weak labels.")
+        logging.debug("generating mask...")
         self.var_class_mask, self.var_to_domsize = self.generate_var_mask()
+        logging.debug("DONE generating mask.")
 
     def generate_weak_labels(self):
         """
@@ -51,7 +56,6 @@ class FeaturizedDataset:
             contains the domain index of the initial value for the i-th
             variable/VID.
         """
-        logging.debug("Generating weak labels...")
         # Trains with clean cells AND cells that have been weak labelled.
         query = 'SELECT _vid_, weak_label_idx, fixed ' \
                 'FROM {} AS t1 LEFT JOIN {} AS t2 ON t1._cid_ = t2._cid_ ' \
@@ -70,7 +74,6 @@ class FeaturizedDataset:
             fixed = int(tuple[2])
             labels[vid] = label
             labels_type[vid] = fixed
-        logging.debug("DONE generating weak labels.")
         return labels, labels_type
 
     def generate_var_mask(self):
@@ -87,7 +90,6 @@ class FeaturizedDataset:
             where tensor[i][j] = 0 iff the value corresponding to domain index 'j'
             is valid for the i-th VID and tensor[i][j] = -10e6 otherwise.
         """
-        logging.debug("Generating mask.")
         var_to_domsize = {}
         query = 'SELECT _vid_, domain_size FROM %s' % AuxTables.cell_domain.name
         res = self.ds.engine.execute_query(query)
@@ -97,7 +99,6 @@ class FeaturizedDataset:
             max_class = int(tuple[1])
             mask[vid, max_class:] = -10e6
             var_to_domsize[vid] = max_class
-        logging.debug("DONE generating mask.")
         return mask, var_to_domsize
 
     def get_tensor(self):

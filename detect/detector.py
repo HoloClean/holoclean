@@ -13,7 +13,7 @@ class Detector:
         """
         Construct error detection object
         
-        :param dataset: A dataset object
+        :param name: The name of the error detector
         """
         self.name = name
         self.ds = None

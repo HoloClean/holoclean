@@ -7,9 +7,9 @@ import time
 import psycopg2
 import sqlalchemy as sql
 
-index_template = Template('CREATE INDEX $idx_title ON $table ($attr)')
-drop_table_template = Template('DROP TABLE IF EXISTS $tab_name')
-create_table_template = Template('CREATE TABLE $tab_name AS ($stmt)')
+index_template = Template('CREATE INDEX $idx_title ON "$table" ($attrs)')
+drop_table_template = Template('DROP TABLE IF EXISTS "$table"')
+create_table_template = Template('CREATE TABLE "$table" AS ($stmt)')
 
 
 class DBengine:
@@ -72,8 +72,8 @@ class DBengine:
 
     def create_db_table_from_query(self, name, query):
         tic = time.clock()
-        drop = drop_table_template.substitute(tab_name=name)
-        create = create_table_template.substitute(tab_name=name, stmt=query)
+        drop = drop_table_template.substitute(table=name)
+        create = create_table_template.substitute(table=name, stmt=query)
         conn = self.engine.connect()
         conn.execute(drop)
         conn.execute(create)
@@ -94,7 +94,7 @@ class DBengine:
         """
         # We need to quote each attribute since Postgres auto-downcases unquoted column references
         quoted_attrs = map(lambda attr: '"{}"'.format(attr), attr_list)
-        stmt = index_template.substitute(idx_title=name, table=table, attr=','.join(quoted_attrs))
+        stmt = index_template.substitute(idx_title=name, table=table, attrs=','.join(quoted_attrs))
         tic = time.clock()
         conn = self.engine.connect()
         result = conn.execute(stmt)
