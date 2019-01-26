@@ -9,6 +9,7 @@ class Source(Enum):
     DB   = 3
     SQL  = 4
 
+
 class Table:
     """
     A wrapper class for Dataset Tables.
