@@ -41,7 +41,7 @@ class FeaturizedDataset:
         # TODO: remove after we validate it is not needed.
         self.in_features = self.tensor.shape[2]
         logging.debug("generating weak labels...")
-        self.weak_labels, self.labels_type = self.generate_weak_labels()
+        self.weak_labels, self.labels_type, self.is_clean = self.generate_weak_labels()
         logging.debug("DONE generating weak labels.")
         logging.debug("generating mask...")
         self.var_class_mask, self.var_to_domsize = self.generate_var_mask()
@@ -57,7 +57,7 @@ class FeaturizedDataset:
             variable/VID.
         """
         # Trains with clean cells AND cells that have been weak labelled.
-        query = 'SELECT _vid_, weak_label_idx, fixed ' \
+        query = 'SELECT _vid_, weak_label_idx, fixed, (t2._cid_ IS NULL) AS clean ' \
                 'FROM {} AS t1 LEFT JOIN {} AS t2 ON t1._cid_ = t2._cid_ ' \
                 'WHERE t2._cid_ is NULL ' \
                 '   OR t1.fixed != {};'.format(AuxTables.cell_domain.name,
@@ -68,13 +68,16 @@ class FeaturizedDataset:
             raise Exception("No weak labels available. Reduce pruning threshold.")
         labels = -1 * torch.ones(self.total_vars, 1).type(torch.LongTensor)
         labels_type = -1 * torch.ones(self.total_vars, 1).type(torch.LongTensor)
+        is_clean = torch.zeros(self.total_vars, 1).type(torch.LongTensor)
         for tuple in tqdm(res):
             vid = int(tuple[0])
             label = int(tuple[1])
             fixed = int(tuple[2])
+            clean = int(tuple[3])
             labels[vid] = label
             labels_type[vid] = fixed
-        return labels, labels_type
+            is_clean[vid] = clean
+        return labels, labels_type, is_clean
 
     def generate_var_mask(self):
         """
@@ -123,14 +126,20 @@ class FeaturizedDataset:
 
     def get_infer_data(self, infer_labeled):
         """
-        :param infer_labeled: (bool) infer also for cells that have been used with weak labels
+        Retrieves the samples to be inferred. Normally this is just the DK cells,
+        but if :param infer_labeled: is True then we infer on ALL cells (DK and
+        clean).
+
+        :param infer_labeled: (bool) infer also for cells that have been used
+            with weak labels.
         """
         if infer_labeled:
             infer_idx = (self.labels_type <= CellStatus.SINGLE_VALUE.value).nonzero()[:, 0]
             X_infer = self.tensor.index_select(0, infer_idx)
             mask_infer = self.var_class_mask.index_select(0, infer_idx)
         else:
-            infer_idx = (self.weak_labels == -1).nonzero()[:, 0]
+            # only infer on those that are DK cells
+            infer_idx = (self.is_clean == 0).nonzero()[:, 0]
             X_infer = self.tensor.index_select(0, infer_idx)
             mask_infer = self.var_class_mask.index_select(0, infer_idx)
         return X_infer, mask_infer, infer_idx

@@ -103,6 +103,12 @@ class EvalEngine:
         return report, report_time, report_list
 
     def compute_total_repairs(self):
+        """
+        compute_total_repairs memoizes the number of repairs:
+        the # of cells that were inferred and where the inferred value
+        is not equal to the initial value.
+        """
+
         query = "SELECT count(*) FROM " \
                 "  (SELECT _vid_ " \
                 "     FROM {} as t1, {} as t2 " \
@@ -114,6 +120,11 @@ class EvalEngine:
         self.total_repairs = float(res[0][0])
 
     def compute_total_repairs_grdt(self):
+        """
+        compute_total_repairs_grdt memoizes the number of repairs for cells
+        that are specified in the clean/ground truth data. Otherwise repairs
+        are defined the same as compute_total_repairs.
+        """
         query = "SELECT count(*) FROM " \
                 "  (SELECT _vid_ " \
                 "   FROM   {} as t1, {} as t2, {} as t3 " \
@@ -128,19 +139,10 @@ class EvalEngine:
         self.total_repairs_grdt = float(res[0][0])
 
     def compute_total_errors(self):
-        queries = []
-        total_errors = 0.0
-        for attr in self.ds.get_attributes():
-            query = errors_template.substitute(init_table=self.ds.raw_data.name,
-                                               grdt_table=self.clean_data.name,
-                                               attr=attr)
-            queries.append(query)
-        results = self.ds.engine.execute_queries(queries)
-        for res in results:
-            total_errors += float(res[0][0])
-        self.total_errors = total_errors
-
-    def compute_total_errors_grdt(self):
+        """
+        compute_total_errors memoizes the number of cells that have a
+        wrong initial value: requires ground truth data.
+        """
         queries = []
         total_errors = 0.0
         for attr in self.ds.get_attributes():
@@ -154,6 +156,13 @@ class EvalEngine:
         self.total_errors = total_errors
 
     def compute_detected_errors(self):
+        """
+        compute_detected_errors memoizes the number of error cells that
+        were detected in error detection: requires ground truth.
+
+        This value is always equal or less than total errors (see
+        compute_total_errors).
+        """
         query = "SELECT count(*) FROM " \
                 "  (SELECT _vid_ " \
                 "   FROM   %s as t1, %s as t2, %s as t3 " \
@@ -165,6 +174,16 @@ class EvalEngine:
         self.detected_errors = float(res[0][0])
 
     def compute_correct_repairs(self):
+        """
+        compute_correct_repairs memoizes the number of error cells
+        that were correctly inferred.
+
+        This value is always equal or less than total errors (see
+        compute_total_errors).
+
+        Note that this value can be greater than detected errors if inference
+        is performed on non-dk cells (e.g. when infer_labeled = True).
+        """
         queries = []
         correct_repairs = 0.0
         for attr in self.ds.get_attributes():
@@ -177,12 +196,18 @@ class EvalEngine:
         self.correct_repairs = correct_repairs
 
     def compute_recall(self):
+        """
+        Computes the recall (# of correct repairs / # of total errors).
+        """
         if self.total_errors == 0:
             return 0
         return self.correct_repairs / self.total_errors
 
     def compute_repairing_recall(self, infer_labeled):
         """
+        Computes the _repairing_ recall (# of correct repairs / # of total
+        _detected_ errors).
+
         :param infer_labeled: (bool) whether weak label cells were inferred for/repaired
         """
         # If cells with weak labels (used for training) were also repaired/inferred,
@@ -195,6 +220,9 @@ class EvalEngine:
         return self.correct_repairs / self.detected_errors
 
     def compute_precision(self):
+        """
+        Computes precision (# correct repairs / # of total repairs w/ ground truth)
+        """
         if self.total_repairs_grdt == 0:
             return 0
         return self.correct_repairs / self.total_repairs_grdt
