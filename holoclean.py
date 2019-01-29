@@ -9,6 +9,10 @@ from repair import RepairEngine
 from evaluate import EvalEngine
 
 logging.basicConfig(format="%(asctime)s - [%(levelname)5s] - %(message)s", datefmt='%H:%M:%S')
+root_logger = logging.getLogger()
+gensim_logger = logging.getLogger('gensim')
+root_logger.setLevel(logging.INFO)
+gensim_logger.setLevel(logging.WARNING)
 
 
 # Arguments for HoloClean
@@ -214,13 +218,9 @@ class Session:
         :param name: Name for the Holoclean session
         """
         # use DEBUG logging level if verbose enabled
-        root_logger = logging.getLogger()
-        gensim_logger = logging.getLogger('gensim')
-        root_level, gensim_level = logging.INFO, logging.WARNING
         if env['verbose']:
-            root_level, gensim_level = logging.DEBUG, logging.DEBUG
-        root_logger.setLevel(root_level)
-        gensim_logger.setLevel(gensim_level)
+            root_logger.setLevel(logging.DEBUG)
+            gensim_logger.setLevel(logging.DEBUG)
 
         logging.info('initiating session with parameters: %s', env)
 
