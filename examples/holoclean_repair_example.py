@@ -22,8 +22,8 @@ hc = holoclean.HoloClean(
 ).session
 
 # 2. Load training data and denial constraints.
-hc.load_data('hospital_100', '../testdata/hospital_100.csv')
-hc.load_dcs('../testdata/hospital_constraints_att.txt')
+hc.load_data('hospital', '../testdata/hospital.csv')
+hc.load_dcs('../testdata/hospital_constraints.txt')
 hc.ds.set_constraints(hc.get_dcs())
 
 # 3. Detect erroneous cells using these two detectors.

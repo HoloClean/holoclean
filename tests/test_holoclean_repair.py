@@ -9,12 +9,12 @@ def test_hospital():
         pruning_topk=0.0,
         weak_label_thresh=0.90,
         domain_prune_thresh=0,
-        max_domain=100,
+        max_domain=10000,
         cor_strength=0.0,
         epochs=20,
-        weight_decay=0.1,
+        weight_decay=0.01,
         threads=1,
-        batch_size=32,
+        batch_size=1,
         verbose=True,
         timeout=3 * 60000,
         print_fw=True
@@ -22,7 +22,7 @@ def test_hospital():
 
     # 2. Load training data and denial constraints.
     hc.load_data('hospital_100', '../testdata/hospital_100.csv')
-    hc.load_dcs('../testdata/hospital_constraints_att.txt')
+    hc.load_dcs('../testdata/hospital_constraints.txt')
     hc.ds.set_constraints(hc.get_dcs())
 
     # 3. Detect erroneous cells using these two detectors.
