@@ -249,8 +249,9 @@ class DomainEngine:
         domain_df = pd.DataFrame(data=cells)
         logging.debug('DONE generating initial set of domain values in %.2f', time.clock() - tic)
 
-        # Skip estimator model.
-        if not self.env['estimator_enabled']:
+        # Skip estimator model since we do not require any weak labelling or domain
+        # pruning based on posterior probabilities.
+        if self.env['weak_label_thresh'] == 1 and self.env['domain_prune_thresh'] == 0:
             return domain_df
 
         # Run pruned domain values from correlated attributes above through
