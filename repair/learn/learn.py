@@ -21,8 +21,9 @@ class TiedLinear(torch.nn.Module):
             in_features are the features with shared weights across the classes
     """
 
-    def __init__(self, feat_info, output_dim, bias=False):
+    def __init__(self, env, feat_info, output_dim, bias=False):
         super(TiedLinear, self).__init__()
+        self.env = env
         # Init parameters
         self.in_features = 0.0
         self.weight_list = ParameterList()
@@ -84,7 +85,7 @@ class RepairModel:
         # A list of tuples (name, is_featurizer_learnable, featurizer_output_size, init_weight, feature_names (list))
         self.feat_info = feat_info
         self.output_dim = output_dim
-        self.model = TiedLinear(feat_info, output_dim, bias)
+        self.model = TiedLinear(self.env, feat_info, output_dim, bias)
         self.featurizer_weights = {}
 
     def fit_model(self, X_train, Y_train, mask_train):
