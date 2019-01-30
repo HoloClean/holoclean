@@ -6,6 +6,7 @@ from torch import optim
 from torch.autograd import Variable
 from torch.nn import Parameter, ParameterList
 from torch.nn.functional import softmax
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 import numpy as np
 
@@ -52,7 +53,12 @@ class TiedLinear(torch.nn.Module):
         tensor.data.uniform_(-stdv, stdv)
 
     def concat_weights(self):
-        self.W = torch.cat([t.expand(self.output_dim, -1) for t in self.weight_list],-1)
+        self.W = torch.cat([t for t in self.weight_list],-1)
+        # Normalize weights.
+        if self.env['weight_norm']:
+            self.W = self.W.div(self.W.norm(p=2))
+        # expand so we can do matrix multiplication with each cell and their max # of domain values
+        self.W = self.W.expand(self.output_dim, -1)
         if self.bias_flag:
             self.B = torch.cat([t.expand(self.output_dim, -1) for t in self.bias_list],-1)
 
@@ -83,21 +89,36 @@ class RepairModel:
 
     def fit_model(self, X_train, Y_train, mask_train):
         n_examples, n_classes, n_features = X_train.shape
+
         loss = torch.nn.CrossEntropyLoss()
         trainable_parameters = filter(lambda p: p.requires_grad, self.model.parameters())
         if self.env['optimizer'] == 'sgd':
             optimizer = optim.SGD(trainable_parameters, lr=self.env['learning_rate'], momentum=self.env['momentum'],
                                   weight_decay=self.env['weight_decay'])
         else:
-            optimizer = optim.Adam(trainable_parameters, weight_decay=self.env['weight_decay'])
+            optimizer = optim.Adam(trainable_parameters, lr=self.env['learning_rate'], weight_decay=self.env['weight_decay'])
+
+        # lr_sched = ReduceLROnPlateau(optimizer, 'min', verbose=True, eps=1e-5, patience=5)
+
         batch_size = self.env['batch_size']
         epochs = self.env['epochs']
         for i in tqdm(range(epochs)):
+            # Randomly shuffle X, Y, and mask every time
+            shuffle_idxs = np.random.permutation(X_train.shape[0])
+            X_train = X_train[shuffle_idxs,:,:]
+            Y_train = Y_train[shuffle_idxs,:]
+            mask_train = mask_train[shuffle_idxs,:]
             cost = 0.
             num_batches = n_examples // batch_size
             for k in range(num_batches):
                 start, end = k * batch_size, (k + 1) * batch_size
                 cost += self.__train__(loss, optimizer, X_train[start:end], Y_train[start:end], mask_train[start:end])
+
+            # Y_pred = self.__predict__(X_train, mask_train)
+            # train_loss = loss.forward(Y_pred, Variable(Y_train, requires_grad=False).squeeze(1))
+            # logging.debug('overall training loss: %f', train_loss)
+            # lr_sched.step(train_loss)
+
             if self.env['verbose']:
                 # Compute and print accuracy at the end of epoch
                 grdt = Y_train.numpy().flatten()
@@ -106,6 +127,7 @@ class RepairModel:
                 logging.debug("Epoch %d, cost = %f, acc = %.2f%%",
                         i + 1, cost / num_batches,
                         100. * np.mean(Y_assign == grdt))
+
 
     def infer_values(self, X_pred, mask_pred):
         output = self.__predict__(X_pred, mask_pred)

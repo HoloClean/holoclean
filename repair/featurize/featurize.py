@@ -5,6 +5,7 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 
 from dataset import AuxTables, CellStatus
 
@@ -29,6 +30,12 @@ class FeaturizedDataset:
                                 for tensor, featurizer in zip(tensors, featurizers)]
         tensor = torch.cat(tensors, 2)
         self.tensor = tensor
+
+        if self.env['feature_norm']:
+            n_cells, n_classes, n_feats = self.tensor.shape
+            # normalize within each cell the features
+            self.tensor = F.normalize(self.tensor, p=2, dim=1)
+
         logging.debug('DONE featurization.')
 
         if self.env['debug_mode']:

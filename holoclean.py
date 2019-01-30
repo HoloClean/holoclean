@@ -125,12 +125,18 @@ arguments = [
       'default': 0.1,
       'type': float,
       'help': 'Correlation threshold (absolute) when selecting correlated attributes for domain pruning.'}),
-    (('-wlt', '--estimator-enabled'),
-     {'metavar': 'ESTIMATOR_ENABLED',
-      'dest': 'estimator_enabled',
-      'default': True,
+    (('-wlt', '--feature-norm'),
+     {'metavar': 'FEATURE_NORM',
+      'dest': 'feature_norm',
+      'default': False,
       'type': bool,
-      'help': 'Enables the posterior estimator for weak labelling and domain generation.'}),
+      'help': 'Normalize the features before training.'}),
+    (('-wlt', '--weight_norm'),
+     {'metavar': 'WEIGHT_NORM',
+      'dest': 'weight_norm',
+      'default': False,
+      'type': bool,
+      'help': 'Normalize the weights after every forward pass during training.'}),
 ]
 
 # Flags for Holoclean mode
