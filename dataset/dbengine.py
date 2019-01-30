@@ -138,6 +138,12 @@ def _execute_query_w_backup(args, conn_args, timeout):
         res = cur.fetchall()
     except psycopg2.extensions.QueryCanceledError as e:
         logging.debug("Failed to execute query %s with id %s. Timeout reached.", query, query_id)
+
+        # No backup query, simply return empty result
+        if not query_backup:
+            logging.warn("no backup query to execute, returning empty query results")
+            return []
+
         logging.debug("Starting to execute backup query %s with id %s", query_backup, query_id)
         con.close()
         con = psycopg2.connect(conn_args)
