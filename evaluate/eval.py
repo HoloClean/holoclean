@@ -79,6 +79,10 @@ class EvalEngine:
         rep_recall = self.compute_repairing_recall(infer_labeled)
         f1 = self.compute_f1()
         rep_f1 = self.compute_repairing_f1(infer_labeled)
+
+        if self.env['verbose']:
+            self.log_weak_label_stats()
+
         return prec, rec, rep_recall, f1, rep_f1
 
     def eval_report(self, infer_labeled):
@@ -230,6 +234,8 @@ class EvalEngine:
     def compute_f1(self):
         prec = self.compute_precision()
         rec = self.compute_recall()
+        if prec+rec == 0:
+            return 0
         f1 = 2*(prec*rec)/(prec+rec)
         return f1
 
@@ -239,5 +245,57 @@ class EvalEngine:
         """
         prec = self.compute_precision()
         rec = self.compute_repairing_recall(infer_labeled)
+        if prec+rec == 0:
+            return 0
         f1 = 2*(prec*rec)/(prec+rec)
         return f1
+
+    def log_weak_label_stats(self):
+        query = """
+        select
+            (t3._tid_ is NULL) as clean,
+            (t1.fixed) as status,
+            (t4._tid_ is NOT NULL) as inferred,
+            (t1.init_value = t2._value_) as init_eq_grdth,
+            (t1.init_value = t4.rv_value) as init_eq_infer,
+            (t1.weak_label = t1.init_value) as wl_eq_init,
+            (t1.weak_label = t2._value_) as wl_eq_grdth,
+            (t1.weak_label = t4.rv_value) as wl_eq_infer,
+            (t2._value_ = t4.rv_value) as infer_eq_grdth,
+            count(*) as count
+        from
+            {cell_domain} as t1,
+            {clean_data} as t2
+            left join {dk_cells} as t3 on t2._tid_ = t3._tid_ and t2._attribute_ = t3.attribute
+            left join {inf_values_dom} as t4 on t2._tid_ = t4._tid_ and t2._attribute_ = t4.attribute where t1._tid_ = t2._tid_ and t1.attribute = t2._attribute_
+        group by
+            clean,
+            status,
+            inferred,
+            init_eq_grdth,
+            init_eq_infer,
+            wl_eq_init,
+            wl_eq_grdth,
+            wl_eq_infer,
+            infer_eq_grdth
+        """.format(cell_domain=AuxTables.cell_domain.name,
+                clean_data=self.clean_data.name,
+                dk_cells=AuxTables.dk_cells.name,
+                inf_values_dom=AuxTables.inf_values_dom.name)
+
+        res = self.ds.engine.execute_query(query)
+
+        df_stats = pd.DataFrame(res,
+                columns=["is_clean", "cell_status", "is_inferred",
+                    "init = grdth", "init = inferred",
+                    "w. label = init", "w. label = grdth", "w. label = inferred",
+                    "infer = grdth", "count"])
+        df_stats = df_stats.sort_values(list(df_stats.columns)).reset_index(drop=True)
+        logging.info("weak label statistics:")
+        pd.set_option('display.max_columns', None)
+        pd.set_option('display.max_rows', len(df_stats))
+        pd.set_option('display.max_colwidth', -1)
+        logging.info("%s", df_stats)
+        pd.reset_option('display.max_columns')
+        pd.reset_option('display.max_rows')
+        pd.reset_option('display.max_colwidth')
