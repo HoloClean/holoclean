@@ -41,12 +41,9 @@ class RepairEngine:
         train_time = toc - tic
         return status, train_time
 
-    def infer_repairs(self, infer_labeled):
-        """
-        :param infer_labeled: (bool) infer also for cells that have been used with weak labels
-        """
+    def infer_repairs(self):
         tic = time.clock()
-        X_pred, mask_pred, infer_idx = self.feat_dataset.get_infer_data(infer_labeled)
+        X_pred, mask_pred, infer_idx = self.feat_dataset.get_infer_data()
         Y_pred = self.repair_model.infer_values(X_pred, mask_pred)
         distr_df, infer_val_df = self.get_infer_dataframes(infer_idx, Y_pred)
         self.ds.generate_aux_table(AuxTables.cell_distr, distr_df, store=True, index_attrs=['_vid_'])

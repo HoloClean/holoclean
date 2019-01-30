@@ -38,12 +38,10 @@ featurizers = [
     ConstraintFeat()
 ]
 
-infer_labeled = False
-hc.repair_errors(featurizers, infer_labeled=infer_labeled)
+hc.repair_errors(featurizers)
 
 # 5. Evaluate the correctness of the results.
 hc.evaluate(fpath='../testdata/hospital_clean.csv',
             tid_col='tid',
             attr_col='attribute',
-            val_col='correct_val',
-            infer_labeled=infer_labeled)
+            val_col='correct_val')

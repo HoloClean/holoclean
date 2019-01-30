@@ -39,16 +39,13 @@ def test_hospital():
         ConstraintFeat()
     ]
 
-    infer_labeled = True
-
-    hc.repair_errors(featurizers, infer_labeled=infer_labeled)
+    hc.repair_errors(featurizers)
 
     # 5. Evaluate the correctness of the results.
     hc.evaluate(fpath='../testdata/hospital_100_clean.csv',
                 tid_col='tid',
                 attr_col='attribute',
-                val_col='correct_val',
-                infer_labeled=infer_labeled)
+                val_col='correct_val')
 
     # Just to make sure pipeline ran with no errors.
     assert True

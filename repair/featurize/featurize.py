@@ -124,22 +124,12 @@ class FeaturizedDataset:
         mask_train = self.var_class_mask.index_select(0, train_idx)
         return X_train, Y_train, mask_train
 
-    def get_infer_data(self, infer_labeled):
+    def get_infer_data(self):
         """
-        Retrieves the samples to be inferred. Normally this is just the DK cells,
-        but if :param infer_labeled: is True then we infer on ALL cells (DK and
-        clean).
-
-        :param infer_labeled: (bool) infer also for cells that have been used
-            with weak labels.
+        Retrieves the samples to be inferred i.e. DK cells.
         """
-        if infer_labeled:
-            infer_idx = (self.labels_type <= CellStatus.SINGLE_VALUE.value).nonzero()[:, 0]
-            X_infer = self.tensor.index_select(0, infer_idx)
-            mask_infer = self.var_class_mask.index_select(0, infer_idx)
-        else:
-            # only infer on those that are DK cells
-            infer_idx = (self.is_clean == 0).nonzero()[:, 0]
-            X_infer = self.tensor.index_select(0, infer_idx)
-            mask_infer = self.var_class_mask.index_select(0, infer_idx)
+        # only infer on those that are DK cells
+        infer_idx = (self.is_clean == 0).nonzero()[:, 0]
+        X_infer = self.tensor.index_select(0, infer_idx)
+        mask_infer = self.var_class_mask.index_select(0, infer_idx)
         return X_infer, mask_infer, infer_idx

@@ -65,10 +65,7 @@ class EvalEngine:
         load_time = toc - tic
         return status, load_time
 
-    def evaluate_repairs(self, infer_labeled):
-        """
-        :param infer_labeled: (bool) whether weak label cells were inferred for/repaired
-        """
+    def evaluate_repairs(self):
         self.compute_total_repairs()
         self.compute_total_repairs_grdt()
         self.compute_total_errors()
@@ -76,22 +73,19 @@ class EvalEngine:
         self.compute_correct_repairs()
         prec = self.compute_precision()
         rec = self.compute_recall()
-        rep_recall = self.compute_repairing_recall(infer_labeled)
+        rep_recall = self.compute_repairing_recall()
         f1 = self.compute_f1()
-        rep_f1 = self.compute_repairing_f1(infer_labeled)
+        rep_f1 = self.compute_repairing_f1()
 
         if self.env['verbose']:
             self.log_weak_label_stats()
 
         return prec, rec, rep_recall, f1, rep_f1
 
-    def eval_report(self, infer_labeled):
-        """
-        :param infer_labeled: (bool) whether weak label cells were inferred for/repaired
-        """
+    def eval_report(self):
         tic = time.clock()
         try:
-            prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs(infer_labeled)
+            prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
             report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
                       prec, rec, rep_recall, f1, rep_f1,
                       self.detected_errors, self.total_errors, self.correct_repairs,
@@ -184,9 +178,6 @@ class EvalEngine:
 
         This value is always equal or less than total errors (see
         compute_total_errors).
-
-        Note that this value can be greater than detected errors if inference
-        is performed on non-dk cells (e.g. when infer_labeled = True).
         """
         queries = []
         correct_repairs = 0.0
@@ -207,18 +198,11 @@ class EvalEngine:
             return 0
         return self.correct_repairs / self.total_errors
 
-    def compute_repairing_recall(self, infer_labeled):
+    def compute_repairing_recall(self):
         """
         Computes the _repairing_ recall (# of correct repairs / # of total
         _detected_ errors).
-
-        :param infer_labeled: (bool) whether weak label cells were inferred for/repaired
         """
-        # If cells with weak labels (used for training) were also repaired/inferred,
-        # we must use all errors instead of just the errors amongst "detected" dk cells.
-        if infer_labeled:
-            return self.compute_recall()
-
         if self.detected_errors == 0:
             return 0
         return self.correct_repairs / self.detected_errors
@@ -239,12 +223,9 @@ class EvalEngine:
         f1 = 2*(prec*rec)/(prec+rec)
         return f1
 
-    def compute_repairing_f1(self, infer_labeled):
-        """
-        :param infer_labeled: (bool) whether weak label cells were inferred for/repaired.
-        """
+    def compute_repairing_f1(self):
         prec = self.compute_precision()
-        rec = self.compute_repairing_recall(infer_labeled)
+        rec = self.compute_repairing_recall()
         if prec+rec == 0:
             return 0
         f1 = 2*(prec*rec)/(prec+rec)

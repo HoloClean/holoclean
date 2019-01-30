@@ -9,5 +9,3 @@ fi
 
 echo "Launching example script $script"
 python $script
-
-
