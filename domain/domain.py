@@ -11,12 +11,10 @@ from .estimators import RecurrentLogistic
 
 
 class DomainEngine:
-    def __init__(self, env, dataset, sampling_prob=1.0, max_sample=5):
+    def __init__(self, env, dataset, max_sample=5):
         """
         :param env: (dict) contains global settings such as verbose
         :param dataset: (Dataset) current dataset
-        :param sampling_prob: (float) probability of using a random sample if domain cannot be determined
-            from correlated co-attributes
         :param max_sample: (int) maximum # of domain values from a random sample
         """
         self.env = env
@@ -32,7 +30,6 @@ class DomainEngine:
         self.correlations = None
         self._corr_attrs = {}
         self.cor_strength = env["cor_strength"]
-        self.sampling_prob = sampling_prob
         self.max_sample = max_sample
         self.single_stats = {}
         self.pair_stats = {}
@@ -388,8 +385,6 @@ class DomainEngine:
         'self.max_sample' of domain values for 'attr' that is NOT 'cur_value'.
         """
 
-        if random.random() > self.sampling_prob:
-            return []
         domain_pool = set(self.single_stats[attr].keys())
         domain_pool.discard(cur_value)
         size = len(domain_pool)
