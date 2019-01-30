@@ -9,6 +9,10 @@ from repair import RepairEngine
 from evaluate import EvalEngine
 
 logging.basicConfig(format="%(asctime)s - [%(levelname)5s] - %(message)s", datefmt='%H:%M:%S')
+root_logger = logging.getLogger()
+gensim_logger = logging.getLogger('gensim')
+root_logger.setLevel(logging.INFO)
+gensim_logger.setLevel(logging.WARNING)
 
 
 # Arguments for HoloClean
@@ -19,20 +23,20 @@ arguments = [
          'default': 'holocleanuser',
          'type': str,
          'help': 'User for DB used to persist state.'}),
-    (('-p', '--password', '--pass'),
-        {'metavar': 'PASSWORD',
+    (('-p', '--db-pwd', '--pass'),
+        {'metavar': 'DB_PWD',
          'dest': 'db_pwd',
          'default': 'abcd1234',
          'type': str,
          'help': 'Password for DB used to persist state.'}),
-    (('-h', '--host'),
-        {'metavar': 'HOST',
+    (('-h', '--db-host'),
+        {'metavar': 'DB_HOST',
          'dest': 'db_host',
          'default': 'localhost',
          'type': str,
          'help': 'Host for DB used to persist state.'}),
-    (('-d', '--database'),
-        {'metavar': 'DATABASE',
+    (('-d', '--db_name'),
+        {'metavar': 'DB_NAME',
          'dest': 'db_name',
          'default': 'holo',
          'type': str,
@@ -121,6 +125,12 @@ arguments = [
       'default': 0.1,
       'type': float,
       'help': 'Correlation threshold (absolute) when selecting correlated attributes for domain pruning.'}),
+    (('-wlt', '--estimator-enabled'),
+     {'metavar': 'ESTIMATOR_ENABLED',
+      'dest': 'estimator_enabled',
+      'default': True,
+      'type': bool,
+      'help': 'Enables the posterior estimator for weak labelling and domain generation.'}),
 ]
 
 # Flags for Holoclean mode
@@ -207,6 +217,13 @@ class Session:
         :param env: Holoclean environment
         :param name: Name for the Holoclean session
         """
+        # use DEBUG logging level if verbose enabled
+        if env['verbose']:
+            root_logger.setLevel(logging.DEBUG)
+            gensim_logger.setLevel(logging.DEBUG)
+
+        logging.info('initiating session with parameters: %s', env)
+
         # Initialize members
         self.name = name
         self.env = env
@@ -217,14 +234,6 @@ class Session:
         self.repair_engine = RepairEngine(env, self.ds)
         self.eval_engine = EvalEngine(env, self.ds)
 
-        # use DEBUG logging level if verbose enabled
-        root_logger = logging.getLogger()
-        gensim_logger = logging.getLogger('gensim')
-        root_level, gensim_level = logging.INFO, logging.WARNING
-        if self.env['verbose']:
-            root_level, gensim_level = logging.DEBUG, logging.DEBUG
-        root_logger.setLevel(root_level)
-        gensim_logger.setLevel(gensim_level)
 
     def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None):
         """
