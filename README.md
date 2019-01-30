@@ -70,7 +70,7 @@ DROP DATABASE holo;
 CREATE DATABASE holo;
 ```
 
-#### Option 2: Using a Docker Container
+#### Option 2: Using Docker
 If you are familiar with docker, an easy way to start using
 HoloClean is to start a PostgreSQL docker container.
 
@@ -98,21 +98,8 @@ a virtual environment.
 #### Creating a virtual environment for HoloClean
 ##### Option 1: Conda Virtual Environment
 
-First, install Conda using one of the following methods:
-
-* Ubuntu *32-bit machines* run
-```bash
-$ wget https://repo.continuum.io/archive/Anaconda-2.3.0-Linux-x86.sh
-$ sh Anaconda-2.3.0-Linux-x86.sh
-```
-* Ubuntu *64-bit machines* run
-```bash
-$ wget https://repo.continuum.io/archive/Anaconda-2.3.0-Linux-x86_64.sh
-$ sh Anaconda-2.3.0-Linux-x86_64.sh
-```
-
-* macOS, please follow the instructions [here](https://conda.io/projects/conda/en/latest/user-guide/install/macos.html) to install
-Anaconda (not miniconda).
+First, download Anaconda (not miniconda) from [this link](https://www.anaconda.com/download).
+Follow the steps for your OS and framework. 
 
 Second, create a conda environment (python 2.7 or 3.6+).
 For example, to create a *Python 3.6* conda environment, run:
@@ -124,7 +111,7 @@ $ conda create -n hc36 python=3.6
 Upon starting/restarting your terminal session, you will need to activate your
 conda environment by running
 ```bash
-$ source activate hc36
+$ conda activate hc36
 ```
 
 ##### Option 2: Set up a virtual environment using pip and Virtualenv
@@ -140,7 +127,7 @@ with your preferred virtualenv wrapper, for example:
 
 
 Either follow instructions [here](https://virtualenv.pypa.io/en/stable/installation/) or install via
-`pip`
+`pip`.
 ```bash
 $ pip install virtualenv
 ```
@@ -159,7 +146,10 @@ $ source hc36/bin/activate
 
 #### Install the required python packages
 
-*Note: make sure that the environment is activated throughout the installation process.*
+*Note: make sure that the environment is activated throughout the installation process.
+When you are done, deactivate it using* 
+`conda deactivate`, `source deactivate`, *or* `deactivate` 
+*depending on your version*.
 
 In the project root directory, run the following to install the required packages.
 Note that this commands installs the packages within the activated virtual environment.
@@ -169,8 +159,8 @@ $ pip install -r requirements.txt
 ```
 
 
-*Note for macOS Users:*\
-if you are on macOS, you may need to install XCode developer tools using the command `xcode-select --install`.
+*Note for macOS Users:*
+you may need to install XCode developer tools using `xcode-select --install`.
 
 
 ## Running HoloClean
