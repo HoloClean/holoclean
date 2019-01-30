@@ -6,9 +6,9 @@ from repair.featurize import *
 def test_hospital():
     # 1. Setup a HoloClean session.
     hc = holoclean.HoloClean(
-        pruning_topk=0.0,
+        domain_thresh_1=0.0,
+        domain_thresh_2=0.0,
         weak_label_thresh=0.90,
-        domain_prune_thresh=0,
         max_domain=10000,
         cor_strength=0.0,
         epochs=20,

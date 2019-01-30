@@ -6,10 +6,9 @@ from repair.featurize import *
 # 1. Setup a HoloClean session.
 hc = holoclean.HoloClean(
     db_name='holo',
-    pruning_topk=0.1,
-    estimator_enabled=True,
+    domain_thresh_1=0.1,
+    domain_thresh_2=0,
     weak_label_thresh=0.9,
-    domain_prune_thresh=0,
     max_domain=10000,
     cor_strength=0.05,
     epochs=20,

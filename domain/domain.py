@@ -19,9 +19,9 @@ class DomainEngine:
         """
         self.env = env
         self.ds = dataset
-        self.topk = env["pruning_topk"]
+        self.domain_thresh_1 = env["domain_thresh_1"]
         self.weak_label_thresh = env["weak_label_thresh"]
-        self.domain_prune_thresh = env["domain_prune_thresh"]
+        self.domain_thresh_2 = env["domain_thresh_2"]
         self.max_domain = env["max_domain"]
         self.setup_complete = False
         self.active_attributes = None
@@ -93,23 +93,23 @@ class DomainEngine:
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total
         self.single_stats = single_stats
-        logging.debug("preparing TOP K co-occurring statistics...")
+        logging.debug("preparing pruned co-occurring statistics...")
         tic = time.clock()
-        self.pair_stats = self._topk_pair_stats(pair_stats)
-        logging.debug("DONE with TOP K co-occurring statistics in %.2f secs", time.clock() - tic)
+        self.pair_stats = self._pruned_pair_stats(pair_stats)
+        logging.debug("DONE with pruned co-occurring statistics in %.2f secs", time.clock() - tic)
         self.setup_complete = True
 
-    def _topk_pair_stats(self, pair_stats):
+    def _pruned_pair_stats(self, pair_stats):
         """
-        _topk_pair_stats converts 'pair_stats' which is a dictionary mapping
+        _pruned_pair_stats converts 'pair_stats' which is a dictionary mapping
             { attr1 -> { attr2 -> {val1 -> {val2 -> count } } } } where
-                DataFrame contains 3 columns:
-                  <val1>: all possible values for attr1
-                  <val2>: all values for attr2 that appeared at least once with <val1>
-                  <count>: frequency (# of entities) where attr1: <val1> AND attr2: <val2>
+              <val1>: all possible values for attr1
+              <val2>: all values for attr2 that appeared at least once with <val1>
+              <count>: frequency (# of entities) where attr1: <val1> AND attr2: <val2>
 
-        to a flattened 4-level dictionary { attr1 -> { attr2 -> { val1 -> [Top K list of val2] } } }
-        i.e. maps to the Top K co-occurring values for attr2 for a given
+        to a flattened 4-level dictionary { attr1 -> { attr2 -> { val1 -> [pruned list of val2] } } }
+        i.e. maps to the co-occurring values for attr2 that exceed
+        the self.domain_thresh_1 co-occurrence probability for a given
         attr1-val1 pair.
         """
 
@@ -120,14 +120,10 @@ class DomainEngine:
                 out[attr1][attr2] = {}
                 for val1 in pair_stats[attr1][attr2].keys():
                     denominator = self.single_stats[attr1][val1]
-                    # TODO(richardwu): while this computes tau as the topk % of
-                    # count, we are actually not guaranteed any pairwise co-occurrence
-                    # thresholds exceed this count.
-                    # For example suppose topk = 0.1 ("top 10%") but we have
-                    # 20 co-occurrence counts i.e. 20 unique val2 with
-                    # uniform counts, therefore each co-occurrence count
-                    # is actually 1 / 20 = 0.05 of the frequency for val1.
-                    tau = float(self.topk*denominator)
+                    # tau becomes a threshhold on co-occurrence frequency
+                    # based on the co-occurrence probability threshold
+                    # domain_thresh_1.
+                    tau = float(self.domain_thresh_1*denominator)
                     top_cands = [val2 for (val2, count) in pair_stats[attr1][attr2][val1].items() if count > tau]
                     out[attr1][attr2][val1] = top_cands
         return out
@@ -251,7 +247,7 @@ class DomainEngine:
 
         # Skip estimator model since we do not require any weak labelling or domain
         # pruning based on posterior probabilities.
-        if self.env['weak_label_thresh'] == 1 and self.env['domain_prune_thresh'] == 0:
+        if self.env['weak_label_thresh'] == 1 and self.env['domain_thresh_2'] == 0:
             return domain_df
 
         # Run pruned domain values from correlated attributes above through
@@ -287,8 +283,8 @@ class DomainEngine:
                 updated_domain_df.append(row)
                 continue
 
-            # prune domain if any of the values are above our domain_prune_thresh
-            preds = [[val, proba] for val, proba in preds if proba >= self.domain_prune_thresh] or preds
+            # prune domain if any of the values are above our domain_thresh_2
+            preds = [[val, proba] for val, proba in preds if proba >= self.domain_thresh_2] or preds
 
             # cap the maximum # of domain values to self.max_domain
             domain_values = [val for val, proba in sorted(preds, key=lambda pred: pred[1], reverse=True)[:self.max_domain]]
