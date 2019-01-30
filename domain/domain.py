@@ -156,15 +156,15 @@ class DomainEngine:
         :param thres: (float) correlation threshold (absolute) for returned attributes.
         """
         # Not memoized: find correlated attributes from correlation dataframe.
-        if attr not in self._corr_attrs:
-            self._corr_attrs[attr] = []
+        if (attr, thres) not in self._corr_attrs:
+            self._corr_attrs[(attr,thres)] = []
 
             if attr in self.correlations:
                 d_temp = self.correlations[attr]
                 d_temp = d_temp.abs()
-                self._corr_attrs[attr] = [rec[0] for rec in d_temp[d_temp > thres].iteritems() if rec[0] != attr]
+                self._corr_attrs[(attr,thres)] = [rec[0] for rec in d_temp[d_temp > thres].iteritems() if rec[0] != attr]
 
-        return self._corr_attrs[attr]
+        return self._corr_attrs[(attr, thres)]
 
     def generate_domain(self):
         """
