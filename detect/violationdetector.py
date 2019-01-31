@@ -1,13 +1,18 @@
-import pandas as pd
 from string import Template
+
+import pandas as pd
 
 from .detector import Detector
 
-unary_template = Template('SELECT t1._tid_ FROM $table as t1 WHERE $cond')
+unary_template = Template('SELECT t1._tid_ FROM "$table" as t1 WHERE $cond')
+multi_template = Template('SELECT t1._tid_ FROM "$table" as t1 WHERE $cond1 $c EXISTS (SELECT t2._tid_ FROM "$table" as t2 WHERE $cond2)')
 
-mult_template = Template ('SELECT t1._tid_ FROM $table as t1 WHERE $cond1 $c EXISTS (SELECT t2._tid_ FROM $table as t2 WHERE $cond2)')
 
 class ViolationDetector(Detector):
+    """
+    Detector to detect violations of integrity constraints (mainly denial constraints).
+    """
+
     def __init__(self, name='ViolationDetector'):
         super(ViolationDetector, self).__init__(name)
 
@@ -17,12 +22,19 @@ class ViolationDetector(Detector):
         self.constraints = dataset.constraints
 
     def detect_noisy_cells(self):
+        """
+        Returns a pandas.DataFrame containing all cells that
+         violate denial constraints contained in self.dataset.
+
+        :return: pandas.DataFrame with columns:
+            _tid_: entity ID
+            attribute: attribute violating any denial constraint.
+        """
         # Convert  Constraints to SQL queries
         tbl = self.ds.raw_data.name
         queries = []
         attrs = []
-        for c_key in self.constraints:
-            c = self.constraints[c_key]
+        for c in self.constraints:
             q = self.to_sql(tbl, c)
             queries.append(q)
             attrs.append(c.components)
@@ -74,17 +86,16 @@ class ViolationDetector(Detector):
             a.append("'"+b+"'")
         a = ','.join(a)
         if cond1 != '':
-            query = mult_template.substitute(table=tbl, cond1=cond1, c='AND', cond2=cond2)
+            query = multi_template.substitute(table=tbl, cond1=cond1, c='AND', cond2=cond2)
         else:
-            query = mult_template.substitute(table=tbl, cond1=cond1, c='', cond2=cond2)
+            query = multi_template.substitute(table=tbl, cond1=cond1, c='', cond2=cond2)
         return query
 
     def gen_tid_attr_output(self, res, attr_list):
-        attrs = [x.lower() for x in attr_list]
         errors = []
         for tuple in res:
             tid = int(tuple[0])
-            for attr in attrs:
+            for attr in attr_list:
                 errors.append({'_tid_': tid, 'attribute': attr})
         error_df  = pd.DataFrame(data=errors)
         return error_df

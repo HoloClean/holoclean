@@ -5,16 +5,13 @@ from .featurizer import Featurizer
 
 
 class FreqFeaturizer(Featurizer):
-    def __init__(self, name='FreqFeaturizer'):
-        super(FreqFeaturizer, self).__init__(name)
-
     def specific_setup(self):
+        self.name = 'FreqFeaturizer'
+        self.all_attrs = self.ds.get_attributes()
         self.attrs_number = len(self.ds.attr_to_idx)
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total
-        self.single_stats = {}
-        for attr in single_stats:
-            self.single_stats[attr] = single_stats[attr].to_dict()
+        self.single_stats = single_stats
 
     def gen_feat_tensor(self, input, classes):
         vid = int(input[0])
@@ -23,9 +20,7 @@ class FreqFeaturizer(Featurizer):
         attr_idx = self.ds.attr_to_idx[attribute]
         tensor = torch.zeros(1, classes, self.attrs_number)
         for idx, val in enumerate(domain):
-            # TODO(richardwu): investigate how 'val' could be missing from single_stats.
-            # Probably an encoding issue.
-            prob = float(self.single_stats[attribute].get(val, 0))/float(self.total)
+            prob = float(self.single_stats[attribute][val])/float(self.total)
             tensor[0][idx][attr_idx] = prob
         return tensor
 
@@ -35,3 +30,6 @@ class FreqFeaturizer(Featurizer):
         tensors = [self.gen_feat_tensor(res, self.classes) for res in results]
         combined = torch.cat(tensors)
         return combined
+
+    def feature_names(self):
+        return self.all_attrs

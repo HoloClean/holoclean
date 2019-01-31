@@ -10,6 +10,7 @@ _templates
 .venv
 *.swp
 *.pyc
+.cache/
 
 # pip package metadata
 *egg-info/
@@ -19,3 +20,6 @@ build/
 dist/
 lib/
 info/
+
+# Holoclean specific files
+debug/

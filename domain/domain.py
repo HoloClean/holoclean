@@ -4,33 +4,32 @@ import time
 from tqdm import tqdm
 import itertools
 import random
+import math
 
-from dataset import AuxTables
-from dataset.dataset import dictify
+from dataset import AuxTables, CellStatus
+from .estimators import Logistic
 
 
 class DomainEngine:
-    def __init__(self, env, dataset, cor_strength = 0.1, sampling_prob=0.3, max_sample=5):
+    def __init__(self, env, dataset, max_sample=5):
         """
         :param env: (dict) contains global settings such as verbose
         :param dataset: (Dataset) current dataset
-        :param cor_strength: (float) correlation magnitude threshold for determining domain values
-            from correlated co-attributes
-        :param sampling_prob: (float) probability of using a random sample if domain cannot be determined
-            from correlated co-attributes
         :param max_sample: (int) maximum # of domain values from a random sample
         """
         self.env = env
         self.ds = dataset
-        self.topk = env["pruning_topk"]
+        self.domain_thresh_1 = env["domain_thresh_1"]
+        self.weak_label_thresh = env["weak_label_thresh"]
+        self.domain_thresh_2 = env["domain_thresh_2"]
+        self.max_domain = env["max_domain"]
         self.setup_complete = False
         self.active_attributes = None
-        self.raw_data = None
         self.domain = None
         self.total = None
         self.correlations = None
-        self.cor_strength = cor_strength
-        self.sampling_prob = sampling_prob
+        self._corr_attrs = {}
+        self.cor_strength = env["cor_strength"]
         self.max_sample = max_sample
         self.single_stats = {}
         self.pair_stats = {}
@@ -53,20 +52,18 @@ class DomainEngine:
 
     def find_correlations(self):
         """
-        find_correlations memoizes to self.correlations a DataFrame containing
+        find_correlations memoizes to self.correlations; a DataFrame containing
         the pairwise correlations between attributes (values are treated as
         discrete categories).
         """
-        self.raw_data = self.ds.get_raw_data().copy()
-        # convert dataset to numberic categories
-        d = pd.DataFrame()
-        for attr in self.raw_data.columns.values:
-            d[attr] = self.raw_data[attr].astype('category').cat.codes
-        # drop columns with only one value and tid column
-        d = d.loc[:, (d != 0).any(axis=0)]
-        d = d.drop(['_tid_'], axis=1)
-        # Computer correlation across attributes
-        m_corr = d.corr()
+        df = self.ds.get_raw_data()[self.ds.get_attributes()].copy()
+        # Convert dataset to categories/factors.
+        for attr in df.columns:
+            df[attr] = df[attr].astype('category').cat.codes
+        # Drop columns with only one value and tid column.
+        df = df.loc[:, (df != 0).any(axis=0)]
+        # Compute correlation across attributes.
+        m_corr = df.corr()
         self.correlations = m_corr
 
     def store_domains(self, domain):
@@ -96,45 +93,39 @@ class DomainEngine:
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total
         self.single_stats = single_stats
+        logging.debug("preparing pruned co-occurring statistics...")
         tic = time.clock()
-        self.pair_stats = self.preproc_pair_stats(pair_stats)
-        toc = time.clock()
-        prep_time = toc - tic
-        logging.debug("DONE with pair stats preparation in %.2f secs", prep_time)
+        self.pair_stats = self._pruned_pair_stats(pair_stats)
+        logging.debug("DONE with pruned co-occurring statistics in %.2f secs", time.clock() - tic)
         self.setup_complete = True
 
-    def preproc_pair_stats(self, pair_stats):
+    def _pruned_pair_stats(self, pair_stats):
         """
-        preproc_pair_stats converts 'pair_stats' which is a dictionary mapping
-            { attr1 -> { attr2 -> DataFrame } } where
-                DataFrame contains 3 columns:
-                  <attr1>: all possible values for attr1 ('val1')
-                  <attr2>: all values for attr2 that appeared at least once with <val1> ('val2')
-                  <count>: frequency (# of entities) where attr1: val1 AND attr2: val2
+        _pruned_pair_stats converts 'pair_stats' which is a dictionary mapping
+            { attr1 -> { attr2 -> {val1 -> {val2 -> count } } } } where
+              <val1>: all possible values for attr1
+              <val2>: all values for attr2 that appeared at least once with <val1>
+              <count>: frequency (# of entities) where attr1: <val1> AND attr2: <val2>
 
-        to a flattened 4-level dictionary { attr1 -> { attr2 -> { val1 -> [Top K list of val2] } } }
-        i.e. maps to the Top K co-occurring values for attr2 for a given
+        to a flattened 4-level dictionary { attr1 -> { attr2 -> { val1 -> [pruned list of val2] } } }
+        i.e. maps to the co-occurring values for attr2 that exceed
+        the self.domain_thresh_1 co-occurrence probability for a given
         attr1-val1 pair.
         """
 
         out = {}
-        for key1 in tqdm(pair_stats):
-            if key1 == '_tid_':
-                continue
-            out[key1] = {}
-            for key2 in pair_stats[key1]:
-                if key1 == '_tid_':
-                    continue
-                df = pair_stats[key1][key2]
-                if not df.empty:
-                    out[key1][key2] = dictify(df)
-                    for val in out[key1][key2]:
-                        denominator = self.single_stats[key1][val]
-                        tau = float(self.topk*denominator)
-                        top_cands = [k for (k, v) in out[key1][key2][val].items() if v > tau]
-                        out[key1][key2][val] = top_cands
-                else:
-                    out[key1][key2] = {}
+        for attr1 in tqdm(pair_stats.keys()):
+            out[attr1] = {}
+            for attr2 in pair_stats[attr1].keys():
+                out[attr1][attr2] = {}
+                for val1 in pair_stats[attr1][attr2].keys():
+                    denominator = self.single_stats[attr1][val1]
+                    # tau becomes a threshhold on co-occurrence frequency
+                    # based on the co-occurrence probability threshold
+                    # domain_thresh_1.
+                    tau = float(self.domain_thresh_1*denominator)
+                    top_cands = [val2 for (val2, count) in pair_stats[attr1][attr2][val1].items() if count > tau]
+                    out[attr1][attr2][val1] = top_cands
         return out
 
     def get_active_attributes(self):
@@ -143,29 +134,34 @@ class DomainEngine:
         These attributes correspond only to attributes that contain at least
         one potentially erroneous cell.
         """
-        query = 'SELECT DISTINCT lower(attribute) as attribute FROM %s'%AuxTables.dk_cells.name
+        query = 'SELECT DISTINCT attribute as attribute FROM {}'.format(AuxTables.dk_cells.name)
         result = self.ds.engine.execute_query(query)
         if not result:
             raise Exception("No attribute contains erroneous cells.")
         return set(itertools.chain(*result))
 
-    def get_corr_attributes(self, attr):
+    def get_corr_attributes(self, attr, thres):
         """
         get_corr_attributes returns attributes from self.correlations
         that are correlated with attr with magnitude at least self.cor_strength
         (init parameter).
+
+        :param thres: (float) correlation threshold (absolute) for returned attributes.
         """
-        cor_attrs = []
-        if attr in self.correlations:
-            d_temp = self.correlations[attr]
-            d_temp = d_temp.abs()
-            cor_attrs = [rec[0] for rec in d_temp[d_temp > self.cor_strength].iteritems()]
-            cor_attrs.remove(attr)
-        return cor_attrs
+        # Not memoized: find correlated attributes from correlation dataframe.
+        if (attr, thres) not in self._corr_attrs:
+            self._corr_attrs[(attr,thres)] = []
+
+            if attr in self.correlations:
+                d_temp = self.correlations[attr]
+                d_temp = d_temp.abs()
+                self._corr_attrs[(attr,thres)] = [rec[0] for rec in d_temp[d_temp > thres].iteritems() if rec[0] != attr]
+
+        return self._corr_attrs[(attr, thres)]
 
     def generate_domain(self):
         """
-        Generate the domain for each cell in the active attributes as well
+        Generates the domain for each cell in the active attributes as well
         as assigns variable IDs (_vid_) (increment key from 0 onwards, depends on
         iteration order of rows/entities in raw data and attributes.
 
@@ -182,7 +178,7 @@ class DomainEngine:
             _cid_: cell ID (unique for every entity-attribute)
             _vid_: variable ID (1-1 correspondence with _cid_)
             attribute: attribute name
-            domain: ||| seperated string of domain values
+            domain: ||| separated string of domain values
             domain_size: length of domain
             init_value: initial value for this cell
             init_value_idx: domain index of init_value
@@ -192,7 +188,10 @@ class DomainEngine:
         if not self.setup_complete:
             raise Exception(
                 "Call <setup_attributes> to setup active attributes. Error detection should be performed before setup.")
-        # Iterate over dataset rows
+
+        logging.debug('generating initial set of un-pruned domain values...')
+        tic = time.clock()
+        # Iterate over dataset rows.
         cells = []
         vid = 0
         records = self.ds.get_raw_data().to_records()
@@ -201,25 +200,124 @@ class DomainEngine:
             tid = row['_tid_']
             app = []
             for attr in self.active_attributes:
+                # TODO(richardwu): relax domain prune here: simply take all
+                #   values with at least one co-occurrence. This can be
+                #   simulated by setting cor_strength = 0.0
                 init_value, dom = self.get_domain_cell(attr, row)
                 init_value_idx = dom.index(init_value)
+                # We will use an Estimator model for weak labelling below, which requires
+                # the full pruned domain first.
+                weak_label = init_value
+                weak_label_idx = init_value_idx
                 if len(dom) > 1:
                     cid = self.ds.get_cell_id(tid, attr)
-                    app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_":vid, "domain": "|||".join(dom),  "domain_size": len(dom),
-                                "init_value": init_value, "init_index": init_value_idx, "fixed":0})
+                    app.append({"_tid_": tid,
+                                "attribute": attr,
+                                "_cid_": cid,
+                                "_vid_": vid,
+                                "domain": "|||".join(dom),
+                                "domain_size": len(dom),
+                                "init_value": init_value,
+                                "init_index": init_value_idx,
+                                "weak_label": weak_label,
+                                "weak_label_idx": weak_label_idx,
+                                "fixed": CellStatus.NOT_SET.value})
                     vid += 1
                 else:
-                    add_domain = self.get_random_domain(attr,init_value)
-                    # Check if attribute has more than one unique values
+                    add_domain = self.get_random_domain(attr, init_value)
+                    # Check if attribute has more than one unique values.
                     if len(add_domain) > 0:
-                        dom.extend(self.get_random_domain(attr,init_value))
+                        dom.extend(self.get_random_domain(attr, init_value))
                         cid = self.ds.get_cell_id(tid, attr)
-                        app.append({"_tid_": tid, "attribute": attr, "_cid_": cid, "_vid_": vid, "domain": "|||".join(dom),
+                        app.append({"_tid_": tid,
+                                    "attribute": attr,
+                                    "_cid_": cid,
+                                    "_vid_": vid,
+                                    "domain": "|||".join(dom),
                                     "domain_size": len(dom),
-                                    "init_value": init_value, "init_index": init_value_idx, "fixed": 1})
+                                    "init_value": init_value,
+                                    "init_index": init_value_idx,
+                                    "weak_label": init_value,
+                                    "weak_label_idx": init_value_idx,
+                                    "fixed": CellStatus.SINGLE_VALUE.value})
                         vid += 1
             cells.extend(app)
         domain_df = pd.DataFrame(data=cells)
+        logging.debug('DONE generating initial set of domain values in %.2f', time.clock() - tic)
+
+        # Skip estimator model since we do not require any weak labelling or domain
+        # pruning based on posterior probabilities.
+        if self.env['weak_label_thresh'] == 1 and self.env['domain_thresh_2'] == 0:
+            return domain_df
+
+        # Run pruned domain values from correlated attributes above through
+        # posterior model for a naive probability estimation.
+        logging.debug('training posterior model for estimating domain value probabilities...')
+        tic = time.clock()
+        pruned_domain = {}
+        for row in domain_df[['_tid_', 'attribute', 'domain']].to_records():
+            pruned_domain[row['_tid_']] = pruned_domain.get(row['_tid_'], {})
+            pruned_domain[row['_tid_']][row['attribute']] = row['domain'].split('|||')
+        estimator = Logistic(self.env, self.ds, pruned_domain, self.active_attributes)
+        estimator.train(num_recur=1, num_epochs=3, batch_size=self.env['batch_size'])
+        logging.debug('DONE training posterior model in %.2fs', time.clock() - tic)
+
+        # Predict probabilities for all pruned domain values.
+        logging.debug('predicting domain value probabilities from posterior model...')
+        tic = time.clock()
+        # raw records indexed by tid
+        raw_records_by_tid = {row['_tid_']: row for row in records}
+        domain_records = domain_df.to_records()
+        preds_by_cell = estimator.predict_pp_batch(raw_records_by_tid, domain_records)
+        logging.debug('DONE predictions in %.2f secs, re-constructing cell domain...', time.clock() - tic)
+
+        logging.debug('re-assembling final cell domain table...')
+        tic = time.clock()
+        # iterate through raw/current data and generate posterior probabilities for
+        # weak labelling
+        num_weak_labels = 0
+        updated_domain_df = []
+        for preds, row in tqdm(zip(preds_by_cell, domain_records)):
+            # no need to modify single value cells
+            if row['fixed'] == CellStatus.SINGLE_VALUE.value:
+                updated_domain_df.append(row)
+                continue
+
+            # prune domain if any of the values are above our domain_thresh_2
+            preds = [[val, proba] for val, proba in preds if proba >= self.domain_thresh_2] or preds
+
+            # cap the maximum # of domain values to self.max_domain
+            domain_values = [val for val, proba in sorted(preds, key=lambda pred: pred[1], reverse=True)[:self.max_domain]]
+
+            # ensure the initial value is included
+            if row['init_value'] not in domain_values:
+                domain_values.append(row['init_value'])
+            # update our memoized domain values for this row again
+            row['domain'] = '|||'.join(domain_values)
+            row['domain_size'] = len(domain_values)
+            row['weak_label_idx'] = domain_values.index(row['weak_label'])
+            row['init_index'] = domain_values.index(row['init_value'])
+
+            # Assign weak label if domain value exceeds our weak label threshold
+            weak_label, weak_label_prob = max(preds, key=lambda pred: pred[1])
+
+            if weak_label_prob >= self.weak_label_thresh:
+                num_weak_labels+=1
+
+                weak_label_idx = domain_values.index(weak_label)
+                row['weak_label'] = weak_label
+                row['weak_label_idx'] = weak_label_idx
+                row['fixed'] = CellStatus.WEAK_LABEL.value
+
+            updated_domain_df.append(row)
+
+        # update our cell domain df with our new updated domain
+        domain_df = pd.DataFrame.from_records(updated_domain_df, columns=updated_domain_df[0].dtype.names).drop('index', axis=1).sort_values('_vid_')
+        logging.debug('DONE assembling cell domain table in %.2f', time.clock() - tic)
+
+        logging.info('number of (additional) weak labels assigned from posterior model: %d', num_weak_labels)
+
+        logging.debug('DONE generating domain and weak labels')
         return domain_df
 
     def get_domain_cell(self, attr, row):
@@ -245,7 +343,7 @@ class DomainEngine:
         """
 
         domain = set([])
-        correlated_attributes = self.get_corr_attributes(attr)
+        correlated_attributes = self.get_corr_attributes(attr, self.cor_strength)
         # Iterate through all attributes correlated at least self.cor_strength ('cond_attr')
         # and take the top K co-occurrence values for 'attr' with the current
         # row's 'cond_attr' value.
@@ -259,23 +357,22 @@ class DomainEngine:
                 s = self.pair_stats[cond_attr][attr]
                 try:
                     candidates = s[cond_val]
-                    domain.update(set(candidates))
+                    domain.update(candidates)
                 except KeyError as missing_val:
-                    if pd.isnull(row[attr]):
-                        pass
-                    else:
-                        # error since co-occurrence must be at least 1 (since the
-                        # current row counts as one co-occurrence).
-                        raise Exception(missing_val)
+                    if not pd.isnull(row[attr]):
+                        # Error since co-occurrence must be at least 1 (since
+                        # the current row counts as one co-occurrence).
+                        logging.error('Missing value: {}'.format(missing_val))
+                        raise
 
-        # Remove _nan_ if added due to correlated attributes
+        # Remove _nan_ if added due to correlated attributes.
         domain.discard('_nan_')
         # Add initial value in domain
         if pd.isnull(row[attr]):
-            domain.update(set(['_nan_']))
+            domain.update({'_nan_'})
             init_value = '_nan_'
         else:
-            domain.update(set([row[attr]]))
+            domain.update({row[attr]})
             init_value = row[attr]
         return init_value, list(domain)
 
@@ -285,10 +382,8 @@ class DomainEngine:
         'self.max_sample' of domain values for 'attr' that is NOT 'cur_value'.
         """
 
-        if random.random() > self.sampling_prob:
-            return []
-        domain_pool = set(self.single_stats[attr].index.astype(str))
-        domain_pool.remove(cur_value)
+        domain_pool = set(self.single_stats[attr].keys())
+        domain_pool.discard(cur_value)
         size = len(domain_pool)
         if size > 0:
             k = min(self.max_sample, size)
