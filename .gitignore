@@ -10,6 +10,7 @@ _templates
 .venv
 *.swp
 *.pyc
+.cache/
 
 # pip package metadata
 *egg-info/

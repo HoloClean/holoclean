@@ -5,9 +5,9 @@ from dataset import AuxTables
 from .featurizer import Featurizer
 
 
-class LangModelFeat(Featurizer):
+class LangModelFeaturizer(Featurizer):
     def specific_setup(self):
-        self.name = 'LangModelFeat'
+        self.name = 'LangModelFeaturizer'
         self.emb_size = 10
         self.all_attrs = self.ds.get_attributes()
         self.attrs_number = len(self.all_attrs)

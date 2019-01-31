@@ -31,11 +31,6 @@ class FeaturizedDataset:
         tensor = torch.cat(tensors, 2)
         self.tensor = tensor
 
-        if self.env['feature_norm']:
-            n_cells, n_classes, n_feats = self.tensor.shape
-            # normalize within each cell the features
-            self.tensor = F.normalize(self.tensor, p=2, dim=1)
-
         logging.debug('DONE featurization.')
 
         if self.env['debug_mode']:
@@ -53,6 +48,13 @@ class FeaturizedDataset:
         logging.debug("generating mask...")
         self.var_class_mask, self.var_to_domsize = self.generate_var_mask()
         logging.debug("DONE generating mask.")
+
+        if self.env['feature_norm']:
+            logging.debug("normalizing features...")
+            n_cells, n_classes, n_feats = self.tensor.shape
+            # normalize within each cell the features
+            self.tensor = F.normalize(self.tensor, p=2, dim=1)
+            logging.debug("DONE feature normalization.")
 
     def generate_weak_labels(self):
         """

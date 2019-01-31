@@ -1,3 +1,5 @@
+import sys
+sys.path.append('../')
 import holoclean
 from detect import NullDetector, ViolationDetector
 from repair.featurize import *
@@ -34,7 +36,7 @@ hc.setup_domain()
 featurizers = [
     InitAttrFeaturizer(),
     OccurAttrFeaturizer(),
-    ConstraintFeat()
+    ConstraintFeaturizer()
 ]
 
 hc.repair_errors(featurizers)

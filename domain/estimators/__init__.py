@@ -1,5 +1,5 @@
-from .recurrent_logistic import RecurrentLogistic
+from .logistic import Logistic
 from .naive_bayes import NaiveBayes
 
 
-__all__ = ['RecurrentLogistic', 'NaiveBayes']
+__all__ = ['Logistic', 'NaiveBayes']

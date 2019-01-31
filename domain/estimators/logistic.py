@@ -5,6 +5,7 @@ import logging
 import pandas as pd
 import time
 import torch
+from torch.optim import Adam, SGD
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 
@@ -12,22 +13,22 @@ from ..estimator import Estimator
 from utils import dictify_df
 
 
-class RecurrentLogistic(Estimator, torch.nn.Module):
+class Logistic(Estimator, torch.nn.Module):
     """
-    RecurrentLogistic is an Estimator that approximates posterior of
+    Logistic is an Estimator that approximates posterior of
     p(v_cur | v_init) by training a logistic regression model to predict the current
     value in a cell given all other initial values using features
     of the other initial values such as co-occurrence.
     """
 
-    def __init__(self, dataset, pruned_domain, active_attrs):
+    def __init__(self, env, dataset, pruned_domain, active_attrs):
         """
         :param dataset: (Dataset) original dataset
         :param pruned_domain: (dict) of tid -> attr -> value for the domain
         :param active_attrs: (list[str]) attributes that have random values
         """
         torch.nn.Module.__init__(self)
-        Estimator.__init__(self, dataset)
+        Estimator.__init__(self, env, dataset)
 
         self.dom = pruned_domain
         self.active_attrs = active_attrs
@@ -52,7 +53,11 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         torch.nn.init.xavier_uniform_(self._W)
         self._B = torch.nn.Parameter(torch.Tensor([1e-6]))
         self._loss = torch.nn.BCELoss()
-        self._optimizer = torch.optim.Adam(self.parameters())
+        if self.env['optimizer'] == 'sgd':
+            self._optimizer = SGD(self.parameters(), lr=self.env['learning_rate'], momentum=self.env['momentum'],
+                                  weight_decay=self.env['weight_decay'])
+        else:
+            self._optimizer = Adam(self.parameters(), lr=self.env['learning_rate'], weight_decay=self.env['weight_decay'])
 
     def _update_featurizers(self, reuse_stats=False):
         """
@@ -84,7 +89,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         self._X = torch.zeros(self.n_samples, self.num_features)
         self._Y = torch.zeros(self.n_samples)
 
-        logging.debug('RecurrentLogistic: featurizing training data...')
+        logging.debug('Logistic: featurizing training data...')
 
         sample_idx = 0
         domain_idx_df = []
@@ -187,11 +192,11 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
             self._update_training_data()
             torch_ds = TensorDataset(self._X, self._Y)
 
-            logging.debug("RecurrentLogistic: training, recur iteration: %d", recur_idx)
+            logging.debug("Logistic: training, recur iteration: %d", recur_idx)
 
             # Main training loop.
             for epoch_idx in range(1, num_epochs+1):
-                logging.debug("RecurrentLogistic: epoch %d", epoch_idx)
+                logging.debug("Logistic: epoch %d", epoch_idx)
                 batch_cnt = 0
                 for batch_X, batch_Y in tqdm(DataLoader(torch_ds, batch_size=batch_size)):
                     batch_pred = self.forward(batch_X)
@@ -201,8 +206,7 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
                     batch_loss.backward()
                     self._optimizer.step()
                     batch_cnt += 1
-                logging.debug('RecurrentLogistic: average batch loss is %f', sum(batch_losses[-1 * batch_cnt:]) / batch_cnt)
-                # TODO(richardwu): update cur_df with predictions
+                logging.debug('Logistic: average batch loss is %f', sum(batch_losses[-1 * batch_cnt:]) / batch_cnt)
 
         return batch_losses
 
@@ -223,26 +227,26 @@ class RecurrentLogistic(Estimator, torch.nn.Module):
         :param raw_records_by_tid: (dict) maps TID to its corresponding row (record) in the raw data
         :param cell_domain_rows: (list[pd.record]) list of records from the cell domain DF
         """
-        logging.debug('RecurrentLogistic: constructing feature tensor for %d cells...', cell_domain_rows.shape[0])
+        logging.debug('Logistic: constructing feature tensor for %d cells...', cell_domain_rows.shape[0])
         X_tensors = []
         for row in tqdm(cell_domain_rows):
             X_tensors.append(self._gen_test_tensor(raw_records_by_tid[row['_tid_']],
                                                    row['attribute'], row['domain'].split('|||')))
-        logging.debug('RecurrentLogistic: DONE featurization.')
+        logging.debug('Logistic: DONE featurization.')
         pred_X = torch.cat(X_tensors, dim=0)
-        logging.debug('RecurrentLogistic: predicting posterior probabilities for tensors...')
+        logging.debug('Logistic: predicting posterior probabilities for tensors...')
         pred_Y = self.forward(pred_X)
-        logging.debug('RecurrentLogistic: DONE prediction.')
+        logging.debug('Logistic: DONE prediction.')
 
         cur_idx = 0
-        logging.debug('RecurrentLogistic: segmenting predictions by cell...')
+        logging.debug('Logistic: segmenting predictions by cell...')
         probs_by_row = []
         for row in tqdm(cell_domain_rows):
             # Create list of (value, proba) for each cell.
             probs_by_row.append(list(zip(row['domain'].split('|||'),
                 map(float, pred_Y[cur_idx:cur_idx+row['domain_size']]))))
             cur_idx += row['domain_size']
-        logging.debug('RecurrentLogistic: DONE segmentation.')
+        logging.debug('Logistic: DONE segmentation.')
         return probs_by_row
 
 
@@ -250,7 +254,7 @@ class Featurizer:
     """
     Feauturizer is an abstract class for featurizers that is able to generate
     real-valued tensors (features) for a row from raw data.
-    Used in RecurrentLogistic model.
+    Used in Logistic model.
     """
     __metaclass__ = ABCMeta
 

@@ -7,7 +7,7 @@ import random
 import math
 
 from dataset import AuxTables, CellStatus
-from .estimators import RecurrentLogistic
+from .estimators import Logistic
 
 
 class DomainEngine:
@@ -258,7 +258,7 @@ class DomainEngine:
         for row in domain_df[['_tid_', 'attribute', 'domain']].to_records():
             pruned_domain[row['_tid_']] = pruned_domain.get(row['_tid_'], {})
             pruned_domain[row['_tid_']][row['attribute']] = row['domain'].split('|||')
-        estimator = RecurrentLogistic(self.ds, pruned_domain, self.active_attributes)
+        estimator = Logistic(self.env, self.ds, pruned_domain, self.active_attributes)
         estimator.train(num_recur=1, num_epochs=3, batch_size=self.env['batch_size'])
         logging.debug('DONE training posterior model in %.2fs', time.clock() - tic)
 

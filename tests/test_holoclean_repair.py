@@ -36,7 +36,8 @@ def test_hospital():
         InitSimFeaturizer(),
         OccurAttrFeaturizer(),
         FreqFeaturizer(),
-        ConstraintFeat()
+        LangModelFeaturizer(),
+        ConstraintFeaturizer()
     ]
 
     hc.repair_errors(featurizers)

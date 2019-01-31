@@ -9,13 +9,15 @@ class Estimator:
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, dataset):
+    def __init__(self, env, dataset):
         """
+        :param env: (dict) dict containing environment/parameters settings.
         :param dataset: (Dataset)
         :param pruned_domain: (dict[dict[list[str]]]) dictionary that maps
         :param active_attrs: (list[str]) list of attributes with random variables (for training samples)
         _tid_ (str) --> attr (str) --> (pruned) domain values (list[str]).
         """
+        self.env = env
         self.ds = dataset
         self.attrs = self.ds.get_attributes()
 

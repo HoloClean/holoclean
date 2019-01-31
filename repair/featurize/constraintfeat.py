@@ -57,9 +57,9 @@ def gen_feat_tensor(violations, total_vars, classes):
     return tensor
 
 
-class ConstraintFeat(Featurizer):
+class ConstraintFeaturizer(Featurizer):
     def specific_setup(self):
-        self.name = 'ConstraintFeat'
+        self.name = 'ConstraintFeaturizer'
         self.constraints = self.ds.constraints
         self.init_table_name = self.ds.raw_data.name
 
