@@ -43,7 +43,7 @@ class FeaturizedDataset:
         # TODO: remove after we validate it is not needed.
         self.in_features = self.tensor.shape[2]
         logging.debug("generating weak labels...")
-        self.weak_labels, self.labels_type, self.is_clean = self.generate_weak_labels()
+        self.weak_labels, self.is_clean = self.generate_weak_labels()
         logging.debug("DONE generating weak labels.")
         logging.debug("generating mask...")
         self.var_class_mask, self.var_to_domsize = self.generate_var_mask()
@@ -76,7 +76,6 @@ class FeaturizedDataset:
         if len(res) == 0:
             raise Exception("No weak labels available. Reduce pruning threshold.")
         labels = -1 * torch.ones(self.total_vars, 1).type(torch.LongTensor)
-        labels_type = -1 * torch.ones(self.total_vars, 1).type(torch.LongTensor)
         is_clean = torch.zeros(self.total_vars, 1).type(torch.LongTensor)
         for tuple in tqdm(res):
             vid = int(tuple[0])
@@ -84,9 +83,8 @@ class FeaturizedDataset:
             fixed = int(tuple[2])
             clean = int(tuple[3])
             labels[vid] = label
-            labels_type[vid] = fixed
             is_clean[vid] = clean
-        return labels, labels_type, is_clean
+        return labels, is_clean
 
     def generate_var_mask(self):
         """

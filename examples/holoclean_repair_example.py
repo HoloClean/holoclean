@@ -8,13 +8,13 @@ from repair.featurize import *
 # 1. Setup a HoloClean session.
 hc = holoclean.HoloClean(
     db_name='holo',
-    domain_thresh_1=0.1,
+    domain_thresh_1=0.7,
     domain_thresh_2=0,
     weak_label_thresh=0.9,
     max_domain=10000,
     cor_strength=0.05,
     epochs=20,
-    weight_decay=0.01,
+    weight_decay=0,
     threads=1,
     batch_size=1,
     verbose=True,
