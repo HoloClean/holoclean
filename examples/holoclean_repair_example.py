@@ -7,7 +7,7 @@ from repair.featurize import *
 
 # 1. Setup a HoloClean session.
 hc = holoclean.HoloClean(
-    db_name='holo',
+    db_name='holo1',
     domain_thresh_1=0.7,
     domain_thresh_2=0,
     weak_label_thresh=0.9,
@@ -19,6 +19,8 @@ hc = holoclean.HoloClean(
     batch_size=1,
     verbose=True,
     timeout=3*60000,
+    feature_norm=True,
+    weight_norm=False,
     print_fw=True
 ).session
 

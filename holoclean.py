@@ -86,7 +86,7 @@ arguments = [
     (('-w', '--weight_decay'),
      {'metavar': 'WEIGHT_DECAY',
       'dest':  'weight_decay',
-      'default': 0.1,
+      'default': 0.01,
       'type': float,
       'help': 'Weight decay across iterations.'}),
     (('-m', '--momentum'),
@@ -122,13 +122,13 @@ arguments = [
     (('-wlt', '--cor-strength'),
      {'metavar': 'COR_STRENGTH',
       'dest': 'cor_strength',
-      'default': 0.1,
+      'default': 0.05,
       'type': float,
       'help': 'Correlation threshold (absolute) when selecting correlated attributes for domain pruning.'}),
     (('-wlt', '--feature-norm'),
      {'metavar': 'FEATURE_NORM',
       'dest': 'feature_norm',
-      'default': False,
+      'default': True,
       'type': bool,
       'help': 'Normalize the features before training.'}),
     (('-wlt', '--weight_norm'),
@@ -137,6 +137,18 @@ arguments = [
       'default': False,
       'type': bool,
       'help': 'Normalize the weights after every forward pass during training.'}),
+    (('-wlt', '--estimator_epochs'),
+     {'metavar': 'ESTIMATOR_EPOCHS',
+      'dest': 'estimator_epochs',
+      'default': 3,
+      'type': int,
+      'help': 'Number of epochs to run the weak labelling and domain generation estimator.'}),
+    (('-wlt', '--estimator_batch_size'),
+     {'metavar': 'ESTIMATOR_BATCH_SIZE',
+      'dest': 'estimator_batch_size',
+      'default': 32,
+      'type': int,
+      'help': 'Size of batch used in SGD in the weak labelling and domain generation estimator.'}),
 ]
 
 # Flags for Holoclean mode
@@ -228,7 +240,7 @@ class Session:
             root_logger.setLevel(logging.DEBUG)
             gensim_logger.setLevel(logging.DEBUG)
 
-        logging.info('initiating session with parameters: %s', env)
+        logging.debug('initiating session with parameters: %s', env)
 
         # Initialize members
         self.name = name

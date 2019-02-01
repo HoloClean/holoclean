@@ -19,7 +19,7 @@ class FeaturizedDataset:
         self.total_vars, self.classes = self.ds.get_domain_info()
         self.processes = self.env['threads']
         for f in featurizers:
-            f.setup_featurizer(self.ds, self.total_vars, self.classes, self.processes, self.env['batch_size'])
+            f.setup_featurizer(self.ds, self.processes, self.env['batch_size'])
         logging.debug('featurizing training data...')
         tensors = [f.create_tensor() for f in featurizers]
         self.featurizer_info = [FeatInfo(featurizer.name,

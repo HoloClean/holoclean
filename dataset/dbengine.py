@@ -150,8 +150,6 @@ def _execute_query_w_backup(args, conn_args, timeout):
         cur = con.cursor()
         cur.execute(query_backup)
         res = cur.fetchall()
-        if len(res) == 1:
-            logging.info(res)
         con.close()
     toc = time.clock()
     logging.debug('Time to execute query with id %d: %.2f secs', query_id, toc - tic)
