@@ -36,7 +36,7 @@ class Parser:
             status = "OPENED constraints file successfully"
             logging.debug(status)
             for line in dc_file:
-                if not line.isspace():
+                if not (line.isspace() or line.startswith('#')):
                     line = line.rstrip()
                     self.dc_strings.append(line)
                     self.dcs.append(DenialConstraint(line,attrs))
