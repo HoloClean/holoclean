@@ -27,11 +27,11 @@ class InitAttrFeaturizer(Featurizer):
         query = 'SELECT _vid_, attribute, init_index FROM %s ORDER BY _vid_'%AuxTables.cell_domain.name
         return self.ds.engine.execute_query(query)
 
-    def gen_feat_tensor(self, input, vid):
+    def gen_feat_tensor(self, vid):
         assert(self.featurization_query_results[vid][0] == vid)
         input = self.featurization_query_results[vid]
         vid = int(input[0])
-        attr_idx = self.attr_to_idex[input[1]]
+        attr_idx = self.attr_to_idx[input[1]]
         init_idx = int(input[2])
         tensor = torch.zeros(self.classes, self.total_attrs)
         tensor[init_idx][attr_idx] = 1.0

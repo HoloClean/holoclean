@@ -47,10 +47,10 @@ class OccurAttrFeaturizer(Featurizer):
         # return combined
 
     def gen_feat_tensor(self, vid):
-        assert(self.featurization_query_results[vid][['vid']] == vid)
+        assert(self.featurization_query_results[vid]['_vid_'] == vid)
         row = self.featurization_query_results[vid]
         tid = row['_tid_']
-        tuple = self.raw_dat_dict[tid]
+        tuple = self.raw_data_dict[tid]
         tensor = torch.zeros(self.classes, self.attrs_number*self.attrs_number)
         rv_attr = row['attribute']
         domain = row['domain'].split('|||')

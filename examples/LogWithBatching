@@ -1,0 +1,4 @@
+Holoclean home directory: /Users/jon/Documents/holoclean
+/anaconda2/envs/holo_env/bin:/anaconda2/bin:/Library/Frameworks/Python.framework/Versions/3.6/bin:/Applications/Postgres.app/Contents/Versions/latest/bin:/Users/jon/.rbenv/shims:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/X11/bin:/Users/jon/Documents/holoclean
+Environment variables set!
+Launching example script holoclean_repair_example.py

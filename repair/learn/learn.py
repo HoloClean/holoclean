@@ -115,7 +115,7 @@ class RepairModel:
             j = 0
             # num_batches = n_examples // batch_size
             # Each iteration of training_data_iterator will return env['batch_size'] examples
-            for batch_X, batch_Y, batch_var_mask in DataLoader(training_data, batch_size=self.env['batch_size'], shuffle=True):
+            for batch_X, batch_Y, batch_var_mask in tqdm(DataLoader(training_data, batch_size=self.env['batch_size'], shuffle=True)):
                 try:
                     cost += self.__train__(loss, optimizer, batch_X, batch_Y, batch_var_mask)
                 except:

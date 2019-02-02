@@ -16,7 +16,7 @@ hc = holoclean.HoloClean(
     epochs=20,
     weight_decay=0,
     threads=1,
-    batch_size=2,
+    batch_size=1,
     verbose=True,
     timeout=3*60000,
     print_fw=True
@@ -35,11 +35,10 @@ hc.detect_errors(detectors)
 hc.setup_domain()
 featurizers = [
     InitAttrFeaturizer(),
-    OccurAttrFeaturizer()
+    OccurAttrFeaturizer(),
+    ConstraintFeaturizer()
 ]
-# featurizers = [
-#     FreqFeaturizer()
-# ]
+
 hc.repair_errors(featurizers)
 
 # 5. Evaluate the correctness of the results.
