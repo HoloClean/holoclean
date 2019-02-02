@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from dataset import AuxTables, CellStatus
 
 FeatInfo = namedtuple('FeatInfo', ['name', 'size', 'learnable', 'init_weight', 'feature_names'])
-BatchedFeaturizedDataset = namedtuple('BatchedFeaturizedDataset', ['X', 'Y', 'var_mask'])
+Example = namedtuple('Example', ['X', 'Y', 'var_mask'])
 
 
 class FeaturizedDataset:
@@ -138,4 +138,4 @@ class TorchFeaturizedDataset(torch.utils.data.Dataset):
 
         Y = self.Y[self.vids[idx]]
         var_mask = self.var_mask[self.vids[idx]]
-        return BatchedFeaturizedDataset(X, Y, var_mask)
+        return Example(X, Y, var_mask)

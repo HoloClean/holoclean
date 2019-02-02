@@ -17,6 +17,7 @@ class InitSimFeaturizer(Featurizer):
 
     def gen_feat_tensor(self, vid):
         assert(self.featurization_query_results[vid][0] == vid)
+        input = self.featurization_query_results[vid]
         vid = int(input[0])
         attr_idx = self.attr_to_idx[input[1]]
         init_value = input[2]

@@ -1,5 +1,4 @@
 from string import Template
-# from functools import partial
 
 import torch
 import torch.nn.functional as F
@@ -51,7 +50,7 @@ class ConstraintFeaturizer(Featurizer):
         self.name = 'ConstraintFeaturizer'
         self.constraints = self.ds.constraints
         self.init_table_name = self.ds.raw_data.name
-        self.featurization_query_results = self.get_featurization_query_results()
+        self.featurization_query_results = self._get_featurization_query_results()
         # List of Dicts mapping vid to value_id to num_violations
         self.featurization_maps = self.build_featurization_maps(self.featurization_query_results)
 
@@ -79,13 +78,13 @@ class ConstraintFeaturizer(Featurizer):
             if vid in featurization_map:
                 for val_id in featurization_map[vid]:
                     violation_count = featurization_map[vid][val_id]
-                    tensor[val_id - 1][0] = violation_count
+                    tensor[val_id][0] = violation_count
             tensors.append(tensor)
         combined = torch.cat(tensors, dim=1)
         combined = F.normalize(combined, p=2, dim=0)
         return combined
 
-    def get_featurization_query_results(self):
+    def _get_featurization_query_results(self):
         queries = self.generate_relaxed_sql()
         return self.ds.engine.execute_queries_w_backup(queries)
 

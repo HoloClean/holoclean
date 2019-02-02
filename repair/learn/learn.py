@@ -11,6 +11,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import numpy as np
 
+import time
+
 
 
 class TiedLinear(torch.nn.Module):
@@ -103,6 +105,7 @@ class RepairModel:
 
         epochs = self.env['epochs']
         for i in tqdm(range(epochs)):
+            tic = time.clock()
             cost = 0.
             # Each iteration of training_data_iterator will return env['batch_size'] examples
             # Randomly shuffle X, Y, and mask every time
@@ -113,7 +116,7 @@ class RepairModel:
             # train_loss = loss.forward(Y_pred, Variable(Y_train, requires_grad=False).squeeze(1))
             # logging.debug('overall training loss: %f', train_loss)
             # lr_sched.step(train_loss)
-
+            logging.debug('Time to complete epoch: %.2f secs', time.clock() - tic)
             if self.env['verbose']:
                 batch_grdt = []
                 batch_Y_assign = []
@@ -130,7 +133,7 @@ class RepairModel:
 
 
     def infer_values(self, infer_data):
-        Y_preds = [self.__predict__(batch_X, batch_var_mask) for batch_X, _, batch_var_mask in DataLoader(infer_data, batch_size=self.env['batch_size'])]
+        Y_preds = [self.__predict__(batch_X, batch_var_mask) for batch_X, _, batch_var_mask in tqdm(DataLoader(infer_data, batch_size=self.env['batch_size']))]
         return torch.cat(Y_preds)
 
     def __train__(self, loss, optimizer, X_train, Y_train, mask_train):
