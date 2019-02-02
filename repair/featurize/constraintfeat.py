@@ -46,22 +46,21 @@ ex_binary_template = Template('SELECT _vid_, val_id, 1 violations '
                               '                AND t3.rv_val $operation $rv_val)')
 
 
-def gen_feat_tensor(violations, total_vars, classes):
-    tensor = torch.zeros(total_vars,classes,1)
-    if violations:
-        for entry in violations:
-            vid = int(entry[0])
-            val_id = int(entry[1]) - 1
-            feat_val = float(entry[2])
-            tensor[vid][val_id][0] = feat_val
-    return tensor
-
-
 class ConstraintFeaturizer(Featurizer):
     def specific_setup(self):
         self.name = 'ConstraintFeaturizer'
         self.constraints = self.ds.constraints
         self.init_table_name = self.ds.raw_data.name
+
+    def gen_feat_tensor(self, violations, total_vars, classes):
+        tensor = torch.zeros(total_vars,classes,1)
+        if violations:
+            for entry in violations:
+                vid = int(entry[0])
+                val_id = int(entry[1]) - 1
+                feat_val = float(entry[2])
+                tensor[vid][val_id][0] = feat_val
+        return tensor
 
     def create_tensor(self):
         queries = self.generate_relaxed_sql()

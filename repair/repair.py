@@ -33,9 +33,9 @@ class RepairEngine:
 
     def fit_repair_model(self):
         tic = time.clock()
-        X_train, Y_train, mask_train = self.feat_dataset.get_training_data()
-        logging.info('training with %d training examples (cells)', X_train.shape[0])
-        self.repair_model.fit_model(X_train, Y_train, mask_train)
+        training_data = self.feat_dataset.get_training_data()
+        logging.info('training with %d training examples (cells)', training_data.num_examples)
+        self.repair_model.fit_model(training_data)
         toc = time.clock()
         status = "DONE training repair model."
         train_time = toc - tic
@@ -43,8 +43,8 @@ class RepairEngine:
 
     def infer_repairs(self):
         tic = time.clock()
-        X_pred, mask_pred, infer_idx = self.feat_dataset.get_infer_data()
-        Y_pred = self.repair_model.infer_values(X_pred, mask_pred)
+        infer_data, infer_idx = self.feat_dataset.get_infer_data()
+        Y_pred = self.repair_model.infer_values(infer_data)
         distr_df, infer_val_df = self.get_infer_dataframes(infer_idx, Y_pred)
         self.ds.generate_aux_table(AuxTables.cell_distr, distr_df, store=True, index_attrs=['_vid_'])
         self.ds.generate_aux_table(AuxTables.inf_values_idx, infer_val_df, store=True, index_attrs=['_vid_'])

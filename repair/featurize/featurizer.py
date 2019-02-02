@@ -25,14 +25,14 @@ class Featurizer:
     def specific_setup(self):
         raise NotImplementedError
 
-    @abstractmethod
-    def create_tensor(self):
-        """
-         This method creates a tensor which has shape
-         [rv_index, (a torch tensor of dimensions classes x features)]
-        :return PyTorch Tensor
-        """
-        raise NotImplementedError
+    # @abstractmethod
+    # def create_tensor(self):
+    #     """
+    #      This method creates a tensor which has shape
+    #      [rv_index, (a torch tensor of dimensions classes x features)]
+    #     :return PyTorch Tensor
+    #     """
+    #     raise NotImplementedError
 
     @abstractmethod
     def feature_names(self):
@@ -41,9 +41,10 @@ class Featurizer:
         this featurizer produces.
         """
         raise NotImplementedError
+    def num_features(self):
+        return len(self.feature_names())
 
     def _apply_func(self, func, collection):
         if self._pool is None:
             return list(map(func, collection))
         return self._pool.map(func, collection, min(self._batch_size, len(collection)))
-

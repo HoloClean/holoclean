@@ -20,6 +20,8 @@ class OccurAttrFeaturizer(Featurizer):
         self.single_stats = None
         self.pair_stats = None
         self.setup_stats()
+        # The query results used to featurize the dataset
+        self.featurization_query_results = self._get_featurization_query_results()
 
     def setup_stats(self):
         self.raw_data_dict = self.ds.raw_data.df.set_index('_tid_').to_dict('index')
@@ -27,25 +29,29 @@ class OccurAttrFeaturizer(Featurizer):
         self.total = float(total)
         self.single_stats = single_stats
         self.pair_stats = pair_stats
+        self.featurization_query_results = self._get_featurization_query_results()
 
-    def create_tensor(self):
-        # Iterate over tuples in domain
-        tensors = []
+    def _get_featurization_query_results(self):
         # Set tuple_id index on raw_data
         t = self.ds.aux_table[AuxTables.cell_domain]
         sorted_domain = t.df.reset_index().sort_values(by=['_vid_'])[['_tid_','attribute','_vid_','domain']]
-        records = sorted_domain.to_records()
-        for row in tqdm(list(records)):
-            # Get tuple from raw_dataset.
-            tid = row['_tid_']
-            tuple = self.raw_data_dict[tid]
-            feat_tensor = self.gen_feat_tensor(row, tuple)
-            tensors.append(feat_tensor)
-        combined = torch.cat(tensors)
-        return combined
+        return sorted_domain.to_records()
+        # 
+        # for row in tqdm(list(records)):
+        #     # Get tuple from raw_dataset.
+        #     tid = row['_tid_']
+        #     tuple = self.raw_data_dict[tid]
+        #     feat_tensor = self.gen_feat_tensor(row, tuple)
+        #     tensors.append(feat_tensor)
+        # combined = torch.cat(tensors)
+        # return combined
 
-    def gen_feat_tensor(self, row, tuple):
-        tensor = torch.zeros(1, self.classes, self.attrs_number*self.attrs_number)
+    def gen_feat_tensor(self, vid):
+        assert(self.featurization_query_results[vid][['vid']] == vid)
+        row = self.featurization_query_results[vid]
+        tid = row['_tid_']
+        tuple = self.raw_dat_dict[tid]
+        tensor = torch.zeros(self.classes, self.attrs_number*self.attrs_number)
         rv_attr = row['attribute']
         domain = row['domain'].split('|||')
         rv_domain_idx = {val: idx for idx, val in enumerate(domain)}
@@ -71,7 +77,7 @@ class OccurAttrFeaturizer(Featurizer):
                         prob = count2/count1
                         if rv_val in rv_domain_idx:
                             index = rv_attr_idx * self.attrs_number + attr_idx
-                            tensor[0][rv_domain_idx[rv_val]][index] = prob
+                            tensor[rv_domain_idx[rv_val]][index] = prob
         return tensor
 
     def feature_names(self):

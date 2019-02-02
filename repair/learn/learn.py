@@ -7,8 +7,10 @@ from torch.autograd import Variable
 from torch.nn import Parameter, ParameterList
 from torch.nn.functional import softmax
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 import numpy as np
+
 
 
 class TiedLinear(torch.nn.Module):
@@ -88,8 +90,8 @@ class RepairModel:
         self.model = TiedLinear(self.env, feat_info, output_dim, bias)
         self.featurizer_weights = {}
 
-    def fit_model(self, X_train, Y_train, mask_train):
-        n_examples, n_classes, n_features = X_train.shape
+    def fit_model(self, training_data):
+        n_examples, n_classes, n_features = training_data.num_examples, self.output_dim, sum(x.size for x in self.feat_info)
 
         loss = torch.nn.CrossEntropyLoss()
         trainable_parameters = filter(lambda p: p.requires_grad, self.model.parameters())
@@ -101,38 +103,56 @@ class RepairModel:
 
         # lr_sched = ReduceLROnPlateau(optimizer, 'min', verbose=True, eps=1e-5, patience=5)
 
-        batch_size = self.env['batch_size']
+        # batch_size = self.env['batch_size']
         epochs = self.env['epochs']
         for i in tqdm(range(epochs)):
             # Randomly shuffle X, Y, and mask every time
-            shuffle_idxs = np.random.permutation(X_train.shape[0])
-            X_train = X_train[shuffle_idxs,:,:]
-            Y_train = Y_train[shuffle_idxs,:]
-            mask_train = mask_train[shuffle_idxs,:]
+            # shuffle_idxs = np.random.permutation(X_train.shape[0])
+            # X_train = X_train[shuffle_idxs,:,:]
+            # Y_train = Y_train[shuffle_idxs,:]
+            # mask_train = mask_train[shuffle_idxs,:]
             cost = 0.
-            num_batches = n_examples // batch_size
-            for k in range(num_batches):
-                start, end = k * batch_size, (k + 1) * batch_size
-                cost += self.__train__(loss, optimizer, X_train[start:end], Y_train[start:end], mask_train[start:end])
+            j = 0
+            # num_batches = n_examples // batch_size
+            # Each iteration of training_data_iterator will return env['batch_size'] examples
+            for batch_X, batch_Y, batch_var_mask in DataLoader(training_data, batch_size=self.env['batch_size'], shuffle=True):
+                try:
+                    cost += self.__train__(loss, optimizer, batch_X, batch_Y, batch_var_mask)
+                except:
+                    import pdb; pdb.set_trace()
+                j += 1
 
-            # Y_pred = self.__predict__(X_train, mask_train)
-            # train_loss = loss.forward(Y_pred, Variable(Y_train, requires_grad=False).squeeze(1))
+            # # Reuse iterator
+            # training_data_iterator.reset()
+            # train_loss = 0
+            # # Not sure if this is equivalent
+            # for training_data in training_data_iterator:
+            #     X_train = training_data.X
+            #     var_mask = training_data.var_mask
+            #     Y_pred = self.__predict__(X_train, mask_train)
+            #     train_loss += loss.forward(Y_pred, Variable(Y_train, requires_grad=False).squeeze(1))
             # logging.debug('overall training loss: %f', train_loss)
             # lr_sched.step(train_loss)
 
-            if self.env['verbose']:
-                # Compute and print accuracy at the end of epoch
-                grdt = Y_train.numpy().flatten()
-                Y_pred = self.__predict__(X_train, mask_train)
-                Y_assign = Y_pred.data.numpy().argmax(axis=1)
-                logging.debug("Epoch %d, cost = %f, acc = %.2f%%",
-                        i + 1, cost / num_batches,
-                        100. * np.mean(Y_assign == grdt))
+            # TODO(jmio) Add this back and not sure if this is equivalent
+            # if self.env['verbose']:
+            #     # Reuse iterator
+            #     train_loss = 0
+            #     # Not sure if this is equivalent
+            #     for batch_X, batch_Y, batch_var_mask in DataLoader(training_data, batch_size=self.env['batch_size']):
+            #         # lr_sched.step(train_loss)
+            #         # Compute and print accuracy at the end of epoch
+            #         grdt = batch_Y.numpy().flatten()
+            #         Y_pred = self.__predict__(batch_X, batch_var_mask)
+            #         Y_assign = Y_pred.data.numpy().argmax(axis=1)
+            #         logging.debug("Epoch %d, cost = %f, acc = %.2f%%",
+            #                 i + 1, cost / num_batches,
+            #                 100. * np.mean(Y_assign == grdt))
 
 
-    def infer_values(self, X_pred, mask_pred):
-        output = self.__predict__(X_pred, mask_pred)
-        return output
+    def infer_values(self, infer_data):
+        Y_preds = [self.__predict__(batch_X, batch_var_mask) for batch_X, _, batch_var_mask in DataLoader(infer_data, batch_size=self.env['batch_size'])]
+        return torch.cat(Y_preds)
 
     def __train__(self, loss, optimizer, X_train, Y_train, mask_train):
         X_var = Variable(X_train, requires_grad=False)
