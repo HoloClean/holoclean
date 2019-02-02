@@ -22,26 +22,12 @@ class FeaturizedDataset:
         self.featurizers = featurizers
         for f in self.featurizers:
             f.setup_featurizer(self.ds, self.total_vars, self.classes, self.processes, self.env['batch_size'])
-        # logging.debug('featurizing training data...')
-        # tensors = [f.create_tensor() for f in featurizers]
         self.featurizer_info = [FeatInfo(featurizer.name,
                                          featurizer.num_features(),
                                          featurizer.learnable,
                                          featurizer.init_weight,
                                          featurizer.feature_names())
                                 for featurizer in self.featurizers]
-        # tensor = torch.cat(tensors, 2)
-        # self.tensor = tensor
-        #
-        # logging.debug('DONE featurization.')
-
-        # Is this still necessary since we have no initial weights for all examples?
-        # if self.env['debug_mode']:
-        #     weights_df = pd.DataFrame(self.tensor.reshape(-1, self.tensor.shape[-1]).numpy())
-        #     weights_df.columns = ["{}::{}".format(f.name, featname) for f in featurizers for featname in f.feature_names()]
-        #     weights_df.insert(0, 'vid', np.floor_divide(np.arange(weights_df.shape[0]), self.tensor.shape[1]) + 1)
-        #     weights_df.insert(1, 'val_idx', np.tile(np.arange(self.tensor.shape[1]), self.tensor.shape[0]))
-        #     weights_df.to_pickle('debug/{}_train_features.pkl'.format(self.ds.id))
 
         # TODO: remove after we validate it is not needed.
         self.in_features = sum(featurizer.size for featurizer in self.featurizer_info)
@@ -143,71 +129,13 @@ class TorchFeaturizedDataset(torch.utils.data.Dataset):
         return self.num_examples
 
     def __getitem__(self, idx):
-        X = torch.cat([featurizer.gen_feat_tensor(self.vids[idx]) for featurizer in self.featurizers],1)
+        X = torch.cat([featurizer.gen_feat_tensor(self.vids[idx]) for featurizer in self.featurizers], dim=1)
         if self.feature_norm:
             logging.debug("normalizing features...")
             # normalize within each cell the features
-            self.tensor = F.normalize(self.tensor, p=2, dim=1)
+            self.tensor = F.normalize(self.tensor, p=2, dim=0)
             logging.debug("DONE feature normalization.")
 
         Y = self.Y[self.vids[idx]]
         var_mask = self.var_mask[self.vids[idx]]
         return BatchedFeaturizedDataset(X, Y, var_mask)
-#
-#     # def reset(self, get_labels):
-#     #     self.vids = np.random.permutation(vids)
-#     #     self.get_labels = get_labels
-#     #     self.curr_batch = 0
-#
-#     def next(self):
-#         if self.curr_batch >= self.batch_size:
-#             raise StopIteration
-#         self.curr_batch += 1
-#         start_ind, end_ind = (self.curr_batch - 1) * self.batch_size, min(len(self.vids), self.curr_batch * self.batch_size)
-#         vids_to_featurize = self.vids[start_ind:end_ind]
-#         X = [featurizer.gen_feat_tensor_for_vids(vids_to_featurize) for featurizer in self.featurizers]
-#         tensor = torch.cat(X, 2)
-#         if self.feature_norm:
-#             logging.debug("normalizing features...")
-#             # normalize within each cell the features
-#             self.tensor = F.normalize(self.tensor, p=2, dim=1)
-#             logging.debug("DONE feature normalization.")
-#         if self.get_labels:
-#             Y = self.Y.index_select(0, vids_to_featurize)
-#         var_mask = self.var_mask.index_select(0, vids_to_featurize)
-#         return BatchedFeaturizedDataset(X, Y, var_mask)
-#
-#
-# class FeaturizedInferenceDataset()
-#     # def get_tensor(self):
-#     #     return self.tensor
-#     #
-#     # def get_training_data(self):
-#     #     """
-#     #     get_training_data returns a DatasetIterator which iterates over the
-#     #     labelled training data.
-#     #     """
-#     #
-#     #     # This assumes that we have a larger proportion of correct initial values
-#     #     # and only a small amount of incorrect initial values which allow us
-#     #     # to train to convergence
-#     #     # """
-#     #     train_idx = (self.weak_labels != -1).nonzero()[:,0]
-#     #     return DatasetIterator(vids=train_idx, batch_size=self.env['batch_size'])
-#     #     #
-#     #     # X_train = self.tensor.index_select(0, train_idx)
-#     #     # Y_train = self.weak_labels.index_select(0, train_idx)
-#     #     # mask_train = self.var_class_mask.index_select(0, train_idx)
-#     #     # return X_train, Y_train, mask_train
-#     #
-#     # def get_infer_data(self):
-#     #     """
-#     #     Retrieves the samples to be inferred i.e. DK cells.
-#     #     """
-#     #     # only infer on those that are DK cells
-#     #     infer_idx = (self.is_clean == 0).nonzero()[:, 0]
-#     #     X_infer = self.tensor.index_select(0, infer_idx)
-#     #     mask_infer = self.var_class_mask.index_select(0, infer_idx)
-#     #     return X_infer, mask_infer, infer_idx
-#
-# class DatasetIterator:

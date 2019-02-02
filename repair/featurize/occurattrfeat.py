@@ -36,15 +36,6 @@ class OccurAttrFeaturizer(Featurizer):
         t = self.ds.aux_table[AuxTables.cell_domain]
         sorted_domain = t.df.reset_index().sort_values(by=['_vid_'])[['_tid_','attribute','_vid_','domain']]
         return sorted_domain.to_records()
-        # 
-        # for row in tqdm(list(records)):
-        #     # Get tuple from raw_dataset.
-        #     tid = row['_tid_']
-        #     tuple = self.raw_data_dict[tid]
-        #     feat_tensor = self.gen_feat_tensor(row, tuple)
-        #     tensors.append(feat_tensor)
-        # combined = torch.cat(tensors)
-        # return combined
 
     def gen_feat_tensor(self, vid):
         assert(self.featurization_query_results[vid]['_vid_'] == vid)

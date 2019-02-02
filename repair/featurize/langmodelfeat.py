@@ -40,12 +40,5 @@ class LangModelFeaturizer(Featurizer):
             tensor[idx][start:end] = torch.tensor(emb_val)
         return tensor
 
-    # def create_tensor(self):
-    #     query = 'SELECT _vid_, attribute, domain FROM %s ORDER BY _vid_' % AuxTables.cell_domain.name
-    #     results = self.ds.engine.execute_query(query)
-    #     tensors = [self.gen_feat_tensor(res, self.classes) for res in results]
-    #     combined = torch.cat(tensors)
-    #     return combined
-
     def feature_names(self):
         return ["{}_emb_{}".format(attr, emb_idx) for attr in self.all_attrs for emb_idx in range(self.emb_size)]

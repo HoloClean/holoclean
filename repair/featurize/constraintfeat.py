@@ -85,23 +85,6 @@ class ConstraintFeaturizer(Featurizer):
         combined = F.normalize(combined, p=2, dim=0)
         return combined
 
-    #
-    # def gen_feat_tensor(self, violations, total_vars, classes):
-    #     tensors = self._apply_func(partial(gen_feat_tensor, total_vars=self.total_vars, classes=self.classes), results)
-    #     combined = torch.cat(tensors, 2)
-    #     combined = F.normalize(combined, p=2, dim=1)
-    #     return combined
-    #
-    #
-    #     tensor = torch.zeros(total_vars,classes,1)
-    #     if violations:
-    #         for entry in violations:
-    #             vid = int(entry[0])
-    #             val_id = int(entry[1]) - 1
-    #             feat_val = float(entry[2])
-    #             tensor[vid][val_id][0] = feat_val
-    #     return tensor
-
     def get_featurization_query_results(self):
         queries = self.generate_relaxed_sql()
         return self.ds.engine.execute_queries_w_backup(queries)

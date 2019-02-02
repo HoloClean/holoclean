@@ -28,11 +28,6 @@ class FreqFeaturizer(Featurizer):
             tensor[idx][attr_idx] = prob
         return tensor
 
-    # def gen_feat_tensor_for_vids(self, vids):
-    #     tensors = [self.gen_feat_tensor(vid) for vid in vids]
-    #     combined = torch.cat(tensors)
-    #     return combined
-
     def _get_featurization_query_results(self):
         query = 'SELECT _vid_, attribute, domain FROM %s ORDER BY _vid_' % AuxTables.cell_domain.name
         return self.ds.engine.execute_query(query)

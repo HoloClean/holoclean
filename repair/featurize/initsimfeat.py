@@ -15,15 +15,6 @@ class InitSimFeaturizer(Featurizer):
         self.total_attrs = len(self.ds.attr_to_idx)
         self.featurization_query_results = self._get_featurization_query_results()
 
-    # def create_tensor(self):
-    #
-    #     map_input = []
-    #     for res in results:
-    #         map_input.append((res[0], self.attr_to_idx[res[1]],res[2]))
-    #     tensors = self._apply_func(partial(gen_feat_tensor, classes=self.classes, total_attrs=self.total_attrs), map_input)
-    #     combined = torch.cat(tensors)
-    #     return combined
-
     def gen_feat_tensor(self, vid):
         assert(self.featurization_query_results[vid][0] == vid)
         vid = int(input[0])
