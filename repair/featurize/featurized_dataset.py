@@ -93,6 +93,7 @@ class FeaturizedDataset:
             var_to_domsize[vid] = max_class
         return mask, var_to_domsize
 
+    # Returns an instance of TorchFeaturizedDataset for the training data
     def get_training_data(self):
         train_idx = (self.weak_labels != -1).nonzero()[:,0]
         return TorchFeaturizedDataset(
@@ -104,6 +105,7 @@ class FeaturizedDataset:
             feature_norm =self.env['feature_norm']
         )
 
+    # Returns an instance of TorchFeaturizedDataset for the inference data
     def get_infer_data(self):
         infer_idx = (self.is_clean == 0).nonzero()[:, 0]
         return TorchFeaturizedDataset(
@@ -115,6 +117,8 @@ class FeaturizedDataset:
             feature_norm =self.env['feature_norm']
         ), infer_idx
 
+# Implements __len__ and __getitem__ for the training or inference dataset so
+# that it can be used with DataLoader which automatically handles batching logic
 class TorchFeaturizedDataset(torch.utils.data.Dataset):
     def __init__(self, vids, featurizers, Y, var_mask, batch_size, feature_norm):
         self.vids = vids

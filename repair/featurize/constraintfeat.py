@@ -51,7 +51,9 @@ class ConstraintFeaturizer(Featurizer):
         self.constraints = self.ds.constraints
         self.init_table_name = self.ds.raw_data.name
         self.featurization_query_results = self._get_featurization_query_results()
-        # List of Dicts mapping vid to value_id to num_violations
+        # List[Dict[str, Dict[str, int]]] where the key of the dict is the vid
+        # and the value is a dict whtere the key is the value_id and the value
+        # is the number of violations.
         self.featurization_maps = self.build_featurization_maps(self.featurization_query_results)
 
     # TODO(jmio): potential memory issues

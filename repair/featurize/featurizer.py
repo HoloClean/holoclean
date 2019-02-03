@@ -25,6 +25,7 @@ class Featurizer:
         raise NotImplementedError
 
     @abstractmethod
+    # Genereate feature tensor for the cell with vid == :param vid:
     def gen_feat_tensor(self, vid):
         raise NotImplementedError
 
