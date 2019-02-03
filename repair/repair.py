@@ -34,7 +34,7 @@ class RepairEngine:
     def fit_repair_model(self):
         tic = time.clock()
         training_data = self.feat_dataset.get_training_data()
-        logging.info('training with %d training examples (cells)', training_data.num_examples)
+        logging.info('training w ith %d training examples (cells)', training_data.num_examples)
         self.repair_model.fit_model(training_data)
         toc = time.clock()
         status = "DONE training repair model."

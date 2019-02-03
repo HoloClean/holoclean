@@ -200,13 +200,10 @@ class DomainEngine:
             tid = row['_tid_']
             app = []
             for attr in self.active_attributes:
-                # TODO(richardwu): relax domain prune here: simply take all
-                #   values with at least one co-occurrence. This can be
-                #   simulated by setting cor_strength = 0.0
                 init_value, dom = self.get_domain_cell(attr, row)
                 init_value_idx = dom.index(init_value)
-                # We will use an Estimator model for weak labelling below, which requires
-                # the full pruned domain first.
+                # We will use an estimator model for additional weak labelling
+                # below, which requires an initial pruned domain first.
                 weak_label = init_value
                 weak_label_idx = init_value_idx
                 if len(dom) > 1:
@@ -242,7 +239,7 @@ class DomainEngine:
                                     "fixed": CellStatus.SINGLE_VALUE.value})
                         vid += 1
             cells.extend(app)
-        domain_df = pd.DataFrame(data=cells)
+        domain_df = pd.DataFrame(data=cells).sort_values('_vid_')
         logging.debug('DONE generating initial set of domain values in %.2f', time.clock() - tic)
 
         # Skip estimator model since we do not require any weak labelling or domain
@@ -254,21 +251,14 @@ class DomainEngine:
         # posterior model for a naive probability estimation.
         logging.debug('training posterior model for estimating domain value probabilities...')
         tic = time.clock()
-        pruned_domain = {}
-        for row in domain_df[['_tid_', 'attribute', 'domain']].to_records():
-            pruned_domain[row['_tid_']] = pruned_domain.get(row['_tid_'], {})
-            pruned_domain[row['_tid_']][row['attribute']] = row['domain'].split('|||')
-        estimator = Logistic(self.env, self.ds, pruned_domain, self.active_attributes)
-        estimator.train(num_recur=1, num_epochs=3, batch_size=self.env['batch_size'])
+        estimator = Logistic(self.env, self.ds, domain_df, self.active_attributes)
+        estimator.train(num_epochs=self.env['estimator_epochs'], batch_size=self.env['estimator_batch_size'])
         logging.debug('DONE training posterior model in %.2fs', time.clock() - tic)
 
         # Predict probabilities for all pruned domain values.
         logging.debug('predicting domain value probabilities from posterior model...')
         tic = time.clock()
-        # raw records indexed by tid
-        raw_records_by_tid = {row['_tid_']: row for row in records}
-        domain_records = domain_df.to_records()
-        preds_by_cell = estimator.predict_pp_batch(raw_records_by_tid, domain_records)
+        preds_by_cell = estimator.predict_pp_batch()
         logging.debug('DONE predictions in %.2f secs, re-constructing cell domain...', time.clock() - tic)
 
         logging.debug('re-assembling final cell domain table...')
@@ -277,7 +267,7 @@ class DomainEngine:
         # weak labelling
         num_weak_labels = 0
         updated_domain_df = []
-        for preds, row in tqdm(zip(preds_by_cell, domain_records)):
+        for preds, row in tqdm(zip(preds_by_cell, domain_df.to_records())):
             # no need to modify single value cells
             if row['fixed'] == CellStatus.SINGLE_VALUE.value:
                 updated_domain_df.append(row)
@@ -313,7 +303,7 @@ class DomainEngine:
 
         # update our cell domain df with our new updated domain
         domain_df = pd.DataFrame.from_records(updated_domain_df, columns=updated_domain_df[0].dtype.names).drop('index', axis=1).sort_values('_vid_')
-        logging.debug('DONE assembling cell domain table in %.2f', time.clock() - tic)
+        logging.debug('DONE assembling cell domain table in %.2fs', time.clock() - tic)
 
         logging.info('number of (additional) weak labels assigned from posterior model: %d', num_weak_labels)
 

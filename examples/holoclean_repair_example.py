@@ -19,6 +19,8 @@ hc = holoclean.HoloClean(
     batch_size=1,
     verbose=True,
     timeout=3*60000,
+    feature_norm=True,
+    weight_norm=False,
     print_fw=True
 ).session
 

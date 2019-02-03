@@ -272,11 +272,11 @@ class EvalEngine:
                     "w. label = init", "w. label = grdth", "w. label = inferred",
                     "infer = grdth", "count"])
         df_stats = df_stats.sort_values(list(df_stats.columns)).reset_index(drop=True)
-        logging.info("weak label statistics:")
+        logging.debug("weak label statistics:")
         pd.set_option('display.max_columns', None)
         pd.set_option('display.max_rows', len(df_stats))
         pd.set_option('display.max_colwidth', -1)
-        logging.info("%s", df_stats)
+        logging.debug("%s", df_stats)
         pd.reset_option('display.max_columns')
         pd.reset_option('display.max_rows')
         pd.reset_option('display.max_colwidth')

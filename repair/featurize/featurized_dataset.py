@@ -19,9 +19,9 @@ class FeaturizedDataset:
         self.env = env
         self.total_vars, self.classes = self.ds.get_domain_info()
         self.processes = self.env['threads']
+        for f in featurizers:
+            f.setup_featurizer(self.ds, self.processes, self.env['batch_size'])
         self.featurizers = featurizers
-        for f in self.featurizers:
-            f.setup_featurizer(self.ds, self.total_vars, self.classes, self.processes, self.env['batch_size'])
         self.featurizer_info = [FeatInfo(featurizer.name,
                                          featurizer.num_features(),
                                          featurizer.learnable,
@@ -131,10 +131,8 @@ class TorchFeaturizedDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         X = torch.cat([featurizer.gen_feat_tensor(self.vids[idx]) for featurizer in self.featurizers], dim=1)
         if self.feature_norm:
-            logging.debug("normalizing features...")
             # normalize within each cell the features
-            self.tensor = F.normalize(self.tensor, p=2, dim=0)
-            logging.debug("DONE feature normalization.")
+            X = F.normalize(X, p=2, dim=0)
 
         Y = self.Y[self.vids[idx]]
         var_mask = self.var_mask[self.vids[idx]]

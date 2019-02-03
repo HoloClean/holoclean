@@ -13,7 +13,7 @@ def is_symmetric(operation):
 def contains_operation(string):
     """
     Method to check if a given string contains one of the operation signs.
-    
+
     :param string: given string
     :return: operation index in list of pre-defined list of operations or
     Null if string does not contain any
@@ -44,7 +44,7 @@ class DenialConstraint:
         self.components = []
 
         # Find all tuple names used in DC
-        logging.info('DONE pre-processing constraint: %s', dc_string)
+        logging.debug('DONE pre-processing constraint: %s', dc_string)
         for component in split:
             if contains_operation(component):
                 break
@@ -99,7 +99,7 @@ class Predicate:
                         attr=component[1])
             if i < len(self.components) - 1:
                 self.cnf_form += self.operation
-        logging.info("DONE parsing predicate: %s", predicate_string)
+        logging.debug("DONE parsing predicate: %s", predicate_string)
 
     def parse_components(self, predicate_string):
         """
