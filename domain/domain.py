@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from dataset import AuxTables, CellStatus
 from .estimators import NaiveBayes
+from utils import NULL_REPR
 
 
 class DomainEngine:
@@ -186,11 +187,12 @@ class DomainEngine:
         that are correlated with attr with magnitude at least self.cor_strength
         (init parameter).
 
+        :param attr: (string) the original attribute to get the correlated attributes for.
         :param thres: (float) correlation threshold (absolute) for returned attributes.
         """
         # Not memoized: find correlated attributes from correlation dictionary.
         if (attr, thres) not in self._corr_attrs:
-            self._corr_attrs[(attr,thres)] = []
+            self._corr_attrs[(attr, thres)] = []
 
             if attr in self.correlations:
                 attr_correlations = self.correlations[attr]
@@ -239,46 +241,58 @@ class DomainEngine:
         self.all_attrs = list(records.dtype.names)
         for row in tqdm(list(records)):
             tid = row['_tid_']
-            app = []
             for attr in self.active_attributes:
                 init_value, init_value_idx, dom = self.get_domain_cell(attr, row)
+                # If init_value is NULL, we would not have it in the domain since we filtered it out.
+                init_value_idx = -1
+                if init_value in dom:
+                    init_value_idx = dom.index(init_value)
                 # We will use an estimator model for additional weak labelling
                 # below, which requires an initial pruned domain first.
-                weak_label = init_value
-                weak_label_idx = init_value_idx
-                if len(dom) > 1:
-                    cid = self.ds.get_cell_id(tid, attr)
-                    app.append({"_tid_": tid,
-                                "attribute": attr,
-                                "_cid_": cid,
-                                "_vid_": vid,
-                                "domain": "|||".join(dom),
-                                "domain_size": len(dom),
-                                "init_value": init_value,
-                                "init_index": init_value_idx,
-                                "weak_label": weak_label,
-                                "weak_label_idx": weak_label_idx,
-                                "fixed": CellStatus.NOT_SET.value})
-                    vid += 1
-                else:
-                    add_domain = self.get_random_domain(attr, init_value)
-                    # Check if attribute has more than one unique values.
-                    if len(add_domain) > 0:
-                        dom.extend(add_domain)
-                        cid = self.ds.get_cell_id(tid, attr)
-                        app.append({"_tid_": tid,
-                                    "attribute": attr,
-                                    "_cid_": cid,
-                                    "_vid_": vid,
-                                    "domain": "|||".join(dom),
-                                    "domain_size": len(dom),
-                                    "init_value": init_value,
-                                    "init_index": init_value_idx,
-                                    "weak_label": init_value,
-                                    "weak_label_idx": init_value_idx,
-                                    "fixed": CellStatus.SINGLE_VALUE.value})
-                        vid += 1
-            cells.extend(app)
+                # Weak labels will be trained on the init values.
+                cid = self.ds.get_cell_id(tid, attr)
+
+                # Originally, all cells have a NOT_SET status to be considered
+                # in weak labelling.
+                cell_status = CellStatus.NOT_SET.value
+
+                if len(dom) <= 1:
+                    # Not enough domain values, we need to get some random
+                    # values (other than 'init_value') for training. However,
+                    # this might still get us zero domain values. We handle it
+                    # next.
+                    rand_dom_values = self.get_random_domain(attr, init_value)
+
+                    # the rand_dom_values might still be empty. In this case,
+                    # there are no other possible values for this cell. There
+                    # is not point to use this cell for training and there is no
+                    # point to run inference on it since we cannot even generate
+                    # a random domain. Therefore, we just ignore it from the
+                    # final tensor.
+                    if len(rand_dom_values) == 0:
+                        continue
+
+                    # Otherwise, just add the random domain values to the domain
+                    # and set the cell status accordingly.
+                    dom.extend(rand_dom_values)
+
+                    # Set the cell status that this is a single value and was
+                    # randomly assigned other values in the domain. These will
+                    # not be modified by the estimator.
+                    cell_status = CellStatus.SINGLE_VALUE.value
+
+                cells.append({"_tid_": tid,
+                              "attribute": attr,
+                              "_cid_": cid,
+                              "_vid_": vid,
+                              "domain": "|||".join(dom),
+                              "domain_size": len(dom),
+                              "init_value": init_value,
+                              "init_index": init_value_idx,
+                              "weak_label": init_value,
+                              "weak_label_idx": init_value_idx,
+                              "fixed": cell_status})
+                vid += 1
         domain_df = pd.DataFrame(data=cells).sort_values('_vid_')
         logging.debug('DONE generating initial set of domain values in %.2f', time.clock() - tic)
 
@@ -319,14 +333,16 @@ class DomainEngine:
             domain_values = [val for val, proba in sorted(preds, key=lambda pred: pred[1], reverse=True)[:self.max_domain]]
 
             # ensure the initial value is included even if its probability is low.
-            if row['init_value'] not in domain_values:
+            if row['init_value'] not in domain_values and row['init_value'] != NULL_REPR:
                 domain_values.append(row['init_value'])
             domain_values = sorted(domain_values)
             # update our memoized domain values for this row again
             row['domain'] = '|||'.join(domain_values)
             row['domain_size'] = len(domain_values)
-            row['weak_label_idx'] = domain_values.index(row['weak_label'])
-            row['init_index'] = domain_values.index(row['init_value'])
+            if row['init_value'] != NULL_REPR:
+                row['init_index'] = domain_values.index(row['init_value'])
+            if row['weak_label'] != NULL_REPR:
+                row['weak_label_idx'] = domain_values.index(row['weak_label'])
 
             weak_label, weak_label_prob = max(preds, key=lambda pred: pred[1])
 
@@ -354,7 +370,7 @@ class DomainEngine:
     def get_domain_cell(self, attr, row):
         """
         get_domain_cell returns a list of all domain values for the given
-        entity (row) and attribute.
+        entity (row) and attribute. The domain never has null as a possible value.
 
         We define domain values as values in 'attr' that co-occur with values
         in attributes ('cond_attr') that are correlated with 'attr' at least in
@@ -374,10 +390,10 @@ class DomainEngine:
         """
 
         domain = set()
+        attr_val = row[attr]
         correlated_attributes = self.get_corr_attributes(attr, self.cor_strength)
-        # Iterate through all attributes correlated at least self.cor_strength ('cond_attr')
-        # and take the top K co-occurrence values for 'attr' with the current
-        # row's 'cond_attr' value.
+        # Iterate through all correlated attributes and take the top K co-occurrence values
+        # for 'attr' with the current row's 'cond_attr' value.
         for cond_attr in correlated_attributes:
             # Ignore correlations with index, tuple id or the same attribute.
             if cond_attr == attr or cond_attr == '_tid_':
@@ -386,27 +402,18 @@ class DomainEngine:
                 logging.warning("domain generation could not find pair_statistics between attributes: {}, {}".format(cond_attr, attr))
                 continue
             cond_val = row[cond_attr]
-            # Ignore correlations with null values.
-            if cond_val == '_nan_':
+            # Ignore co-occurrences with if any value is null.
+            if cond_val == NULL_REPR or attr_val == NULL_REPR or pd.isnull(cond_val) or pd.isnull(attr_val):
                 continue
             s = self.pair_stats[cond_attr][attr]
-            try:
-                candidates = s[cond_val]
-                domain.update(candidates)
-            except KeyError as missing_val:
-                if row[attr] != '_nan_':
-                    # Error since co-occurrence must be at least 1 (since
-                    # the current row counts as one co-occurrence).
-                    logging.error('value missing from statistics: {}'.format(missing_val))
-                    raise
+            candidates = s[cond_val]
+            domain.update(candidates)
 
-        # Add the initial value to the domain.
-        init_value = row[attr]
-        domain.add(init_value)
-
-        # Remove _nan_ if added due to correlated attributes, only if it was not the initial value.
-        if init_value != '_nan_':
-            domain.discard('_nan_')
+        # Remove NULL_REPR (_nan_) if added due to correlated attributes.
+        domain.discard(NULL_REPR)
+        # Add the initial value to the domain if it is not null.
+        if attr_val != NULL_REPR:
+            domain.update({attr_val})
 
         # Convert to ordered list to preserve order.
         domain_lst = sorted(list(domain))
@@ -424,6 +431,7 @@ class DomainEngine:
         """
         domain_pool = set(self.single_stats[attr].keys())
         domain_pool.discard(cur_value)
+        domain_pool.discard(NULL_REPR)
         domain_pool = sorted(list(domain_pool))
         size = len(domain_pool)
         if size > 0:
