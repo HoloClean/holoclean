@@ -154,6 +154,11 @@ class ConstraintFeaturizer(Featurizer):
         predicates = constraint.predicates
         for k in range(len(predicates)):
             orig_cnf = self._orig_cnf(predicates, k)
+            # If there are no other predicates in the constraint,
+            # append TRUE to the WHERE condition. This avoids having
+            # multiple SQL templates.
+            if len(orig_cnf) == 0:
+                orig_cnf = 'TRUE'
             is_binary, join_rel, other_rel = self.get_binary_predicate_join_rel(predicates[k])
             if not is_binary:
                 rv_attr, op, rv_val = self.relax_unary_predicate(predicates[k])
