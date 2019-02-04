@@ -15,9 +15,9 @@ from dcparser.constraint import is_symmetric
 unary_template = Template('SELECT _vid_, val_id, count(*) violations '
                           'FROM   "$init_table" as t1, $pos_values as t2 '
                           'WHERE  t1._tid_ = t2._tid_ '
-                          '  AND t2.attribute = \'$rv_attr\' '
+                          '  AND  t2.attribute = \'$rv_attr\' '
                           '  AND  $orig_predicates '
-                          '  AND t2.rv_val $operation $rv_val '
+                          '  AND  t2.rv_val $operation $rv_val '
                           'GROUP BY _vid_, val_id')
 
 # binary_template is used for constraints where the current predicate
@@ -26,10 +26,10 @@ unary_template = Template('SELECT _vid_, val_id, count(*) violations '
 binary_template = Template('SELECT _vid_, val_id, count(*) violations '
                            'FROM   "$init_table" as t1, "$init_table" as t2, $pos_values as t3 '
                            'WHERE  t1._tid_ != t2._tid_ '
-                           '  AND $join_rel._tid_ = t3._tid_ '
-                           '  AND t3.attribute = \'$rv_attr\' '
-                           '  AND $orig_predicates '
-                           '  AND t3.rv_val $operation $rv_val '
+                           '  AND  $join_rel._tid_ = t3._tid_ '
+                           '  AND  t3.attribute = \'$rv_attr\' '
+                           '  AND  $orig_predicates '
+                           '  AND  t3.rv_val $operation $rv_val '
                            'GROUP BY _vid_, val_id')
 
 # ex_binary_template is used as a fallback for binary_template in case
@@ -38,12 +38,12 @@ binary_template = Template('SELECT _vid_, val_id, count(*) violations '
 ex_binary_template = Template('SELECT _vid_, val_id, 1 violations '
                               'FROM   "$init_table" as $join_rel, $pos_values as t3 '
                               'WHERE  $join_rel._tid_ = t3._tid_ '
-                              '  AND t3.attribute = \'$rv_attr\' '
+                              '  AND  t3.attribute = \'$rv_attr\' '
                               '  AND EXISTS (SELECT $other_rel._tid_ '
-                              '              FROM "$init_table" AS $other_rel '
-                              '              WHERE $join_rel._tid_ != $other_rel._tid_ '
-                              '                AND $orig_predicates '
-                              '                AND t3.rv_val $operation $rv_val)')
+                              '              FROM   "$init_table" AS $other_rel '
+                              '              WHERE  $join_rel._tid_ != $other_rel._tid_ '
+                              '                AND  $orig_predicates '
+                              '                AND  t3.rv_val $operation $rv_val)')
 
 
 def gen_feat_tensor(violations, total_vars, classes):
@@ -75,7 +75,7 @@ class ConstraintFeaturizer(Featurizer):
         query_list = []
         for c in self.constraints:
             # Check tuples in constraint
-            unary = len(c.tuple_names)==1
+            unary = (len(c.tuple_names) == 1)
             if unary:
                 queries = self.gen_unary_queries(c)
             else:
@@ -134,6 +134,11 @@ class ConstraintFeaturizer(Featurizer):
         predicates = constraint.predicates
         for k in range(len(predicates)):
             orig_cnf = self._orig_cnf(predicates, k)
+            # If there are no other predicates in the constraint,
+            # append TRUE to the WHERE condition. This avoids having
+            # multiple SQL templates.
+            if len(orig_cnf) == 0:
+                orig_cnf = 'TRUE'
             rv_attr, op, rv_val = self.relax_unary_predicate(predicates[k])
             query = unary_template.substitute(init_table=self.init_table_name,
                                               pos_values=AuxTables.pos_values.name,
@@ -149,6 +154,11 @@ class ConstraintFeaturizer(Featurizer):
         predicates = constraint.predicates
         for k in range(len(predicates)):
             orig_cnf = self._orig_cnf(predicates, k)
+            # If there are no other predicates in the constraint,
+            # append TRUE to the WHERE condition. This avoids having
+            # multiple SQL templates.
+            if len(orig_cnf) == 0:
+                orig_cnf = 'TRUE'
             is_binary, join_rel, other_rel = self.get_binary_predicate_join_rel(predicates[k])
             if not is_binary:
                 rv_attr, op, rv_val = self.relax_unary_predicate(predicates[k])
