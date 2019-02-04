@@ -4,6 +4,7 @@ import time
 
 from .constraint import DenialConstraint
 
+
 class Parser:
     """
     This class creates interface for parsing denial constraints
@@ -39,7 +40,7 @@ class Parser:
                 if not line.isspace():
                     line = line.rstrip()
                     self.dc_strings.append(line)
-                    self.dcs.append(DenialConstraint(line,attrs))
+                    self.dcs.append(DenialConstraint(line, attrs))
             status = 'DONE Loading DCs from {fname}'.format(fname=os.path.basename(fpath))
         except Exception:
             logging.error('FAILED to load constraints from file %s', os.path.basename(fpath))

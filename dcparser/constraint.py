@@ -66,6 +66,7 @@ class DenialConstraint:
         cnf_forms = [predicate.cnf_form for predicate in self.predicates]
         self.cnf_form = " AND ".join(cnf_forms)
 
+
 class Predicate:
     """
     This class represents predicates.
@@ -171,3 +172,6 @@ class Predicate:
             elif str_so_far == ',' or str_so_far == '.':
                 str_so_far = ''
         return components
+
+    def __str__(self):
+        return self.cnf_form
