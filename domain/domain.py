@@ -1,10 +1,12 @@
 import logging
-import pandas as pd
 import time
 from tqdm import tqdm
 import itertools
 import random
-import math
+
+import numpy as np
+import pandas as pd
+import scipy.stats as ss
 
 from dataset import AuxTables, CellStatus
 from .estimators import Logistic
@@ -56,6 +58,12 @@ class DomainEngine:
         the pairwise correlations between attributes (values are treated as
         discrete categories).
         """
+        self.correlations = self._compute_correlations_pearson()
+
+    def _compute_correlations_pearson(self):
+        """
+        Computes Pearson's correlation.
+        """
         df = self.ds.get_raw_data()[self.ds.get_attributes()].copy()
         # Convert dataset to categories/factors.
         for attr in df.columns:
@@ -64,7 +72,40 @@ class DomainEngine:
         df = df.loc[:, (df != 0).any(axis=0)]
         # Compute correlation across attributes.
         m_corr = df.corr()
-        self.correlations = m_corr
+        return m_corr
+
+    def _compute_correlations_cramer_v(self):
+        """
+        Computes Cramer's V correlation for all pairs of attributes based on Chi-Square.
+        """
+        logging.debug("computing Cramer's V correlations between attribute pairs...")
+        df = self.ds.get_raw_data()
+        attrs = self.ds.get_attributes()
+        corr = {}
+        for j in attrs:
+            corr[j] = {}
+            for k in attrs:
+                corr[j][k] = self._compute_correlations_cramer_v_two_attrs(df, j, k)
+        corr_df = pd.DataFrame(corr)
+        # Order columns alphabetically like rows.
+        return corr_df.reindex(sorted(corr_df.columns), axis=1)
+
+    def _compute_correlations_cramer_v_two_attrs(self, df, attr_a, attr_b):
+        """
+        Computes Cramer's V for two attributes in the dataset.
+        """
+        confusion_matrix = pd.crosstab(df[attr_a], df[attr_b]).values
+        x2 = ss.chi2_contingency(confusion_matrix)[0]  # Get the chi-2 test statistic.
+        n = confusion_matrix.sum()
+        p2 = x2 / n
+        r, k = confusion_matrix.shape
+        phi2corr = max(0, p2 - ((k - 1) * (r - 1)) / (n - 1))
+        r_corr = r - ((r - 1) ** 2) / (n - 1)
+        k_corr = k - ((k - 1) ** 2) / (n - 1)
+        div = min((k_corr - 1), (r_corr - 1))
+        if div == 0:  # In case one of the attributes is empty.
+            return 0.0
+        return np.sqrt(phi2corr / div)
 
     def store_domains(self, domain):
         """
