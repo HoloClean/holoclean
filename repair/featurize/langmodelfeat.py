@@ -32,7 +32,7 @@ class LangModelFeaturizer(Featurizer):
         domain = input[2].split('|||')
         attr_idx = self.ds.attr_to_idx[attribute]
         model = self.attr_language_model[attribute]
-        tensor = torch.zeros(classes, self.attrs_number*self.emb_size)
+        tensor = torch.zeros(self.classes, self.attrs_number*self.emb_size)
         for idx, val in enumerate(domain):
             emb_val = model[val]
             start = attr_idx*self.emb_size
