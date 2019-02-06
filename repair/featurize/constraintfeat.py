@@ -1,7 +1,6 @@
 from string import Template
 
 import torch
-import torch.nn.functional as F
 
 from .featurizer import Featurizer
 from dataset import AuxTables
@@ -50,14 +49,30 @@ class ConstraintFeaturizer(Featurizer):
         self.name = 'ConstraintFeaturizer'
         self.constraints = self.ds.constraints
         self.init_table_name = self.ds.raw_data.name
+
+        # List[tuple(vid, attribute, num_violations)] storing the number of
+        # violations for each cell and the corresponding attribute.
         self.featurization_query_results = self._get_featurization_query_results()
+
         # List[Dict[str, Dict[str, int]]] where the key of the dict is the vid
-        # and the value is a dict whtere the key is the value_id and the value
-        # is the number of violations.
+        # and the value is a dict where the key is the value_id and the value
+        # is the number of violations. Each element in the list corresponds
+        # to one denial constraint.
         self.featurization_maps = self.build_featurization_maps(self.featurization_query_results)
 
-    # TODO(jmio): potential memory issues
     def build_featurization_maps(self, queries):
+        """
+        Memoizes the feature values for each vid based on DC violations.
+
+        :param queries: A List[tuple(vid, attribute, num_violations)] storing
+            the number of violations for each cell and the corresponding
+            attribute.
+
+        :return: A List[Dict[str, Dict[str, int]]] where the key of the dict is
+            the vid and the value is a dict where the key is the value_id and
+            the value is the number of violations. Each element in the list
+            corresponds to one denial constraint.
+        """
         featurization_maps = []
         for query in queries:
             featurization_map = {}
@@ -67,14 +82,13 @@ class ConstraintFeaturizer(Featurizer):
                 feat_val = float(result[2])
                 if vid not in featurization_map:
                     featurization_map[vid] = {}
-                if val_id not in featurization_map[vid]:
-                    featurization_map[vid][val_id] = {}
                 featurization_map[vid][val_id] = feat_val
             featurization_maps.append(featurization_map)
         return featurization_maps
 
     def gen_feat_tensor(self, vid):
         tensors = []
+        # Iterate over each DC and check whether it was violated by the cell.
         for featurization_map in self.featurization_maps:
             tensor = torch.zeros(self.classes, 1)
             if vid in featurization_map:
@@ -83,10 +97,15 @@ class ConstraintFeaturizer(Featurizer):
                     tensor[val_id][0] = violation_count
             tensors.append(tensor)
         combined = torch.cat(tensors, dim=1)
-        combined = F.normalize(combined, p=2, dim=0)
         return combined
 
     def _get_featurization_query_results(self):
+        """
+        Queries the DB once for each DC to detect violations.
+
+        :returns: A List[tuple(vid, attribute, num_violations)] storing the
+            number of violations for each cell and the corresponding attribute.
+        """
         queries = self.generate_relaxed_sql()
         return self.ds.engine.execute_queries_w_backup(queries)
 

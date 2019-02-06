@@ -12,7 +12,7 @@ class InitAttrFeaturizer(Featurizer):
         self.all_attrs = self.ds.get_attributes()
         self.attr_to_idx = self.ds.attr_to_idx
         self.total_attrs = len(self.ds.attr_to_idx)
-        # The query results used to featurize the dataset
+        # List[tuple(vid, attribute, init_index)] sorted by vid.
         self.featurization_query_results = self._get_featurization_query_results()
 
     def _get_featurization_query_results(self):

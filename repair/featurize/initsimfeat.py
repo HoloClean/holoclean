@@ -13,6 +13,7 @@ class InitSimFeaturizer(Featurizer):
         self.all_attrs = self.ds.get_attributes()
         self.attr_to_idx = self.ds.attr_to_idx
         self.total_attrs = len(self.ds.attr_to_idx)
+        # List[tuple(vid, attribute, init_value, domain)].
         self.featurization_query_results = self._get_featurization_query_results()
 
     def gen_feat_tensor(self, vid):

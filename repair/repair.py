@@ -33,7 +33,7 @@ class RepairEngine:
 
     def fit_repair_model(self):
         tic = time.clock()
-        training_data = self.feat_dataset.get_training_data()
+        training_data = self.feat_dataset.get_training_dataset()
         logging.info('training w ith %d training examples (cells)', training_data.num_examples)
         self.repair_model.fit_model(training_data)
         toc = time.clock()
@@ -43,7 +43,7 @@ class RepairEngine:
 
     def infer_repairs(self):
         tic = time.clock()
-        infer_data, infer_idx = self.feat_dataset.get_infer_data()
+        infer_data, infer_idx = self.feat_dataset.get_infer_dataset()
         Y_pred = self.repair_model.infer_values(infer_data)
         distr_df, infer_val_df = self.get_infer_dataframes(infer_idx, Y_pred)
         self.ds.generate_aux_table(AuxTables.cell_distr, distr_df, store=True, index_attrs=['_vid_'])

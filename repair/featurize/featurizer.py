@@ -25,8 +25,11 @@ class Featurizer:
         raise NotImplementedError
 
     @abstractmethod
-    # Genereate feature tensor for the cell with vid == :param vid:
     def gen_feat_tensor(self, vid):
+        """
+        Generates a torch.Tensor(max_domain, num_features) by featurizing the cell
+        with vid == :param vid:.
+        """
         raise NotImplementedError
 
     @abstractmethod

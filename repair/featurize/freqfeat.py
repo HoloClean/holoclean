@@ -12,7 +12,7 @@ class FreqFeaturizer(Featurizer):
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total
         self.single_stats = single_stats
-        # The query results used to featurize the dataset
+        # List[tuple(vid, attribute, '|||' separated domain)] sorted by vid.
         self.featurization_query_results = self._get_featurization_query_results()
 
     def gen_feat_tensor(self, vid):

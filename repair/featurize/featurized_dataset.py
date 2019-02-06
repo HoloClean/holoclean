@@ -93,8 +93,12 @@ class FeaturizedDataset:
             var_to_domsize[vid] = max_class
         return mask, var_to_domsize
 
-    # Returns an instance of TorchFeaturizedDataset for the training data
-    def get_training_data(self):
+    def get_training_dataset(self):
+        """
+        Constructs a TorchFeaturizedDataset for the training dataset.
+
+        :return: An instance of TorchFeaturizedDataset for the training data.
+        """
         train_idx = (self.weak_labels != -1).nonzero()[:,0]
         return TorchFeaturizedDataset(
             vids=train_idx,
@@ -105,8 +109,12 @@ class FeaturizedDataset:
             feature_norm =self.env['feature_norm']
         )
 
-    # Returns an instance of TorchFeaturizedDataset for the inference data
-    def get_infer_data(self):
+    def get_infer_dataset(self):
+        """
+        Constructs a TorchFeaturizedDataset for the inference dataset.
+
+        :return: An instance of TorchFeaturizedDataset for the inference data.
+        """
         infer_idx = (self.is_clean == 0).nonzero()[:, 0]
         return TorchFeaturizedDataset(
             vids=infer_idx,
@@ -117,10 +125,29 @@ class FeaturizedDataset:
             feature_norm =self.env['feature_norm']
         ), infer_idx
 
-# Implements __len__ and __getitem__ for the training or inference dataset so
-# that it can be used with DataLoader which automatically handles batching logic
+
+"""
+Implements interface for torch.utils.data.Dataset.
+
+An instance of TorchFeaturizedDataset can be created for training and inference
+data. It can be used with Torch DataLoader to iterate over batches of the data.
+"""
 class TorchFeaturizedDataset(torch.utils.data.Dataset):
+
     def __init__(self, vids, featurizers, Y, var_mask, batch_size, feature_norm):
+        """
+        Initializes a TorchFeaturizedDataset.
+
+        :param vids: List[str] with vids of the cells to include in the dataset.
+        :param featurizers: List[Featurizer] used to featurize the data.
+        :param Y: Torch.tensor(num_cells, 1) where tensor[i][0] contains the domain
+            index of the initial value for the cell with vid i.
+        :param var_mask: Torch.tensor(num_cells, max_domain) where tensor[i][j] = 0
+            iff the value corresponding to domain index j is valid for the cell with
+            vid i, otherwise tensor[i][j] = -10e6.
+        :param batch_size: An int storing the number of examples to include per batch.
+        :param feature_norm: A boolean indicating if features should be normalized.
+        """
         self.vids = vids
         self.featurizers = featurizers
         self.Y = Y
@@ -133,6 +160,14 @@ class TorchFeaturizedDataset(torch.utils.data.Dataset):
         return self.num_examples
 
     def __getitem__(self, idx):
+        """
+        Get the featurized tensor for a cell.
+
+        :param idx: An int storing the index of the cell to be featurized in
+            self.vids.
+        :return: A torch.Tensor(max_domain, num_features) holding the featurized
+            values of the cell.
+        """
         X = torch.cat([featurizer.gen_feat_tensor(self.vids[idx]) for featurizer in self.featurizers], dim=1)
         if self.feature_norm:
             # normalize within each cell the features

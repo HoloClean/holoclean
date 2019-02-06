@@ -20,7 +20,7 @@ class OccurAttrFeaturizer(Featurizer):
         self.single_stats = None
         self.pair_stats = None
         self.setup_stats()
-        # The query results used to featurize the dataset
+        # A numpy record array with columns '_tid_','attribute','_vid_','domain'.
         self.featurization_query_results = self._get_featurization_query_results()
 
     def setup_stats(self):
