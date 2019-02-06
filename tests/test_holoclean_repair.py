@@ -17,7 +17,8 @@ def test_hospital():
         batch_size=1,
         verbose=True,
         timeout=3 * 60000,
-        print_fw=True
+        print_fw=True,
+        featurization_batch_size=100
     ).session
 
     # 2. Load training data and denial constraints.
