@@ -59,12 +59,12 @@ class NaiveBayes(Estimator):
             yield self.predict_pp(raw_records_by_tid[row['_tid_']], row['attribute'], row['domain'].split('|||'))
 
     def _get_corr_attributes(self, attr):
-        if (attr, thres) not in self._corr_attrs:
-            self._corr_attrs[(attr,thres)] = []
+        if (attr, self._cor_strength) not in self._corr_attrs:
+            self._corr_attrs[(attr,self._cor_strength)] = []
 
             if attr in self._correlations:
                 d_temp = self._correlations[attr]
                 d_temp = d_temp.abs()
-                self._corr_attrs[(attr,thres)] = [rec[0] for rec in d_temp[d_temp > self._cor_strength].iteritems() if rec[0] != attr]
+                self._corr_attrs[(attr,self._cor_strength)] = [rec[0] for rec in d_temp[d_temp > self._cor_strength].iteritems() if rec[0] != attr]
 
-        return self._corr_attrs[(attr, thres)]
+        return self._corr_attrs[(attr, self._cor_strength)]
