@@ -58,7 +58,7 @@ class DomainEngine:
         the pairwise correlations between attributes (values are treated as
         discrete categories).
         """
-        self.correlations = self._compute_correlations_pearson()
+        self.correlations = self._compute_correlations_cramer_v()
 
     def _compute_correlations_pearson(self):
         """
