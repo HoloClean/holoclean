@@ -104,11 +104,6 @@ class RepairModel:
         batch_size = self.env['batch_size']
         epochs = self.env['epochs']
         for i in tqdm(range(epochs)):
-            # Randomly shuffle X, Y, and mask every time
-            shuffle_idxs = np.random.permutation(X_train.shape[0])
-            X_train = X_train[shuffle_idxs,:,:]
-            Y_train = Y_train[shuffle_idxs,:]
-            mask_train = mask_train[shuffle_idxs,:]
             cost = 0.
             num_batches = n_examples // batch_size
             for k in range(num_batches):
