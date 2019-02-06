@@ -7,7 +7,7 @@ import random
 import math
 
 from dataset import AuxTables, CellStatus
-from .estimators import Logistic
+from .estimators import NaiveBayes
 
 
 class DomainEngine:
@@ -251,8 +251,7 @@ class DomainEngine:
         # posterior model for a naive probability estimation.
         logging.debug('training posterior model for estimating domain value probabilities...')
         tic = time.clock()
-        estimator = Logistic(self.env, self.ds, domain_df, self.active_attributes)
-        estimator.train(num_epochs=self.env['estimator_epochs'], batch_size=self.env['estimator_batch_size'])
+        estimator = NaiveBayes(self.env, self.ds, domain_df, self.correlations)
         logging.debug('DONE training posterior model in %.2fs', time.clock() - tic)
 
         # Predict probabilities for all pruned domain values.
@@ -268,7 +267,7 @@ class DomainEngine:
         num_weak_labels = 0
         updated_domain_df = []
         for preds, row in tqdm(zip(preds_by_cell, domain_df.to_records())):
-            # no need to modify single value cells
+            # Do not re-label single valued cells.
             if row['fixed'] == CellStatus.SINGLE_VALUE.value:
                 updated_domain_df.append(row)
                 continue
@@ -288,10 +287,11 @@ class DomainEngine:
             row['weak_label_idx'] = domain_values.index(row['weak_label'])
             row['init_index'] = domain_values.index(row['init_value'])
 
-            # Assign weak label if domain value exceeds our weak label threshold
             weak_label, weak_label_prob = max(preds, key=lambda pred: pred[1])
 
-            if weak_label_prob >= self.weak_label_thresh:
+            # Assign weak label if it is not the same as init AND domain value
+            # exceeds our weak label threshold.
+            if weak_label != row['init_value'] and weak_label_prob >= self.weak_label_thresh:
                 num_weak_labels+=1
 
                 weak_label_idx = domain_values.index(weak_label)
