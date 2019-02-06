@@ -85,7 +85,11 @@ class DomainEngine:
         for j in attrs:
             corr[j] = {}
             for k in attrs:
-                corr[j][k] = self._compute_correlations_cramer_v_two_attrs(df, j, k)
+                if j == k:
+                    correlation = 1.0
+                else:
+                    correlation = self._compute_correlations_cramer_v_two_attrs(df, j, k)
+                corr[j][k] = correlation
         corr_df = pd.DataFrame(corr)
         # Order columns alphabetically like rows.
         return corr_df.reindex(sorted(corr_df.columns), axis=1)
