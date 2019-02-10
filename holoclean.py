@@ -1,5 +1,9 @@
 import logging
 import os
+import random
+
+import torch
+import numpy as np
 
 from dataset import Dataset
 from dcparser import Parser
@@ -247,6 +251,11 @@ class Session:
             gensim_logger.setLevel(logging.DEBUG)
 
         logging.debug('initiating session with parameters: %s', env)
+
+        # Initialize random seeds.
+        random.seed(env['seed'])
+        torch.manual_seed(env['seed'])
+        np.random.seed(seed=env['seed'])
 
         # Initialize members
         self.name = name

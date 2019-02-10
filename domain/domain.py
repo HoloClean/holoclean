@@ -3,8 +3,7 @@ import pandas as pd
 import time
 from tqdm import tqdm
 import itertools
-import random
-import math
+import numpy as np
 
 from dataset import AuxTables, CellStatus
 from .estimators import NaiveBayes
@@ -41,7 +40,6 @@ class DomainEngine:
         'cell_domain', 'pos_values').
         """
         tic = time.time()
-        random.seed(self.env['seed'])
         self.find_correlations()
         self.setup_attributes()
         domain = self.generate_domain()
@@ -138,7 +136,8 @@ class DomainEngine:
         result = self.ds.engine.execute_query(query)
         if not result:
             raise Exception("No attribute contains erroneous cells.")
-        return set(itertools.chain(*result))
+        # Sort the active attributes to maintain the order of the ids of random variable.
+        return sorted(list(itertools.chain(*result)))
 
     def get_corr_attributes(self, attr, thres):
         """
@@ -223,7 +222,7 @@ class DomainEngine:
                     add_domain = self.get_random_domain(attr, init_value)
                     # Check if attribute has more than one unique values.
                     if len(add_domain) > 0:
-                        dom.extend(self.get_random_domain(attr, init_value))
+                        dom.extend(add_domain)
                         cid = self.ds.get_cell_id(tid, attr)
                         app.append({"_tid_": tid,
                                     "attribute": attr,
@@ -274,10 +273,10 @@ class DomainEngine:
             # prune domain if any of the values are above our domain_thresh_2
             preds = [[val, proba] for val, proba in preds if proba >= self.domain_thresh_2] or preds
 
-            # cap the maximum # of domain values to self.max_domain
+            # cap the maximum # of domain values to self.max_domain based on probabilities.
             domain_values = [val for val, proba in sorted(preds, key=lambda pred: pred[1], reverse=True)[:self.max_domain]]
 
-            # ensure the initial value is included
+            # ensure the initial value is included even if its probability is low.
             if row['init_value'] not in domain_values:
                 domain_values.append(row['init_value'])
             # update our memoized domain values for this row again
@@ -291,7 +290,7 @@ class DomainEngine:
             # Assign weak label if it is not the same as init AND domain value
             # exceeds our weak label threshold.
             if weak_label != row['init_value'] and weak_label_prob >= self.weak_label_thresh:
-                num_weak_labels+=1
+                num_weak_labels += 1
 
                 weak_label_idx = domain_values.index(weak_label)
                 row['weak_label'] = weak_label
@@ -380,13 +379,13 @@ class DomainEngine:
         get_random_domain returns a random sample of at most size
         'self.max_sample' of domain values for 'attr' that is NOT 'cur_value'.
         """
-
         domain_pool = set(self.single_stats[attr].keys())
         domain_pool.discard(cur_value)
+        domain_pool = sorted(list(domain_pool))
         size = len(domain_pool)
         if size > 0:
             k = min(self.max_sample, size)
-            additional_values = random.sample(domain_pool, k)
+            additional_values = np.random.choice(domain_pool, size=k, replace=False)
         else:
             additional_values = []
-        return additional_values
+        return sorted(additional_values)

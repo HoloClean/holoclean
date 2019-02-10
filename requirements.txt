@@ -1,5 +1,5 @@
 enum34==1.1.6
-gensim==3.2.0
+gensim==3.7.0
 numpy==1.16.0
 pandas==0.23.4
 psycopg2-binary==2.7.7
