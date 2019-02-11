@@ -13,7 +13,7 @@ def test_hospital():
         max_domain=10000,
         cor_strength=0.6,
         nb_cor_strength=0.8,
-        epochs=20,
+        epochs=10,
         weight_decay=0.1,
         threads=1,
         batch_size=1,
