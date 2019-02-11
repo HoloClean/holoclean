@@ -81,24 +81,28 @@ class DomainEngine:
         for x in attrs:
             corr[x] = {}
             x_vals = data_df[x]
-            x_entropy = drv.entropy(x_vals)
+            x_domain_size = x_vals.nunique()
             for y in attrs:
-                # Set correlation to 0 if H(x) = 0
-                if x_entropy == 0:
+                # Set correlation to 0.0 if entropy of x is 1 (only one possible value).
+                if x_domain_size == 1:
                     corr[x][y] = 0.0
+                    continue
+
+                # Set correlation to 1 for same attributes.
+                if x == y:
+                    corr[x][y] = 1.0
                     continue
 
                 # Compute the conditional entropy H(x|y) = H(x,y) - H(y).
                 # H(x,y) denotes H(x U y).
                 # If H(x|y) = 0, then y determines x, i.e., y -> x.
+                # Use the domain size of x as a log base for normalization.
                 y_vals = data_df[y]
-                x_y_entropy = drv.entropy_conditional(x_vals, y_vals)
+                x_y_entropy = drv.entropy_conditional(x_vals, y_vals, base=x_domain_size)
 
-                # Normalize by dividing H(x|y) / H(x).
-                # The normalized conditional entropy is 0 for strongly correlated
-                # attributes and 1 for completely independent attributes. We reverse
-                # this to reflect the correlation.
-                corr[x][y] = 1.0 - (x_y_entropy / x_entropy)
+                # The conditional entropy is 0 for strongly correlated attributes and 1 for
+                # completely independent attributes. We reverse this to reflect the correlation.
+                corr[x][y] = 1.0 - x_y_entropy
         return corr
 
     def store_domains(self, domain):
