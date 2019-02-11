@@ -32,21 +32,21 @@ class NaiveBayes(Estimator):
 
     def predict_pp(self, row, attr, values):
         nb_score = []
+        correlated_attributes = self._get_corr_attributes(attr)
         for val1 in values:
             val1_count = self._freq[attr][val1]
-            log_prob = math.log(float(val1_count)/float(self._n_tuples))
-            correlated_attributes = self._get_corr_attributes(attr)
-            total_log_prob = 0.0
+            log_prob = math.log(float(val1_count) / float(self._n_tuples))
             for at in correlated_attributes:
-                if at != attr:
-                    val2 = row[at]
-                    val2_count = self._freq[at][val2]
-                    val2_val1_count = 0.1
-                    if val1 in self._cooccur_freq[attr][at]:
-                        if val2 in self._cooccur_freq[attr][at][val1]:
-                            val2_val1_count = max(self._cooccur_freq[attr][at][val1][val2] - 1.0, 0.1)
-                    p = float(val2_val1_count)/float(val1_count)
-                    log_prob += math.log(p)
+                # Ignore same attribute, index, and tuple id.
+                if at == attr or at == '_tid_':
+                    continue
+                val2 = row[at]
+                val2_val1_count = 0.1
+                if val1 in self._cooccur_freq[attr][at]:
+                    if val2 in self._cooccur_freq[attr][at][val1]:
+                        val2_val1_count = max(self._cooccur_freq[attr][at][val1][val2] - 1.0, 0.1)
+                p = float(val2_val1_count) / float(val1_count)
+                log_prob += math.log(p)
             nb_score.append((val1, log_prob))
 
         denom = sum(map(math.exp, [log_prob for _, log_prob in nb_score]))
@@ -69,6 +69,9 @@ class NaiveBayes(Estimator):
             yield self.predict_pp(self._raw_records_by_tid[row['_tid_']], row['attribute'], row['domain'].split('|||'))
 
     def _get_corr_attributes(self, attr):
+        """
+        TODO: refactor this with Domain::get_corr_attributes().
+        """
         if (attr, self._cor_strength) not in self._corr_attrs:
             self._corr_attrs[(attr,self._cor_strength)] = []
 

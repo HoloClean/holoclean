@@ -3,8 +3,7 @@ import pandas as pd
 import time
 from tqdm import tqdm
 import itertools
-import random
-import math
+import numpy as np
 
 from dataset import AuxTables, CellStatus
 from .estimators import NaiveBayes
@@ -41,7 +40,6 @@ class DomainEngine:
         'cell_domain', 'pos_values').
         """
         tic = time.time()
-        random.seed(self.env['seed'])
         self.find_correlations()
         self.setup_attributes()
         domain = self.generate_domain()
@@ -138,7 +136,8 @@ class DomainEngine:
         result = self.ds.engine.execute_query(query)
         if not result:
             raise Exception("No attribute contains erroneous cells.")
-        return set(itertools.chain(*result))
+        # Sort the active attributes to maintain the order of the ids of random variable.
+        return sorted(itertools.chain(*result))
 
     def get_corr_attributes(self, attr, thres):
         """
@@ -200,8 +199,7 @@ class DomainEngine:
             tid = row['_tid_']
             app = []
             for attr in self.active_attributes:
-                init_value, dom = self.get_domain_cell(attr, row)
-                init_value_idx = dom.index(init_value)
+                init_value, init_value_idx, dom = self.get_domain_cell(attr, row)
                 # We will use an estimator model for additional weak labelling
                 # below, which requires an initial pruned domain first.
                 weak_label = init_value
@@ -224,7 +222,7 @@ class DomainEngine:
                     add_domain = self.get_random_domain(attr, init_value)
                     # Check if attribute has more than one unique values.
                     if len(add_domain) > 0:
-                        dom.extend(self.get_random_domain(attr, init_value))
+                        dom.extend(add_domain)
                         cid = self.ds.get_cell_id(tid, attr)
                         app.append({"_tid_": tid,
                                     "attribute": attr,
@@ -275,10 +273,10 @@ class DomainEngine:
             # prune domain if any of the values are above our domain_thresh_2
             preds = [[val, proba] for val, proba in preds if proba >= self.domain_thresh_2] or preds
 
-            # cap the maximum # of domain values to self.max_domain
+            # cap the maximum # of domain values to self.max_domain based on probabilities.
             domain_values = [val for val, proba in sorted(preds, key=lambda pred: pred[1], reverse=True)[:self.max_domain]]
 
-            # ensure the initial value is included
+            # ensure the initial value is included even if its probability is low.
             if row['init_value'] not in domain_values:
                 domain_values.append(row['init_value'])
             # update our memoized domain values for this row again
@@ -292,7 +290,7 @@ class DomainEngine:
             # Assign weak label if it is not the same as init AND domain value
             # exceeds our weak label threshold.
             if weak_label != row['init_value'] and weak_label_prob >= self.weak_label_thresh:
-                num_weak_labels+=1
+                num_weak_labels += 1
 
                 weak_label_idx = domain_values.index(weak_label)
                 row['weak_label'] = weak_label
@@ -332,52 +330,62 @@ class DomainEngine:
         :return: (initial value of entity-attribute, domain values for entity-attribute).
         """
 
-        domain = set([])
+        domain = set()
         correlated_attributes = self.get_corr_attributes(attr, self.cor_strength)
         # Iterate through all attributes correlated at least self.cor_strength ('cond_attr')
         # and take the top K co-occurrence values for 'attr' with the current
         # row's 'cond_attr' value.
         for cond_attr in correlated_attributes:
-            if cond_attr == attr or cond_attr == 'index' or cond_attr == '_tid_':
+            # Ignore correlations with index, tuple id or the same attribute.
+            if cond_attr == attr or cond_attr == '_tid_':
+                continue
+            if not self.pair_stats[cond_attr][attr]:
+                logging.warning("domain generation could not find pair_statistics between attributes: {}, {}".format(cond_attr, attr))
                 continue
             cond_val = row[cond_attr]
-            if not pd.isnull(cond_val):
-                if not self.pair_stats[cond_attr][attr]:
-                    break
-                s = self.pair_stats[cond_attr][attr]
-                try:
-                    candidates = s[cond_val]
-                    domain.update(candidates)
-                except KeyError as missing_val:
-                    if not pd.isnull(row[attr]):
-                        # Error since co-occurrence must be at least 1 (since
-                        # the current row counts as one co-occurrence).
-                        logging.error('Missing value: {}'.format(missing_val))
-                        raise
+            # Ignore correlations with null values.
+            if cond_val == '_nan_':
+                continue
+            s = self.pair_stats[cond_attr][attr]
+            try:
+                candidates = s[cond_val]
+                domain.update(candidates)
+            except KeyError as missing_val:
+                if row[attr] != '_nan_':
+                    # Error since co-occurrence must be at least 1 (since
+                    # the current row counts as one co-occurrence).
+                    logging.error('value missing from statistics: {}'.format(missing_val))
+                    raise
 
-        # Remove _nan_ if added due to correlated attributes.
-        domain.discard('_nan_')
-        # Add initial value in domain
-        if pd.isnull(row[attr]):
-            domain.update({'_nan_'})
-            init_value = '_nan_'
-        else:
-            domain.update({row[attr]})
-            init_value = row[attr]
-        return init_value, list(domain)
+        # Add the initial value to the domain.
+        init_value = row[attr]
+        domain.add(init_value)
+
+        # Remove _nan_ if added due to correlated attributes, only if it was not the initial value.
+        if init_value != '_nan_':
+            domain.discard('_nan_')
+
+        # Convert to ordered list to preserve order.
+        domain_lst = sorted(list(domain))
+
+        # Get the index of the initial value. This should never raise a ValueError since we made sure
+        # that 'init_value' was added.
+        init_value_idx = domain_lst.index(init_value)
+
+        return init_value, init_value_idx, domain_lst
 
     def get_random_domain(self, attr, cur_value):
         """
         get_random_domain returns a random sample of at most size
         'self.max_sample' of domain values for 'attr' that is NOT 'cur_value'.
         """
-
         domain_pool = set(self.single_stats[attr].keys())
         domain_pool.discard(cur_value)
+        domain_pool = sorted(list(domain_pool))
         size = len(domain_pool)
         if size > 0:
             k = min(self.max_sample, size)
-            additional_values = random.sample(domain_pool, k)
+            additional_values = np.random.choice(domain_pool, size=k, replace=False)
         else:
             additional_values = []
-        return additional_values
+        return sorted(additional_values)
