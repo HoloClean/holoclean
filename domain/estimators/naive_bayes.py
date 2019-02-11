@@ -38,7 +38,7 @@ class NaiveBayes(Estimator):
             log_prob = math.log(float(val1_count) / float(self._n_tuples))
             for at in correlated_attributes:
                 # Ignore same attribute, index, and tuple id.
-                if at == attr or at == 'index' or at == '_tid_':
+                if at == attr or at == '_tid_':
                     continue
                 val2 = row[at]
                 val2_val1_count = 0.1

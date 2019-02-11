@@ -137,7 +137,7 @@ class DomainEngine:
         if not result:
             raise Exception("No attribute contains erroneous cells.")
         # Sort the active attributes to maintain the order of the ids of random variable.
-        return sorted(list(itertools.chain(*result)))
+        return sorted(itertools.chain(*result))
 
     def get_corr_attributes(self, attr, thres):
         """
@@ -337,7 +337,7 @@ class DomainEngine:
         # row's 'cond_attr' value.
         for cond_attr in correlated_attributes:
             # Ignore correlations with index, tuple id or the same attribute.
-            if cond_attr == attr or cond_attr == 'index' or cond_attr == '_tid_':
+            if cond_attr == attr or cond_attr == '_tid_':
                 continue
             if not self.pair_stats[cond_attr][attr]:
                 logging.warning("domain generation could not find pair_statistics between attributes: {}, {}".format(cond_attr, attr))
