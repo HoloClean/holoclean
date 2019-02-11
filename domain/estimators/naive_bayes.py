@@ -73,11 +73,12 @@ class NaiveBayes(Estimator):
         TODO: refactor this with Domain::get_corr_attributes().
         """
         if (attr, self._cor_strength) not in self._corr_attrs:
-            self._corr_attrs[(attr,self._cor_strength)] = []
+            self._corr_attrs[(attr, self._cor_strength)] = []
 
             if attr in self._correlations:
-                d_temp = self._correlations[attr]
-                d_temp = d_temp.abs()
-                self._corr_attrs[(attr,self._cor_strength)] = [rec[0] for rec in d_temp[d_temp > self._cor_strength].iteritems() if rec[0] != attr]
+                attr_correlations = self._correlations[attr]
+                self._corr_attrs[(attr, self._cor_strength)] = [corr_attr
+                                                                for corr_attr, corr_strength in attr_correlations.items()
+                                                                if corr_attr != attr and corr_strength > self._cor_strength]
 
         return self._corr_attrs[(attr, self._cor_strength)]
