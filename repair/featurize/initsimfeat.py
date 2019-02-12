@@ -39,7 +39,7 @@ class InitSimFeaturizer(Featurizer):
             # is multiplied by a tensor of ones for initialization.
             init_weight = torch.FloatTensor(init_weight)
 
-        super().__init__(learnable=False, init_weight=init_weight)
+        Featurizer.__init__(self, learnable=False, init_weight=init_weight)
 
     def specific_setup(self):
         self.name = 'InitSimFeaturizer'
