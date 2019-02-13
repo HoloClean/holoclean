@@ -69,12 +69,12 @@ class ViolationDetector(Detector):
         cond1_preds = []
         cond2_preds = []
         for pred in c.predicates:
-            if pred.cnf_form.find('t1'):
-                if pred.cnf_form.find('t2'):
+            if 't1' in pred.cnf_form:
+                if 't2' in pred.cnf_form:
                     cond2_preds.append(pred.cnf_form)
                 else:
                     cond1_preds.append(pred.cnf_form)
-            elif pred.cnf_form.find('t2'):
+            elif 't2' in pred.cnf_form:
                 cond2_preds.append(pred.cnf_form)
             else:
                 raise Exception("ERROR in violation detector. Cannot ground mult-tuple template.")
