@@ -154,7 +154,7 @@ class DomainEngine:
             if attr in self.correlations:
                 d_temp = self.correlations[attr]
                 d_temp = d_temp.abs()
-                self._corr_attrs[(attr,thres)] = [rec[0] for rec in d_temp[d_temp > thres].iteritems() if rec[0] != attr]
+                self._corr_attrs[(attr,thres)] = sorted([rec[0] for rec in d_temp[d_temp > thres].items() if rec[0] != attr])
 
         return self._corr_attrs[(attr, thres)]
 
@@ -279,6 +279,7 @@ class DomainEngine:
             # ensure the initial value is included even if its probability is low.
             if row['init_value'] not in domain_values:
                 domain_values.append(row['init_value'])
+            domain_values = sorted(domain_values)
             # update our memoized domain values for this row again
             row['domain'] = '|||'.join(domain_values)
             row['domain_size'] = len(domain_values)
