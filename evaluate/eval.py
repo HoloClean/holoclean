@@ -86,10 +86,10 @@ class EvalEngine:
         tic = time.clock()
         try:
             prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
-            report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
+            report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs on correct cells (Grdth present) = %d, Total Repairs on incorrect cells (Grdth present) = %d" % (
                       prec, rec, rep_recall, f1, rep_f1,
                       self.detected_errors, self.total_errors, self.correct_repairs,
-                      self.total_repairs, self.total_repairs_grdt)
+                      self.total_repairs, self.total_repairs_grdt_correct, self.total_repairs_grdt_incorrect)
             report_list = [prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
                            self.correct_repairs, self.total_repairs, self.total_repairs_grdt]
         except Exception as e:
@@ -122,19 +122,43 @@ class EvalEngine:
         compute_total_repairs_grdt memoizes the number of repairs for cells
         that are specified in the clean/ground truth data. Otherwise repairs
         are defined the same as compute_total_repairs.
+
+        We also distinguish between repairs on correct cells and repairs on
+        incorrect cells (correct cells are cells where init == ground truth).
         """
-        query = "SELECT count(*) FROM " \
-                "  (SELECT _vid_ " \
-                "   FROM   {} as t1, {} as t2, {} as t3 " \
-                "   WHERE  t1._tid_ = t2._tid_ " \
-                "     AND  t1.attribute = t2.attribute " \
-                "     AND  t1.init_value != t2.rv_value " \
-                "     AND  t1._tid_ = t3._tid_ " \
-                "     AND  t1.attribute = t3._attribute_) AS t".format(AuxTables.cell_domain.name,
-                                                                       AuxTables.inf_values_dom.name,
-                                                                       self.clean_data.name)
+        query = """
+        SELECT
+            (t1.init_value = t3._value_) AS is_correct,
+            count(*)
+        FROM   {} as t1, {} as t2, {} as t3
+        WHERE  t1._tid_ = t2._tid_
+          AND  t1.attribute = t2.attribute
+          AND  t1.init_value != t2.rv_value
+          AND  t1._tid_ = t3._tid_
+          AND  t1.attribute = t3._attribute_
+        GROUP BY is_correct
+          """.format(AuxTables.cell_domain.name,
+                  AuxTables.inf_values_dom.name,
+                  self.clean_data.name)
         res = self.ds.engine.execute_query(query)
-        self.total_repairs_grdt = float(res[0][0])
+
+        # Memoize the number of repairs on correct cells and incorrect cells.
+        # Since we do a GROUP BY we need to check which row of the result
+        # corresponds to the correct/incorrect counts.
+        self.total_repairs_grdt_correct, self.total_repairs_grdt_incorrect = 0, 0
+        self.total_repairs_grdt = 0
+        if not res:
+            return
+
+        if res[0][0]:
+            correct_idx, incorrect_idx = 0, 1
+        else:
+            correct_idx, incorrect_idx = 1, 0
+        if correct_idx < len(res):
+            self.total_repairs_grdt_correct = float(res[correct_idx][1])
+        if incorrect_idx < len(res):
+            self.total_repairs_grdt_incorrect =  float(res[incorrect_idx][1])
+        self.total_repairs_grdt = self.total_repairs_grdt_correct + self.total_repairs_grdt_incorrect
 
     def compute_total_errors(self):
         """
