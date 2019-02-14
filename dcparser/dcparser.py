@@ -37,9 +37,11 @@ class Parser:
             logging.debug(status)
             for line in dc_file:
                 line = line.rstrip()
-                if line and not line.startswith('#'):
-                    self.dc_strings.append(line)
-                    self.dcs.append(DenialConstraint(line,attrs))
+                # Skip empty and comment lines.
+                if not line or line.startswith('#'):
+                    continue
+                self.dc_strings.append(line)
+                self.dcs.append(DenialConstraint(line,attrs))
             status = 'DONE Loading DCs from {fname}'.format(fname=os.path.basename(fpath))
         except Exception:
             logging.error('FAILED to load constraints from file %s', os.path.basename(fpath))
