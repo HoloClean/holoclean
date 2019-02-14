@@ -1,9 +1,11 @@
 import logging
 import pandas as pd
 import time
-from tqdm import tqdm
+
 import itertools
 import numpy as np
+from pyitlib import discrete_random_variable as drv
+from tqdm import tqdm
 
 from dataset import AuxTables, CellStatus
 from .estimators import NaiveBayes
@@ -40,7 +42,7 @@ class DomainEngine:
         'cell_domain', 'pos_values').
         """
         tic = time.time()
-        self.find_correlations()
+        self.compute_correlations()
         self.setup_attributes()
         domain = self.generate_domain()
         self.store_domains(domain)
@@ -48,21 +50,60 @@ class DomainEngine:
         toc = time.time()
         return status, toc - tic
 
-    def find_correlations(self):
+    def compute_correlations(self):
         """
-        find_correlations memoizes to self.correlations; a DataFrame containing
-        the pairwise correlations between attributes (values are treated as
+        compute_correlations memoizes to self.correlations; a data structure
+        that contains pairwise correlations between attributes (values are treated as
         discrete categories).
         """
-        df = self.ds.get_raw_data()[self.ds.get_attributes()].copy()
-        # Convert dataset to categories/factors.
-        for attr in df.columns:
-            df[attr] = df[attr].astype('category').cat.codes
-        # Drop columns with only one value and tid column.
-        df = df.loc[:, (df != 0).any(axis=0)]
-        # Compute correlation across attributes.
-        m_corr = df.corr()
-        self.correlations = m_corr
+        self.correlations = self._compute_norm_cond_entropy_corr()
+
+    def _compute_norm_cond_entropy_corr(self):
+        """
+        Computes the correlations between attributes by calculating
+        the normalized conditional entropy between them. The conditional
+        entropy is asymmetric, therefore we need pairwise computation.
+
+        The computed correlations are stored in a dictionary in the format:
+        {
+          attr_a: { cond_attr_i: corr_strength_a_i,
+                    cond_attr_j: corr_strength_a_j, ... },
+          attr_b: { cond_attr_i: corr_strength_b_i, ...}
+        }
+
+        :return a dictionary of correlations
+        """
+        data_df = self.ds.get_raw_data()
+        attrs = self.ds.get_attributes()
+
+        corr = {}
+        # Compute pair-wise conditional entropy.
+        for x in attrs:
+            corr[x] = {}
+            x_vals = data_df[x]
+            x_domain_size = x_vals.nunique()
+            for y in attrs:
+                # Set correlation to 0.0 if entropy of x is 1 (only one possible value).
+                if x_domain_size == 1:
+                    corr[x][y] = 0.0
+                    continue
+
+                # Set correlation to 1 for same attributes.
+                if x == y:
+                    corr[x][y] = 1.0
+                    continue
+
+                # Compute the conditional entropy H(x|y) = H(x,y) - H(y).
+                # H(x,y) denotes H(x U y).
+                # If H(x|y) = 0, then y determines x, i.e., y -> x.
+                # Use the domain size of x as a log base for normalization.
+                y_vals = data_df[y]
+                x_y_entropy = drv.entropy_conditional(x_vals, y_vals, base=x_domain_size)
+
+                # The conditional entropy is 0 for strongly correlated attributes and 1 for
+                # completely independent attributes. We reverse this to reflect the correlation.
+                corr[x][y] = 1.0 - x_y_entropy
+        return corr
 
     def store_domains(self, domain):
         """
@@ -147,14 +188,15 @@ class DomainEngine:
 
         :param thres: (float) correlation threshold (absolute) for returned attributes.
         """
-        # Not memoized: find correlated attributes from correlation dataframe.
+        # Not memoized: find correlated attributes from correlation dictionary.
         if (attr, thres) not in self._corr_attrs:
             self._corr_attrs[(attr,thres)] = []
 
             if attr in self.correlations:
-                d_temp = self.correlations[attr]
-                d_temp = d_temp.abs()
-                self._corr_attrs[(attr,thres)] = sorted([rec[0] for rec in d_temp[d_temp > thres].items() if rec[0] != attr])
+                attr_correlations = self.correlations[attr]
+                self._corr_attrs[(attr, thres)] = sorted([corr_attr
+                                                   for corr_attr, corr_strength in attr_correlations.items()
+                                                   if corr_attr != attr and corr_strength > thres])
 
         return self._corr_attrs[(attr, thres)]
 
