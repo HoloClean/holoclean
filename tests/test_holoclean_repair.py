@@ -6,17 +6,21 @@ from repair.featurize import *
 def test_hospital():
     # 1. Setup a HoloClean session.
     hc = holoclean.HoloClean(
+        db_name='holo',
         domain_thresh_1=0.0,
         domain_thresh_2=0.0,
-        weak_label_thresh=0.90,
+        weak_label_thresh=0.99,
         max_domain=10000,
-        cor_strength=0.0,
-        epochs=20,
-        weight_decay=0.01,
+        cor_strength=0.6,
+        nb_cor_strength=0.8,
+        epochs=10,
+        weight_decay=0.1,
         threads=1,
         batch_size=1,
         verbose=True,
         timeout=3 * 60000,
+        feature_norm=False,
+        weight_norm=False,
         print_fw=True
     ).session
 
@@ -36,8 +40,8 @@ def test_hospital():
         InitSimFeaturizer(),
         OccurAttrFeaturizer(),
         FreqFeaturizer(),
+        ConstraintFeaturizer(),
         LangModelFeaturizer(),
-        ConstraintFeaturizer()
     ]
 
     hc.repair_errors(featurizers)

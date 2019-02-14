@@ -1,5 +1,9 @@
 import logging
 import os
+import random
+
+import torch
+import numpy as np
 
 from dataset import Dataset
 from dcparser import Parser
@@ -65,12 +69,6 @@ arguments = [
       'default': 0.001,
       'type': float,
       'help': 'The learning rate used during training.'}),
-    (('-k', '--domain_thresh_1'),
-     {'metavar': 'DOMAIN_THRESH_1',
-      'dest': 'domain_thresh_1',
-      'default': 0.1,
-      'type': float,
-      'help': 'Minimum co-occurrence probability threshold required for domain values in the first domain pruning stage. Between 0 and 1.'}),
     (('-o', '--optimizer'),
      {'metavar': 'OPTIMIZER',
       'dest': 'optimizer',
@@ -107,43 +105,55 @@ arguments = [
       'default': 0.90,
       'type': float,
       'help': 'Threshold of posterior probability to assign weak labels.'}),
-    (('-wlt', '--domain-thresh-2'),
+    (('-dt1', '--domain_thresh_1'),
+     {'metavar': 'DOMAIN_THRESH_1',
+      'dest': 'domain_thresh_1',
+      'default': 0.1,
+      'type': float,
+      'help': 'Minimum co-occurrence probability threshold required for domain values in the first domain pruning stage. Between 0 and 1.'}),
+    (('-dt2', '--domain-thresh-2'),
      {'metavar': 'DOMAIN_THRESH_2',
       'dest': 'domain_thresh_2',
       'default': 0,
       'type': float,
       'help': 'Threshold of posterior probability required for values to be included in the final domain in the second domain pruning stage. Between 0 and 1.'}),
-    (('-wlt', '--max-domain'),
+    (('-md', '--max-domain'),
      {'metavar': 'MAX_DOMAIN',
       'dest': 'max_domain',
       'default': 1000000,
       'type': int,
       'help': 'Maximum number of values to include in the domain for a given cell.'}),
-    (('-wlt', '--cor-strength'),
+    (('-cs', '--cor-strength'),
      {'metavar': 'COR_STRENGTH',
       'dest': 'cor_strength',
       'default': 0.05,
       'type': float,
       'help': 'Correlation threshold (absolute) when selecting correlated attributes for domain pruning.'}),
-    (('-wlt', '--feature-norm'),
+    (('-cs', '--nb-cor-strength'),
+     {'metavar': 'NB_COR_STRENGTH',
+      'dest': 'nb_cor_strength',
+      'default': 0.3,
+      'type': float,
+      'help': 'Correlation threshold for correlated attributes when using NaiveBayes estimator.'}),
+    (('-fn', '--feature-norm'),
      {'metavar': 'FEATURE_NORM',
       'dest': 'feature_norm',
       'default': True,
       'type': bool,
       'help': 'Normalize the features before training.'}),
-    (('-wlt', '--weight_norm'),
+    (('-wn', '--weight_norm'),
      {'metavar': 'WEIGHT_NORM',
       'dest': 'weight_norm',
       'default': False,
       'type': bool,
       'help': 'Normalize the weights after every forward pass during training.'}),
-    (('-wlt', '--estimator_epochs'),
+    (('-ee', '--estimator_epochs'),
      {'metavar': 'ESTIMATOR_EPOCHS',
       'dest': 'estimator_epochs',
       'default': 3,
       'type': int,
       'help': 'Number of epochs to run the weak labelling and domain generation estimator.'}),
-    (('-wlt', '--estimator_batch_size'),
+    (('-ebs', '--estimator_batch_size'),
      {'metavar': 'ESTIMATOR_BATCH_SIZE',
       'dest': 'estimator_batch_size',
       'default': 32,
@@ -241,6 +251,11 @@ class Session:
             gensim_logger.setLevel(logging.DEBUG)
 
         logging.debug('initiating session with parameters: %s', env)
+
+        # Initialize random seeds.
+        random.seed(env['seed'])
+        torch.manual_seed(env['seed'])
+        np.random.seed(seed=env['seed'])
 
         # Initialize members
         self.name = name
