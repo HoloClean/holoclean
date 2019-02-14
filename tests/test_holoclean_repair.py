@@ -1,8 +1,8 @@
-import math
-
 from detect import NullDetector, ViolationDetector
 import holoclean
 from repair.featurize import *
+
+TOL = 1e-9
 
 
 def test_hospital():
@@ -58,7 +58,7 @@ def test_hospital():
     # If these assertions ever fail in a new change, the results should
     # be comparable if not better than before, unless a clear and correct
     # reason can be given.
-    assert math.isclose(report.precision, 1.)
-    assert math.isclose(report.recall, 231 / 509)
-    assert math.isclose(report.repair_recall, 231 / 435)
+    assert abs(report.precision - 1.) < TOL
+    assert abs(report.recall - 231 / 509) < TOL
+    assert abs(report.repair_recall - 231 / 435) < TOL
     assert report.total_repairs_grdt_correct == 0
