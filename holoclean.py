@@ -350,12 +350,14 @@ class Session:
         :param val_col: (str) column in CSV that corresponds to correct value
             for the current TID and attribute (i.e. cell).
         :param na_values: (Any) how na_values are represented in the data.
+
+        Returns an EvalReport named tuple containing the experiment results.
         """
         name = self.ds.raw_data.name + '_clean'
         status, load_time = self.eval_engine.load_data(name, fpath, tid_col, attr_col, val_col, na_values=na_values)
         logging.info(status)
         logging.debug('Time to evaluate repairs: %.2f secs', load_time)
-        status, report_time, report_list = self.eval_engine.eval_report()
+        status, report_time, eval_report = self.eval_engine.eval_report()
         logging.info(status)
         logging.debug('Time to generate report: %.2f secs', report_time)
-        return report_list
+        return eval_report

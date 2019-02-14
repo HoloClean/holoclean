@@ -39,11 +39,10 @@ hc.detect_errors(detectors)
 hc.setup_domain()
 featurizers = [
     InitAttrFeaturizer(),
-    InitSimFeaturizer(),
     OccurAttrFeaturizer(),
     FreqFeaturizer(),
     ConstraintFeaturizer(),
-    LangModelFeaturizer()
+    LangModelFeaturizer(),
 ]
 
 hc.repair_errors(featurizers)
