@@ -39,12 +39,12 @@ class TiedLinear(torch.nn.Module):
             feat_size = feat_entry.size
             init_weight = feat_entry.init_weight
             self.in_features += feat_size
-            feat_weight = Parameter(init_weight*torch.ones(1,feat_size), requires_grad=learnable)
+            feat_weight = Parameter(init_weight*torch.ones(1, feat_size), requires_grad=learnable)
             if learnable:
                 self.reset_parameters(feat_weight)
             self.weight_list.append(feat_weight)
             if bias:
-                feat_bias = Parameter(torch.zeros(1,feat_size), requires_grad=learnable)
+                feat_bias = Parameter(torch.zeros(1, feat_size), requires_grad=learnable)
                 if learnable:
                     self.reset_parameters(feat_bias)
                 self.bias_list.append(feat_bias)
@@ -81,7 +81,6 @@ class RepairModel:
 
     def __init__(self, env, feat_info, output_dim, bias=False):
         self.env = env
-        torch.manual_seed(self.env['seed'])
         # A list of tuples (name, is_featurizer_learnable, featurizer_output_size, init_weight, feature_names (list))
         self.feat_info = feat_info
         self.output_dim = output_dim
@@ -104,11 +103,6 @@ class RepairModel:
         batch_size = self.env['batch_size']
         epochs = self.env['epochs']
         for i in tqdm(range(epochs)):
-            # Randomly shuffle X, Y, and mask every time
-            shuffle_idxs = np.random.permutation(X_train.shape[0])
-            X_train = X_train[shuffle_idxs,:,:]
-            Y_train = Y_train[shuffle_idxs,:]
-            mask_train = mask_train[shuffle_idxs,:]
             cost = 0.
             num_batches = n_examples // batch_size
             for k in range(num_batches):
@@ -131,6 +125,7 @@ class RepairModel:
 
 
     def infer_values(self, X_pred, mask_pred):
+        logging.info('inferring on %d examples (cells)', X_pred.shape[0])
         output = self.__predict__(X_pred, mask_pred)
         return output
 

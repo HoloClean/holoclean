@@ -4,6 +4,7 @@ import time
 
 from .constraint import DenialConstraint
 
+
 class Parser:
     """
     This class creates interface for parsing denial constraints

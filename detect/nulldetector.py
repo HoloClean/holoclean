@@ -28,9 +28,6 @@ class NullDetector(Detector):
         attributes = self.ds.get_attributes()
         errors = []
         for attr in attributes:
-            # do not add attributes in which all values are null
-            if (self.df[attr] == '_nan_').all():
-                continue
             tmp_df = self.df[self.df[attr] == '_nan_']['_tid_'].to_frame()
             tmp_df.insert(1, "attribute", attr)
             errors.append(tmp_df)
