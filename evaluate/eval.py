@@ -1,3 +1,4 @@
+from collections import namedtuple
 import logging
 import os
 from string import Template
@@ -7,6 +8,11 @@ import pandas as pd
 
 from dataset import AuxTables
 from dataset.table import Table, Source
+
+EvalReport = namedtuple('EvalReport', ['precision', 'recall', 'repair_recall',
+    'f1', 'repair_f1', 'detected_errors', 'total_errors', 'correct_repairs',
+    'total_repairs',
+    'total_repairs_grdt', 'total_repairs_grdt_correct', 'total_repairs_grdt_incorrect'])
 
 errors_template = Template('SELECT count(*) ' \
                            'FROM  "$init_table" as t1, "$grdt_table" as t2 ' \
@@ -83,6 +89,9 @@ class EvalEngine:
         return prec, rec, rep_recall, f1, rep_f1
 
     def eval_report(self):
+        """
+        Returns an EvalReport named tuple containing the experiment results.
+        """
         tic = time.clock()
         try:
             prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
@@ -90,15 +99,16 @@ class EvalEngine:
                       prec, rec, rep_recall, f1, rep_f1,
                       self.detected_errors, self.total_errors, self.correct_repairs,
                       self.total_repairs, self.total_repairs_grdt_correct, self.total_repairs_grdt_incorrect)
-            report_list = [prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
-                           self.correct_repairs, self.total_repairs, self.total_repairs_grdt]
+            eval_report = EvalReport(prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
+                           self.correct_repairs, self.total_repairs, self.total_repairs_grdt,
+                           self.total_repairs_grdt_correct, self.total_repairs_grdt_incorrect)
         except Exception as e:
             logging.error("ERROR generating evaluation report %s" % e)
             raise
 
         toc = time.clock()
         report_time = toc - tic
-        return report, report_time, report_list
+        return report, report_time, eval_report
 
     def compute_total_repairs(self):
         """
