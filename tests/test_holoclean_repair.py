@@ -59,6 +59,6 @@ def test_hospital():
     # be comparable if not better than before, unless a clear and correct
     # reason can be given.
     assert abs(report.precision - 1.) < TOL
-    assert abs(report.recall - 231 / 509) < TOL
-    assert abs(report.repair_recall - 231 / 435) < TOL
+    assert abs(report.recall - 231. / 509) < TOL
+    assert abs(report.repair_recall - 231. / 435) < TOL
     assert report.total_repairs_grdt_correct == 0
