@@ -132,6 +132,6 @@ def test_hospital_without_init():
         assert abs(report.precision - 434. / 456) < TOL
         assert abs(report.recall - 434. / 509) < TOL
         assert abs(report.repair_recall - 434. / 435) < TOL
-        assert report.total_repairs_grdt_correct == 0
+        assert report.total_repairs_grdt_correct == 22
     finally:
         delete_database(db_name)
