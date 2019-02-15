@@ -1,4 +1,5 @@
 import csv
+
 import pytest
 from tempfile import NamedTemporaryFile
 
@@ -15,7 +16,7 @@ def test_errors_loader_valid_csv_file():
         csv_writer.writerow([2, 'attr1'])
         csv_writer.writerow([3, 'attr2'])
     errors_loader_detector = ErrorsLoaderDetector(fpath=tmp_file.name)
-    errors_df = errors_loader_detector.errors_df
+    errors_df = errors_loader_detector.detect_noisy_cells()
 
     assert errors_df is not None
     assert errors_df.columns.tolist() == ['_tid_', 'attribute']
@@ -32,4 +33,4 @@ def test_errors_loader_invalid_csv_file():
     with pytest.raises(Exception) as invalid_file_error:
         errors_loader_detector = ErrorsLoaderDetector(fpath=tmp_file.name)
 
-    assert 'Invalid input file for ErrorsLoaderDetector' in str(invalid_file_error.value)
+    assert 'The loaded errors table does not match the expected schema' in str(invalid_file_error.value)
