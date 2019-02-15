@@ -36,6 +36,6 @@ def delete_database(db_name):
             cur.execute("""
             SELECT pid, pg_terminate_backend(pid)
             FROM pg_stat_activity
-            WHERE datname = current_database() AND pid <> pg_backend_pid();""")
+            WHERE datname = '{db_name}' AND pid <> pg_backend_pid();""".format(db_name=db_name))
             # Drop the database.
             cur.execute("DROP DATABASE IF EXISTS {db_name}".format(db_name=db_name))
