@@ -51,6 +51,12 @@ class EvalEngine:
         tic = time.clock()
         try:
             raw_data = pd.read_csv(fpath, na_values=na_values, encoding='utf-8')
+            import pdb; pdb.set_trace()
+            # We drop any ground truth values that are NULLs since we follow
+            # the closed-world assumption (if it's not there it's wrong).
+            # TODO: revisit this once we allow users to specify which
+            # attributes may be NULL.
+            raw_data.dropna(subset=[val_col], inplace=True)
             raw_data.fillna(NULL_REPR, inplace=True)
             raw_data.rename({tid_col: '_tid_',
                              attr_col: '_attribute_',

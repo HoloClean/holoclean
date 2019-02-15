@@ -209,6 +209,12 @@ class Dataset:
                 <val1>: all values of <attr1>
                 <val2>: values of <attr2> that appear at least once with <val1>.
                 <count>: frequency (# of entities) where attr1=val1 AND attr2=val2
+
+        NB: neither single_attr_stats nor pair_attr_stats contain frequencies
+            for values that are NULL (NULL_REPR). One would need to explicitly
+            check if the value is NULL before lookup.
+
+            Also, values that only co-occur with NULLs will NOT be in pair_attr_stats.
         """
         if not self.stats_ready:
             logging.debug('computing frequency and co-occurrence statistics from raw data...')
@@ -260,7 +266,7 @@ class Dataset:
             <first_val>: all possible values for first_attr
             <second_val>: all values for second_attr that appear at least once with <first_val>
             <count>: frequency (# of entities) where first_attr=<first_val> AND second_attr=<second_val>
-        Filters out NULL values so no entries in the dictionary would have nulls.
+        Filters out NULL values so no entries in the dictionary would have NULLs.
         """
         data_df = self.get_raw_data()
         tmp_df = data_df[[first_attr, second_attr]]\

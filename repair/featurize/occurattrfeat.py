@@ -50,15 +50,17 @@ class OccurAttrFeaturizer(Featurizer):
         rv_attr = row['attribute']
         domain = row['domain'].split('|||')
         rv_domain_idx = {val: idx for idx, val in enumerate(domain)}
+        # We should not have any NULLs in our domain.
+        assert NULL_REPR not in rv_domain_idx
         rv_attr_idx = self.ds.attr_to_idx[rv_attr]
         for attr in self.all_attrs:
             val = tuple[attr]
 
             # Ignore co-occurrences of same attribute or with null values.
+            # It's possible a value is not in pair_stats if it only co-occurred
+            # with NULL values.
             if attr == rv_attr \
-                    or pd.isnull(val) \
                     or val == NULL_REPR \
-                    or val not in self.single_stats[attr] \
                     or val not in self.pair_stats[attr][rv_attr]:
                 continue
             attr_idx = self.ds.attr_to_idx[attr]

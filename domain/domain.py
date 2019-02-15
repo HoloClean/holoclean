@@ -205,10 +205,8 @@ class DomainEngine:
     def generate_domain(self):
         """
         Generates the domain for each cell in the active attributes as well
-        as assigns variable IDs (_vid_) (increment key from 0 onwards, depends on
-        iteration order of rows/entities in raw data and attributes.
-
-        Note that _vid_ has a 1-1 correspondence with _cid_.
+        as assigns a random variable ID (_vid_) for cells that have
+        a domain of size >= 2.
 
         See get_domain_cell for how the domain is generated from co-occurrence
         and correlated attributes.
@@ -218,8 +216,8 @@ class DomainEngine:
 
         :return: DataFrame with columns
             _tid_: entity/tuple ID
-            _cid_: cell ID (unique for every entity-attribute)
-            _vid_: variable ID (1-1 correspondence with _cid_)
+            _cid_: cell ID (one for every cell in the raw data in active attributes)
+            _vid_: random variable ID (one for every cell with a domain of at least size 2)
             attribute: attribute name
             domain: ||| separated string of domain values
             domain_size: length of domain
@@ -243,10 +241,6 @@ class DomainEngine:
             tid = row['_tid_']
             for attr in self.active_attributes:
                 init_value, init_value_idx, dom = self.get_domain_cell(attr, row)
-                # If init_value is NULL, we would not have it in the domain since we filtered it out.
-                init_value_idx = -1
-                if init_value in dom:
-                    init_value_idx = dom.index(init_value)
                 # We will use an estimator model for additional weak labelling
                 # below, which requires an initial pruned domain first.
                 # Weak labels will be trained on the init values.
@@ -259,11 +253,10 @@ class DomainEngine:
                 if len(dom) <= 1:
                     # Not enough domain values, we need to get some random
                     # values (other than 'init_value') for training. However,
-                    # this might still get us zero domain values. We handle it
-                    # next.
+                    # this might still get us zero domain values.
                     rand_dom_values = self.get_random_domain(attr, init_value)
 
-                    # the rand_dom_values might still be empty. In this case,
+                    # rand_dom_values might still be empty. In this case,
                     # there are no other possible values for this cell. There
                     # is not point to use this cell for training and there is no
                     # point to run inference on it since we cannot even generate
@@ -339,8 +332,10 @@ class DomainEngine:
             # update our memoized domain values for this row again
             row['domain'] = '|||'.join(domain_values)
             row['domain_size'] = len(domain_values)
-            if row['init_value'] != NULL_REPR:
+            # update init index based on new domain
+            if row['init_value'] in domain_values:
                 row['init_index'] = domain_values.index(row['init_value'])
+            # update weak label index based on new domain
             if row['weak_label'] != NULL_REPR:
                 row['weak_label_idx'] = domain_values.index(row['weak_label'])
 
@@ -390,7 +385,7 @@ class DomainEngine:
         """
 
         domain = set()
-        attr_val = row[attr]
+        init_value = row[attr]
         correlated_attributes = self.get_corr_attributes(attr, self.cor_strength)
         # Iterate through all correlated attributes and take the top K co-occurrence values
         # for 'attr' with the current row's 'cond_attr' value.
@@ -402,25 +397,35 @@ class DomainEngine:
                 logging.warning("domain generation could not find pair_statistics between attributes: {}, {}".format(cond_attr, attr))
                 continue
             cond_val = row[cond_attr]
-            # Ignore co-occurrences with if any value is null.
-            if cond_val == NULL_REPR or attr_val == NULL_REPR or pd.isnull(cond_val) or pd.isnull(attr_val):
+            # Ignore co-occurrence with a NULL cond init value since we do not
+            # store them.
+            # Also it does not make sense to retrieve the top co-occuring
+            # values with a NULL value.
+            # It is possible for cond_val to not be in pair stats if it only co-occurs
+            # with NULL values.
+            if cond_val == NULL_REPR or cond_val not in self.pair_stats[cond_attr][attr]:
                 continue
-            s = self.pair_stats[cond_attr][attr]
-            candidates = s[cond_val]
+
+            # Update domain with top co-occuring values with the cond init value.
+            candidates = self.pair_stats[cond_attr][attr][cond_val]
             domain.update(candidates)
 
-        # Remove NULL_REPR (_nan_) if added due to correlated attributes.
-        domain.discard(NULL_REPR)
-        # Add the initial value to the domain if it is not null.
-        if attr_val != NULL_REPR:
-            domain.update({attr_val})
+        # We should not have any NULLs since we do not store co-occurring NULL
+        # values.
+        assert NULL_REPR not in domain
+
+        # Add the initial value to the domain if it is not NULL.
+        if init_value != NULL_REPR:
+            domain.add(init_value)
 
         # Convert to ordered list to preserve order.
         domain_lst = sorted(list(domain))
 
-        # Get the index of the initial value. This should never raise a ValueError since we made sure
-        # that 'init_value' was added.
-        init_value_idx = domain_lst.index(init_value)
+        # Get the index of the initial value.
+        # NULL values are not in the domain so we set their index to -1.
+        init_value_idx = -1
+        if init_value != NULL_REPR:
+            init_value_idx = domain_lst.index(init_value)
 
         return init_value, init_value_idx, domain_lst
 
@@ -430,8 +435,10 @@ class DomainEngine:
         'self.max_sample' of domain values for 'attr' that is NOT 'cur_value'.
         """
         domain_pool = set(self.single_stats[attr].keys())
+        # We should not have any NULLs since we do not keep track of their
+        # counts.
+        assert NULL_REPR not in domain_pool
         domain_pool.discard(cur_value)
-        domain_pool.discard(NULL_REPR)
         domain_pool = sorted(list(domain_pool))
         size = len(domain_pool)
         if size > 0:

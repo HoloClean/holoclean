@@ -31,21 +31,20 @@ hc.load_data('hospital', '../testdata/hospital.csv')
 hc.load_dcs('../testdata/hospital_constraints.txt')
 hc.ds.set_constraints(hc.get_dcs())
 
-# 3. Detect erroneous cells using these two detectors.
-detectors = [NullDetector(), ViolationDetector()]
-hc.detect_errors(detectors)
-
-# 4. Repair errors utilizing the defined features.
-hc.setup_domain()
-featurizers = [
-    InitAttrFeaturizer(),
-    OccurAttrFeaturizer(),
-    FreqFeaturizer(),
-    ConstraintFeaturizer(),
-    LangModelFeaturizer(),
-]
-
-hc.repair_errors(featurizers)
+# # 3. Detect erroneous cells using these two detectors.
+# detectors = [NullDetector(), ViolationDetector()]
+# hc.detect_errors(detectors)
+#
+# # 4. Repair errors utilizing the defined features.
+# hc.setup_domain()
+# featurizers = [
+#     InitAttrFeaturizer(),
+#     OccurAttrFeaturizer(),
+#     FreqFeaturizer(),
+#     ConstraintFeaturizer(),
+# ]
+#
+# hc.repair_errors(featurizers)
 
 # 5. Evaluate the correctness of the results.
 hc.evaluate(fpath='../testdata/hospital_clean.csv',
