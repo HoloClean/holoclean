@@ -72,7 +72,9 @@ class Logistic(Estimator, torch.nn.Module):
         # and given TID
         self._X = torch.zeros(self.n_samples, self.num_features)
         self._Y = torch.zeros(self.n_samples)
-        self._train_idx = torch.zeros(self.n_samples)  # Keeps track of rows with NULL init_value to ignore in training.
+        # Keeps track of cells with NULL init_value to ignore in training.
+        # We only train on cells when train_idx[idx] == 1.
+        self._train_idx = torch.zeros(self.n_samples)
 
         """
         Iterate through the domain for every cell and create a sample
@@ -179,13 +181,9 @@ class Logistic(Estimator, torch.nn.Module):
         values = self.domain_records[row['_vid_']]['domain'].split('|||')
         return zip(values, map(float, pred_Y))
 
-    def predict_pp_batch(self, raw_records_by_tid=None, cell_domain_rows=None):
+    def predict_pp_batch(self):
         """
         Performs batch prediction.
-
-        Parameters are ignored: instead it returns the predictions for cells
-        and domain values ordered by VID of the initial domain dataframe
-        passed into the constructor.
         """
         pred_Y = self.forward(self._X)
         for rec in self.domain_records:
