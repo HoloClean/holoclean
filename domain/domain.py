@@ -251,6 +251,12 @@ class DomainEngine:
                 cell_status = CellStatus.NOT_SET.value
 
                 if len(dom) <= 1:
+                    # Initial  value is NULL and we cannot come up with
+                    # a domain; a random domain probably won't help us so
+                    # completely ignore this cell and continue.
+                    if init_value == NULL_REPR:
+                        continue
+
                     # Not enough domain values, we need to get some random
                     # values (other than 'init_value') for training. However,
                     # this might still get us zero domain values.

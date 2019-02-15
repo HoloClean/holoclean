@@ -46,8 +46,8 @@ class NaiveBayes(Estimator):
                 # we skip them.
                 # It also doesn't make sense for our likelihood to be conditioned
                 # on a NULL value.
-                # if val2 == NULL_REPR:
-                #     continue
+                if val2 == NULL_REPR:
+                    continue
                 val2_val1_count = 0.1
                 if val1 in self._cooccur_freq[attr][at]:
                     if val2 in self._cooccur_freq[attr][at][val1]:

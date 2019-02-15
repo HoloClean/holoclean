@@ -93,18 +93,22 @@ class Logistic(Estimator, torch.nn.Module):
             assert(feat_tensor.shape[0] == len(domain_vals))
             self._X[sample_idx:sample_idx+len(domain_vals)] = feat_tensor
 
-            # If the init value is not NULL, then we want to use these possible value samples
-            # during training.
-            if rec['init_value'] != NULL_REPR:
-                self._train_idx[sample_idx:sample_idx + len(domain_vals)] = 1
-
-            # Assign the tensor corresponding to the initial value with
-            # a target label of 1. If the initial value is NULL, we do not care because it will be ignored in the training anyways.
-            if rec['init_value'] != NULL_REPR:
-                init_idx = domain_vals.index(rec['init_value'])
-                self._Y[sample_idx + init_idx] = 1
-
             self.vid_to_idxs[rec['_vid_']] = (sample_idx, sample_idx+len(domain_vals))
+
+            # If the initial value is NULL, we do not want to train on it
+            # nor assign it a weak label.
+            if rec['init_value'] == NULL_REPR:
+                sample_idx += len(domain_vals)
+                continue
+
+            # If the init value is not NULL, then we want to use these possible
+            # value samples during training.
+            self._train_idx[sample_idx:sample_idx + len(domain_vals)] = 1
+            # Assign the tensor corresponding to the initial value with
+            # a target label of 1.
+            init_idx = domain_vals.index(rec['init_value'])
+            self._Y[sample_idx + init_idx] = 1
+
             sample_idx += len(domain_vals)
 
         # Convert this to a vector of indices rather than a vector mask.
@@ -138,6 +142,7 @@ class Logistic(Estimator, torch.nn.Module):
         :param num_epochs: (int) number of epochs.
         """
         batch_losses = []
+        # We train only on cells that do not have their initial value as NULL.
         X_train, Y_train = self._X.index_select(0, self._train_idx), self._Y.index_select(0, self._train_idx)
         torch_ds = TensorDataset(X_train, Y_train)
 
