@@ -48,7 +48,6 @@ def test_hospital_with_init():
             OccurAttrFeaturizer(),
             FreqFeaturizer(),
             ConstraintFeaturizer(),
-            LangModelFeaturizer(),
         ]
 
         hc.repair_errors(featurizers)
@@ -112,7 +111,6 @@ def test_hospital_without_init():
             OccurAttrFeaturizer(),
             FreqFeaturizer(),
             ConstraintFeaturizer(),
-            LangModelFeaturizer(),
         ]
 
         hc.repair_errors(featurizers)
