@@ -1,5 +1,3 @@
-import os 
-
 import pandas as pd
 
 from dataset.table import Table, Source
@@ -29,15 +27,13 @@ class ErrorsLoaderDetector(Detector):
 
         To load from csv file, :param fpath: must be specified.
         To load from a relational table, :param db_engine:, and 
-        :param table_name: must be specified, optionally specifying 
-        :param schema_name:.
+        :param table_name: must be specified, optionally specifying :param schema_name:.
         """
         super(ErrorsLoaderDetector, self).__init__(name)
         src = None
         dataset_name = None
         if fpath is not None:
-            # Get the file name without the extension from fpath
-            dataset_name = os.path.basename(fpath).split()[0]
+            dataset_name = "errors"
             src = Source.FILE
         elif (db_engine is not None) and (table_name is not None):
             dataset_name = table_name
