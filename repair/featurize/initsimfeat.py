@@ -13,7 +13,7 @@ def gen_feat_tensor(input, classes, total_attrs):
     init_value = input[2]
     # TODO: To add more similarity metrics increase the last dimension of tensor.
     tensor = torch.zeros(1, classes, total_attrs)
-    domain = input[3].split('|||')
+    domain = input[3]
     for idx, val in enumerate(domain):
         if val == init_value:
             sim = -1.0
@@ -53,7 +53,7 @@ class InitSimFeaturizer(Featurizer):
                 raise ValueError("The size of init_weight for InitSimFeaturizer %d does not match the number of attributes %d." % (self.init_weight.shape[0], len(self.all_attrs)))
 
     def create_tensor(self):
-        query = 'SELECT _vid_, attribute, init_value, domain FROM %s ORDER BY _vid_' % AuxTables.cell_domain.name
+        query = 'SELECT _vid_, attribute, init_value, domain::TEXT[] FROM %s ORDER BY _vid_' % AuxTables.cell_domain.name
         results = self.ds.engine.execute_query(query)
         map_input = []
         for res in results:

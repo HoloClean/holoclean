@@ -267,7 +267,7 @@ class Dataset:
         """
         Returns (number of random variables, count of distinct values across all attributes).
         """
-        query = 'SELECT count(_vid_), max(domain_size) FROM %s'%AuxTables.cell_domain.name
+        query = 'SELECT COUNT(_vid_), MAX(LENGTH(domain)) FROM %s'%AuxTables.cell_domain.name
         res = self.engine.execute_query(query)
         total_vars = int(res[0][0])
         classes = int(res[0][1])
@@ -279,7 +279,7 @@ class Dataset:
         query = "SELECT t1._tid_, t1.attribute, domain[inferred_val_idx + 1] as rv_value " \
                 "FROM " \
                 "(SELECT _tid_, attribute, " \
-                "_vid_, init_value, string_to_array(regexp_replace(domain, \'[{\"\"}]\', \'\', \'gi\'), \'|||\') as domain " \
+                "_vid_, init_value, domain" \
                 "FROM %s) as t1, %s as t2 " \
                 "WHERE t1._vid_ = t2._vid_"%(AuxTables.cell_domain.name, AuxTables.inf_values_idx.name)
         self.generate_aux_table_sql(AuxTables.inf_values_dom, query, index_attrs=['_tid_'])
