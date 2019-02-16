@@ -20,6 +20,10 @@ class Logistic(Estimator, torch.nn.Module):
     value in a cell given all other initial values using features
     of the other initial values such as co-occurrence.
     """
+    # We should not use weight decay for this posterior model since we'd
+    # like to overfit as much as possible to the co-occurrence features.
+    # This is fine since we take only samples with high predicted probabilities.
+    WEIGHT_DECAY = 0
 
     def __init__(self, env, dataset, domain_df, active_attrs, batch_size=32):
         """
@@ -59,9 +63,9 @@ class Logistic(Estimator, torch.nn.Module):
         self._loss = torch.nn.BCELoss()
         if self.env['optimizer'] == 'sgd':
             self._optimizer = SGD(self.parameters(), lr=self.env['learning_rate'], momentum=self.env['momentum'],
-                                  weight_decay=self.env['weight_decay'])
+                                  weight_decay=self.WEIGHT_DECAY)
         else:
-            self._optimizer = Adam(self.parameters(), lr=self.env['learning_rate'], weight_decay=self.env['weight_decay'])
+            self._optimizer = Adam(self.parameters(), lr=self.env['learning_rate'], weight_decay=self.WEIGHT_DECAY)
 
     def _gen_training_data(self):
         """
