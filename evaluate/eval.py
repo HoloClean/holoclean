@@ -1,3 +1,4 @@
+from collections import namedtuple
 import logging
 import os
 from string import Template
@@ -7,6 +8,11 @@ import pandas as pd
 
 from dataset import AuxTables
 from dataset.table import Table, Source
+
+EvalReport = namedtuple('EvalReport', ['precision', 'recall', 'repair_recall',
+    'f1', 'repair_f1', 'detected_errors', 'total_errors', 'correct_repairs',
+    'total_repairs',
+    'total_repairs_grdt', 'total_repairs_grdt_correct', 'total_repairs_grdt_incorrect'])
 
 errors_template = Template('SELECT count(*) ' \
                            'FROM  "$init_table" as t1, "$grdt_table" as t2 ' \
@@ -83,22 +89,26 @@ class EvalEngine:
         return prec, rec, rep_recall, f1, rep_f1
 
     def eval_report(self):
+        """
+        Returns an EvalReport named tuple containing the experiment results.
+        """
         tic = time.clock()
         try:
             prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
-            report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs (Grdth present) = %d" % (
+            report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs on correct cells (Grdth present) = %d, Total Repairs on incorrect cells (Grdth present) = %d" % (
                       prec, rec, rep_recall, f1, rep_f1,
                       self.detected_errors, self.total_errors, self.correct_repairs,
-                      self.total_repairs, self.total_repairs_grdt)
-            report_list = [prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
-                           self.correct_repairs, self.total_repairs, self.total_repairs_grdt]
+                      self.total_repairs, self.total_repairs_grdt_correct, self.total_repairs_grdt_incorrect)
+            eval_report = EvalReport(prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
+                           self.correct_repairs, self.total_repairs, self.total_repairs_grdt,
+                           self.total_repairs_grdt_correct, self.total_repairs_grdt_incorrect)
         except Exception as e:
             logging.error("ERROR generating evaluation report %s" % e)
             raise
 
         toc = time.clock()
         report_time = toc - tic
-        return report, report_time, report_list
+        return report, report_time, eval_report
 
     def compute_total_repairs(self):
         """
@@ -122,19 +132,43 @@ class EvalEngine:
         compute_total_repairs_grdt memoizes the number of repairs for cells
         that are specified in the clean/ground truth data. Otherwise repairs
         are defined the same as compute_total_repairs.
+
+        We also distinguish between repairs on correct cells and repairs on
+        incorrect cells (correct cells are cells where init == ground truth).
         """
-        query = "SELECT count(*) FROM " \
-                "  (SELECT _vid_ " \
-                "   FROM   {} as t1, {} as t2, {} as t3 " \
-                "   WHERE  t1._tid_ = t2._tid_ " \
-                "     AND  t1.attribute = t2.attribute " \
-                "     AND  t1.init_value != t2.rv_value " \
-                "     AND  t1._tid_ = t3._tid_ " \
-                "     AND  t1.attribute = t3._attribute_) AS t".format(AuxTables.cell_domain.name,
-                                                                       AuxTables.inf_values_dom.name,
-                                                                       self.clean_data.name)
+        query = """
+        SELECT
+            (t1.init_value = t3._value_) AS is_correct,
+            count(*)
+        FROM   {} as t1, {} as t2, {} as t3
+        WHERE  t1._tid_ = t2._tid_
+          AND  t1.attribute = t2.attribute
+          AND  t1.init_value != t2.rv_value
+          AND  t1._tid_ = t3._tid_
+          AND  t1.attribute = t3._attribute_
+        GROUP BY is_correct
+          """.format(AuxTables.cell_domain.name,
+                  AuxTables.inf_values_dom.name,
+                  self.clean_data.name)
         res = self.ds.engine.execute_query(query)
-        self.total_repairs_grdt = float(res[0][0])
+
+        # Memoize the number of repairs on correct cells and incorrect cells.
+        # Since we do a GROUP BY we need to check which row of the result
+        # corresponds to the correct/incorrect counts.
+        self.total_repairs_grdt_correct, self.total_repairs_grdt_incorrect = 0, 0
+        self.total_repairs_grdt = 0
+        if not res:
+            return
+
+        if res[0][0]:
+            correct_idx, incorrect_idx = 0, 1
+        else:
+            correct_idx, incorrect_idx = 1, 0
+        if correct_idx < len(res):
+            self.total_repairs_grdt_correct = float(res[correct_idx][1])
+        if incorrect_idx < len(res):
+            self.total_repairs_grdt_incorrect =  float(res[incorrect_idx][1])
+        self.total_repairs_grdt = self.total_repairs_grdt_correct + self.total_repairs_grdt_incorrect
 
     def compute_total_errors(self):
         """
@@ -272,11 +306,11 @@ class EvalEngine:
                     "w. label = init", "w. label = grdth", "w. label = inferred",
                     "infer = grdth", "count"])
         df_stats = df_stats.sort_values(list(df_stats.columns)).reset_index(drop=True)
-        logging.info("weak label statistics:")
+        logging.debug("weak label statistics:")
         pd.set_option('display.max_columns', None)
         pd.set_option('display.max_rows', len(df_stats))
         pd.set_option('display.max_colwidth', -1)
-        logging.info("%s", df_stats)
+        logging.debug("%s", df_stats)
         pd.reset_option('display.max_columns')
         pd.reset_option('display.max_rows')
         pd.reset_option('display.max_colwidth')

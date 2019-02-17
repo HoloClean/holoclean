@@ -13,9 +13,6 @@ class Estimator:
         """
         :param env: (dict) dict containing environment/parameters settings.
         :param dataset: (Dataset)
-        :param pruned_domain: (dict[dict[list[str]]]) dictionary that maps
-        :param active_attrs: (list[str]) list of attributes with random variables (for training samples)
-        _tid_ (str) --> attr (str) --> (pruned) domain values (list[str]).
         """
         self.env = env
         self.ds = dataset
@@ -32,7 +29,7 @@ class Estimator:
         :param attr: (str) attribute of row (i.e. cell) to generate posteriors for.
         :param values: (list[str]) list of values (for this attr) to generate posteriors for.
 
-        :return: list of tuples (value, proba) for each value in :param values:
+        :return: iterator of tuples (value, proba) for each value in :param values:
         """
         raise NotImplementedError
 
@@ -45,6 +42,6 @@ class Estimator:
         :param cell_domain_rows: (list[pd.record]) list of records from the cell domain DF. Each
             record should include the field '_tid_', 'attribute', and 'domain'
 
-        :return: list of list of tuples (value, proba) (one list per cell/row in cell_domain_rows)
+        :return: iterator of iterator of tuples (value, proba) (one iterator per cell/row in cell_domain_rows)
         """
         raise NotImplementedError

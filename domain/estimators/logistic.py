@@ -1,10 +1,10 @@
 from abc import ABCMeta, abstractmethod
-import copy
 import logging
 
 import pandas as pd
 import time
 import torch
+import torch.nn.functional as F
 from torch.optim import Adam, SGD
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
@@ -21,37 +21,41 @@ class Logistic(Estimator, torch.nn.Module):
     of the other initial values such as co-occurrence.
     """
 
-    def __init__(self, env, dataset, pruned_domain, active_attrs):
+    def __init__(self, env, dataset, domain_df, active_attrs, batch_size=32):
         """
         :param dataset: (Dataset) original dataset
-        :param pruned_domain: (dict) of tid -> attr -> value for the domain
+        :param domain_df: (DataFrame) currently populated domain dataframe.
+            Required columns are: _vid_, _tid_, attribute, domain, domain_size, init_value
         :param active_attrs: (list[str]) attributes that have random values
         """
         torch.nn.Module.__init__(self)
         Estimator.__init__(self, env, dataset)
 
-        self.dom = pruned_domain
         self.active_attrs = active_attrs
+
+        # Sorted records of the currently populated domain. This helps us
+        # align the final predicted probabilities.
+        self.domain_records = domain_df.sort_values('_vid_')[['_vid_', '_tid_', 'attribute', 'domain', 'init_value']].to_records()
 
         # self.dom maps tid --> attr --> list of domain values
         # we need to find the number of domain values we will be generating
         # a training sample for.
-        self.n_samples = sum(len(dom) for _, attrs in self.dom.items() for _, dom in attrs.items())
+        self.n_samples = int(domain_df['domain_size'].sum())
 
-        # Make a copy of the raw data as our current data.
-        self.cur_df = self.ds.get_raw_data().copy()
+        # Create and initialize featurizers.
+        self.featurizers = [CooccurAttrFeaturizer(self.ds)]
+        for f in self.featurizers:
+            f.setup()
+        self.num_features = sum(feat.num_features() for feat in self.featurizers)
 
-        # Generate featurizers for this model.
-        self._update_featurizers(reuse_stats=True)
-
-        # Make a copy of the initial featurizers for prediction/test set
-        # i.e., we want to use our original co-occurrence statistics.
-        self.test_featurizers = [feat.copy() for feat in self.train_featurizers]
+        # Construct the X and Y tensors.
+        self._gen_training_data()
 
         # Use pytorch logistic regression model.
         self._W = torch.nn.Parameter(torch.zeros(self.num_features, 1))
         torch.nn.init.xavier_uniform_(self._W)
         self._B = torch.nn.Parameter(torch.Tensor([1e-6]))
+
         self._loss = torch.nn.BCELoss()
         if self.env['optimizer'] == 'sgd':
             self._optimizer = SGD(self.parameters(), lr=self.env['learning_rate'], momentum=self.env['momentum'],
@@ -59,196 +63,125 @@ class Logistic(Estimator, torch.nn.Module):
         else:
             self._optimizer = Adam(self.parameters(), lr=self.env['learning_rate'], weight_decay=self.env['weight_decay'])
 
-    def _update_featurizers(self, reuse_stats=False):
+    def _gen_training_data(self):
         """
-        Reinitialize featurizers that depend on updated current values.
-
-        :param reuse_stats: (bool) reuses frequency and co-occurrence statistics from
-            raw Dataset instead of re-computing.
+        _gen_training_data memoizes the self._X and self._Y tensors
+        used for training and prediction.
         """
-
-        # Featurizers used for training.
-        freq, cooccur_freq = None, None
-        if reuse_stats:
-            _, freq, cooccur_freq = self.ds.get_statistics()
-
-        self.train_featurizers = [
-                CooccurAttrFeaturizer(self.cur_df, self.attrs, freq=freq, cooccur_freq=cooccur_freq),
-        ]
-        # Initialize featurizers.
-        [feat.setup() for feat in self.train_featurizers]
-
-        self.num_features = sum(feat.num_features() for feat in self.train_featurizers)
-
-    def _update_training_data(self):
-        """
-        _update_training_data (re-)constructs the self._X and self._Y training
-        tensors from self.cur_df (DataFrame of current values).
-        """
-        # Each row corresponds to a possible value for a given attribute and given TID
+        logging.debug('Logistic: featurizing training data...')
+        tic = time.clock()
+        # Each row corresponds to a possible value for a given attribute
+        # and given TID
         self._X = torch.zeros(self.n_samples, self.num_features)
         self._Y = torch.zeros(self.n_samples)
 
-        logging.debug('Logistic: featurizing training data...')
-
+        """
+        Iterate through the domain for every cell and create a sample
+        to use in training. We assign Y as 1 if the value is the initial value.
+        """
         sample_idx = 0
-        domain_idx_df = []
-        # Iterate through each row and attribute and generate a sample (corresponds
-        # to one row of X and Y)
-        for row in tqdm(self.cur_df.to_records()):
-            for attr in self.active_attrs:
-                domain_vals = self.dom[row['_tid_']][attr]
-                domain_idx_df += [{'_tid_': row['_tid_'],
-                                   'attr': attr,
-                                   'val': val}
-                                  for val in domain_vals]
+        raw_data_dict = self.ds.raw_data.df.set_index('_tid_').to_dict('index')
+        # Keep track of which indices correspond to a VID so we can re-use
+        # self._X in prediction.
+        self.vid_to_idxs = {}
+        for rec in tqdm(list(self.domain_records)):
+            init_row = raw_data_dict[rec['_tid_']]
+            domain_vals = rec['domain'].split('|||')
 
-                # Initialize our X matrix with features from featurizers.
-                feat_tensor = self._gen_train_tensor(row, attr, domain_vals)
-                assert(feat_tensor.shape[0] == len(domain_vals))
-                self._X[sample_idx:sample_idx+len(domain_vals)] = feat_tensor
+            # Generate the feature tensor for all the domain values for this
+            # cell.
+            feat_tensor = self._gen_feat_tensor(init_row, rec['attribute'], domain_vals)
+            assert(feat_tensor.shape[0] == len(domain_vals))
+            self._X[sample_idx:sample_idx+len(domain_vals)] = feat_tensor
 
-                # Target label is our initial value.
-                if row[attr] in domain_vals:
-                    init_val_idx = domain_vals.index(row[attr])
-                    self._Y[sample_idx + init_val_idx] = 1
+            # Assign the tensor corresponding to the initial value with
+            # a target label of 1.
+            try:
+                init_idx = domain_vals.index(rec['init_value'])
+                self._Y[sample_idx + init_idx] = 1
+            except ValueError:
+                logging.error('init value "%s" should be in domain "%s" for VID %d', rec['init_value'], rec['domain'], rec['_vid_'])
+                raise
 
-                sample_idx += len(domain_vals)
+            self.vid_to_idxs[rec['_vid_']] = (sample_idx, sample_idx+len(domain_vals))
+            sample_idx += len(domain_vals)
 
+        logging.debug('Logistic: DONE featurization in %.2fs', time.clock() - tic)
+
+    def _gen_feat_tensor(self, init_row, attr, domain_vals):
         """
-        Map index (along first dimension) in self._X and self._Y to domain
-        values, that is the dataframe has columns:
-            (Index)     |    _tid_      |   attr    |   val
+        Generates the feature tensor for the list of :param`domain_vals` from
+        all featurizers.
 
-        where the (Index)-th row of self._X/self._Y corresponds to the
-        possible/domain value with _tid_, attr, and val.
+        :param init_row: (namedtuple or dict) current initial values
+        :param attr: (str) attribute of row (i.e. cell) the :param values: correspond to
+            and the cell to generate a feature tensor for.
+        :param domain_vals: (list[str]) domain values to featurize for
+
+        :return: Tensor with dimensions (len(values), total # of features across all featurizers)
         """
-        self._domain_idx_df = pd.DataFrame(domain_idx_df)
 
-    def _gen_train_tensor(self, row, attr, values):
-        """
-        Returns featurized tensor using training corpus (statistics are
-        based on current best predicted values).
-
-        :param row: (namedtuple, recarray, dict) current values
-        :param attr: (str) attribute for :param values:
-        :param values: (list[str]) values to generate features for
-        """
-        return self._gen_feat_tensor(row, attr, values, self.train_featurizers)
-
-    def _gen_test_tensor(self, row, attr, values):
-        """
-        Returns featurized tensor using initial corpus (statistics are
-        based on initial values).
-
-        :param row: (namedtuple, recarray, dict) current values
-        :param attr: (str) attribute for :param values:
-        :param values: (list[str]) values to generate features for
-        """
-        return self._gen_feat_tensor(row, attr, values, self.test_featurizers)
-
-    def _gen_feat_tensor(self, row, attr, values, featurizers):
-        """
-        :param row: (namedtuple, recarray, dict) current values
-        :param attr: (str) attribute for :param values:
-        :param values: (list[str]) values to generate features for
-        :param featurizers: (list[Featurizer]) featurizers to use
-        """
-        # Fastpath for 1 featurizer
-        if len(featurizers) == 1:
-            return featurizers[0].create_tensor(row, attr, values)
-
-        out_tensor = torch.zeros(len(values), sum(feat.num_features() for feat in featurizers))
-        # iterate through each featurizer
-        feat_idx = 0
-        for featurizer in featurizers:
-            feat_tensor = featurizer.create_tensor(row, attr, values)
-            assert(feat_tensor.shape[0] == len(values))
-            assert(feat_tensor.shape[1] == featurizer.num_features())
-
-            out_tensor[:, feat_idx:feat_idx+featurizer.num_features()] = feat_tensor
-            feat_idx += featurizer.num_features()
-
-        return out_tensor
+        return torch.cat([f.create_tensor(init_row, attr, domain_vals) for f in self.featurizers], dim=1)
 
     def forward(self, X):
         linear = X.matmul(self._W) + self._B
         return torch.sigmoid(linear)
 
-    def train(self, num_recur=1, num_epochs=3, batch_size=32):
+    def train(self, num_epochs=3, batch_size=32):
         """
-        Trains the LR model. Updates the current values with the maximum a posteriori after
-        each recurrent iteration.
-        :param num_recur: (int) number of times to train model.
-        :param num_epochs: (int) number of epochs PER recurrent iteration.
-        :param batch_size: (int) size of batch in stochastic gradient descent.
+        Trains the LR model.
+
+        :param num_epochs: (int) number of epochs.
         """
         batch_losses = []
-        for recur_idx in range(1, num_recur + 1):
-            # We need to update our statistics in featurizers on the 2nd and
-            # later iteration with our newest current values.
-            if recur_idx > 1:
-                self._update_featurizers()
-            self._update_training_data()
-            torch_ds = TensorDataset(self._X, self._Y)
+        torch_ds = TensorDataset(self._X, self._Y)
 
-            logging.debug("Logistic: training, recur iteration: %d", recur_idx)
-
-            # Main training loop.
-            for epoch_idx in range(1, num_epochs+1):
-                logging.debug("Logistic: epoch %d", epoch_idx)
-                batch_cnt = 0
-                for batch_X, batch_Y in tqdm(DataLoader(torch_ds, batch_size=batch_size)):
-                    batch_pred = self.forward(batch_X)
-                    batch_loss = self._loss(batch_pred, batch_Y.reshape(-1,1))
-                    batch_losses.append(float(batch_loss))
-                    self.zero_grad()
-                    batch_loss.backward()
-                    self._optimizer.step()
-                    batch_cnt += 1
-                logging.debug('Logistic: average batch loss is %f', sum(batch_losses[-1 * batch_cnt:]) / batch_cnt)
-
+        # Main training loop.
+        for epoch_idx in range(1, num_epochs+1):
+            logging.debug("Logistic: epoch %d", epoch_idx)
+            batch_cnt = 0
+            for batch_X, batch_Y in tqdm(DataLoader(torch_ds, batch_size=batch_size)):
+                batch_pred = self.forward(batch_X)
+                batch_loss = self._loss(batch_pred, batch_Y.reshape(-1,1))
+                batch_losses.append(float(batch_loss))
+                self.zero_grad()
+                batch_loss.backward()
+                self._optimizer.step()
+                batch_cnt += 1
+            logging.debug('Logistic: average batch loss: %f', sum(batch_losses[-1 * batch_cnt:]) / batch_cnt)
         return batch_losses
 
-    def predict_pp(self, row, attr, values):
+    def predict_pp(self, row, attr=None, values=None):
         """
-        predict_pp generates posterior probabilities for :param values: for the
-        cell corresponding to :param attr: of this :param row:.
+        predict_pp generates posterior probabilities for the domain values
+        corresponding to the cell/random variable row['_vid_'].
+
+        That is: :param`attr` and :param`values` are ignored.
+
+        predict_pp_batch is much faster for Logistic since it simply does
+        a one-pass of the batch feature tensor.
 
         :return: (list[2-tuple]) 2-tuples corresponding to (value, proba)
         """
-        pred_X = self._gen_test_tensor(row, attr, values)
+        start_idx, end_idx = self.vid_to_idxs[row['_vid_']]
+        pred_X = self._X[start_idx:end_idx]
         pred_Y = self.forward(pred_X)
-        return list(zip(values, map(float, pred_Y)))
+        values = self.domain_records[row['_vid_']]['domain'].split('|||')
+        return zip(values, map(float, pred_Y))
 
-    def predict_pp_batch(self, raw_records_by_tid, cell_domain_rows):
+    def predict_pp_batch(self, raw_records_by_tid=None, cell_domain_rows=None):
         """
         Performs batch prediction.
-        :param raw_records_by_tid: (dict) maps TID to its corresponding row (record) in the raw data
-        :param cell_domain_rows: (list[pd.record]) list of records from the cell domain DF
+
+        Parameters are ignored: instead it returns the predictions for cells
+        and domain values ordered by VID of the initial domain dataframe
+        passed into the constructor.
         """
-        logging.debug('Logistic: constructing feature tensor for %d cells...', cell_domain_rows.shape[0])
-        X_tensors = []
-        for row in tqdm(cell_domain_rows):
-            X_tensors.append(self._gen_test_tensor(raw_records_by_tid[row['_tid_']],
-                                                   row['attribute'], row['domain'].split('|||')))
-        logging.debug('Logistic: DONE featurization.')
-        pred_X = torch.cat(X_tensors, dim=0)
-        logging.debug('Logistic: predicting posterior probabilities for tensors...')
-        pred_Y = self.forward(pred_X)
-        logging.debug('Logistic: DONE prediction.')
-
-        cur_idx = 0
-        logging.debug('Logistic: segmenting predictions by cell...')
-        probs_by_row = []
-        for row in tqdm(cell_domain_rows):
-            # Create list of (value, proba) for each cell.
-            probs_by_row.append(list(zip(row['domain'].split('|||'),
-                map(float, pred_Y[cur_idx:cur_idx+row['domain_size']]))))
-            cur_idx += row['domain_size']
-        logging.debug('Logistic: DONE segmentation.')
-        return probs_by_row
-
+        pred_Y = self.forward(self._X)
+        for rec in self.domain_records:
+            values = rec['domain'].split('|||')
+            start_idx, end_idx = self.vid_to_idxs[rec['_vid_']]
+            yield zip(values, map(float, pred_Y[start_idx:end_idx]))
 
 class Featurizer:
     """
@@ -270,10 +203,6 @@ class Featurizer:
     def create_tensor(self, row, attr, values):
         raise NotImplementedError
 
-    @abstractmethod
-    def copy(self):
-        raise NotImplementedError
-
 
 class CooccurAttrFeaturizer(Featurizer):
     """
@@ -283,7 +212,7 @@ class CooccurAttrFeaturizer(Featurizer):
     """
     name = 'CooccurAttrFeaturizer'
 
-    def __init__(self, data_df, attrs, freq=None, cooccur_freq=None):
+    def __init__(self, dataset):
         """
         :param data_df: (pandas.DataFrame) contains the data to compute co-occurrence features for.
         :param attrs: attributes in columns of :param data_df: to compute feautres for.
@@ -293,10 +222,8 @@ class CooccurAttrFeaturizer(Featurizer):
             if not None, uses these co-occurrence statistics instead of
             computing it from data_df.
         """
-        self.data_df = data_df
-        self.attrs = attrs
-        self.freq = freq
-        self.cooccur_freq = cooccur_freq
+        self.ds = dataset
+        self.attrs = self.ds.get_attributes()
         self.attr_to_idx = {attr: idx for idx, attr in enumerate(self.attrs)}
         self.n_attrs = len(self.attrs)
 
@@ -304,30 +231,7 @@ class CooccurAttrFeaturizer(Featurizer):
         return len(self.attrs) * len(self.attrs)
 
     def setup(self):
-        logging.debug("%s: setting up co-occurrence statistics...", self.name)
-        tic = time.clock()
-
-        if self.freq is None:
-            logging.debug("%s: re-using frequency statistics passed in")
-        else:
-            # Frequencies of values per each attribute
-            self.freq = {}
-            for attr in self.attrs:
-                self.freq[attr] = self._get_freq(attr)
-
-        if self.cooccur_freq is None:
-            logging.debug("%s: re-using co-occurrence statistics passed in")
-        else:
-            # Co-occurrence counts per each attribute pair (and value pair)
-            self.cooccur_freq = {}
-            for attr1 in self.attrs:
-                self.cooccur_freq[attr1] = {}
-                for attr2 in self.attrs:
-                    if attr1 == attr2:
-                        continue
-                    self.cooccur_freq[attr1][attr2] = self._get_cooccur_freq(attr1, attr2)
-
-        logging.debug("%s: co-occurrence statistics computed in %.2fs", self.name, time.clock() - tic)
+        _, self.freq, self.cooccur_freq = self.ds.get_statistics()
 
     def create_tensor(self, row, attr, values):
         """
@@ -335,8 +239,10 @@ class CooccurAttrFeaturizer(Featurizer):
         :param attr: (str) attribute of row (i.e. cell) the :param values: correspond to
             and the cell to generate a feature tensor for.
         :param values: (list[str]) values to generate
+
+        :return: Tensor with dimensions (len(values), # of features)
         """
-        tensor = torch.zeros(len(values), len(self.attrs) * len(self.attrs))
+        tensor = torch.zeros(len(values), self.num_features())
         for val_idx, val in enumerate(values):
             for other_attr_idx, other_attr in enumerate(self.attrs):
                 if attr == other_attr:
@@ -353,30 +259,3 @@ class CooccurAttrFeaturizer(Featurizer):
 
                 tensor[val_idx,feat_idx] = float(cooccur) / float(freq)
         return tensor
-
-    def copy(self):
-        """
-        Makes a copy of this featurizer.
-        """
-        temp = CooccurAttrFeaturizer(self.data_df.copy(), [a for a in self.attrs])
-        temp.freq = copy.deepcopy(self.freq)
-        temp.cooccur_freq = copy.deepcopy(self.cooccur_freq)
-        return temp
-
-    def _get_freq(self, attr):
-        """
-        _get_freq returns a dictionary where the keys possible values for :param attr: and
-        the values contain the frequency count of that value for this attribute.
-        """
-        return self.data_df[[attr]].groupby([attr]).size().to_dict()
-
-    def _get_cooccur_freq(self, attr1, attr2):
-        """
-        _get_cooccur_freq returns a dictionary {val1 -> {val2 -> count } } where:
-            <val1>: all possible values for :param attr1:
-            <val2>: all values for :param attr2: that appeared at least once with <val1>
-            <count>: frequency (# of entities) where :param attr1 = <val1> AND :param attr2: = <val2>
-        """
-        tmp_df = self.data_df[[attr1,attr2]].groupby([attr1,attr2]).size().reset_index(name="count")
-        return dictify_df(tmp_df)
-
