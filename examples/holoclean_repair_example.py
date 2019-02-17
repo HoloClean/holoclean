@@ -7,19 +7,21 @@ from repair.featurize import *
 
 # 1. Setup a HoloClean session.
 hc = holoclean.HoloClean(
-    db_name='holo1',
-    domain_thresh_1=0.7,
+    db_name='holo',
+    domain_thresh_1=0,
     domain_thresh_2=0,
-    weak_label_thresh=0.9,
+    weak_label_thresh=0.99,
     max_domain=10000,
-    cor_strength=0.05,
-    epochs=20,
-    weight_decay=0,
+    cor_strength=0.6,
+    nb_cor_strength=0.8,
+    epochs=10,
+    weight_decay=0.01,
+    learning_rate=0.001,
     threads=1,
     batch_size=1,
     verbose=True,
     timeout=3*60000,
-    feature_norm=True,
+    feature_norm=False,
     weight_norm=False,
     print_fw=True,
     featurization_batch_size=1000
@@ -39,7 +41,9 @@ hc.setup_domain()
 featurizers = [
     InitAttrFeaturizer(),
     OccurAttrFeaturizer(),
-    ConstraintFeaturizer()
+    FreqFeaturizer(),
+    ConstraintFeaturizer(),
+    LangModelFeaturizer(),
 ]
 
 hc.repair_errors(featurizers)
