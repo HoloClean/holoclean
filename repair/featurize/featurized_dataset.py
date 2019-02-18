@@ -105,7 +105,7 @@ class FeaturizedDataset:
             featurizers=self.featurizers,
             Y=self.weak_labels,
             var_mask=self.var_class_mask,
-            batch_size=self.env['batch_size'],
+            batch_size=self.env['featurization_batch_size'],
             feature_norm =self.env['feature_norm']
         )
 
@@ -121,7 +121,7 @@ class FeaturizedDataset:
             featurizers=self.featurizers,
             Y=self.weak_labels,
             var_mask=self.var_class_mask,
-            batch_size=self.env['batch_size'],
+            batch_size=self.env['featurization_batch_size'],
             feature_norm =self.env['feature_norm']
         ), infer_idx
 
@@ -156,8 +156,21 @@ class TorchFeaturizedDataset(torch.utils.data.Dataset):
         self.feature_norm = feature_norm
         self.num_examples = len(self.vids)
 
+        self.batch_number_to_file_path = []
+        self.cached_batch_number = None
+        self.cached_tensor = None
+
     def __len__(self):
         return self.num_examples
+
+    def _featurize_batch(self, batch_number):
+        start_idx, end_idx = self.batch_size * batch_number, min(self.num_examples, self.batch_size * (batch_number + 1))
+        featurized_examples = [torch.cat([featurizer.gen_feat_tensor(self.vids[idx]) for featurizer in self.featurizers], dim=1) for idx in range(start_idx, end_idx)]
+        featurized_tensor = torch.stack(featurized_examples)
+        if self.feature_norm:
+            featurized_tensor = F.normalize(featurized_tensor, p=2, dim=1)
+        return featurized_tensor
+
 
     def __getitem__(self, idx):
         """
@@ -168,11 +181,20 @@ class TorchFeaturizedDataset(torch.utils.data.Dataset):
         :return: A torch.Tensor(max_domain, num_features) holding the featurized
             values of the cell.
         """
-        X = torch.cat([featurizer.gen_feat_tensor(self.vids[idx]) for featurizer in self.featurizers], dim=1)
-        if self.feature_norm:
-            # normalize within each cell the features
-            X = F.normalize(X, p=2, dim=0)
+        batch_number = idx // self.batch_size
 
+        if batch_number >= len(self.batch_number_to_file_path):
+            assert(batch_number == len(self.batch_number_to_file_path))
+            cached_batch_file_path = '../tmp/cached_tensor' + str(batch_number)
+            self.batch_number_to_file_path.append(cached_batch_file_path)
+            cached_tensor = self._featurize_batch(batch_number)
+            torch.save(cached_tensor, cached_batch_file_path)
+
+        if batch_number != self.cached_batch_number:
+            self.cached_batch_number = batch_number
+            self.cached_tensor = torch.load(self.batch_number_to_file_path[batch_number])
+
+        X = self.cached_tensor[idx - batch_number * self.batch_size]
         Y = self.Y[self.vids[idx]]
         var_mask = self.var_mask[self.vids[idx]]
         return Example(X, Y, var_mask)

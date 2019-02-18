@@ -90,7 +90,6 @@ class RepairModel:
         self.output_dim = output_dim
         self.model = TiedLinear(self.env, feat_info, output_dim, bias)
         self.featurizer_weights = {}
-        self.featurization_batch_size = self.env['threads'] - 1
 
     def fit_model(self, training_data):
         """
@@ -116,7 +115,7 @@ class RepairModel:
             cost = 0.
             # Each iteration of training_data_iterator will return env['batch_size'] examples
             # Randomly shuffle X, Y, and mask every time
-            for batch_X, batch_Y, batch_var_mask in tqdm(DataLoader(training_data, batch_size=self.env['featurization_batch_size'], num_workers=self.featurization_batch_size)):
+            for batch_X, batch_Y, batch_var_mask in tqdm(DataLoader(training_data, batch_size=self.env['featurization_batch_size'], num_workers=self.env['threads'] - 1)):
                 num_batches = len(batch_X) // self.env['batch_size']
                 for k in range(num_batches):
                     start, end = k * self.env['batch_size'], (k + 1) * self.env['batch_size']
@@ -132,7 +131,7 @@ class RepairModel:
             #     batch_grdt = []
             #     batch_Y_assign = []
             #     # Compute and print accuracy at the end of epoch
-            #     for j, (batch_X, batch_Y, batch_var_mask) in enumerate(tqdm(DataLoader(training_data, batch_size=self.env['batch_size'], num_workers=self.featurization_batch_size))):
+            #     for j, (batch_X, batch_Y, batch_var_mask) in enumerate(tqdm(DataLoader(training_data, batch_size=self.env['featurization_batch_size'], num_workers=self.env['threads'] - 1))):
             #         batch_grdt.append(batch_Y.numpy().flatten())
             #         batch_Y_assign.append(self.__predict__(batch_X, batch_var_mask).data.numpy().argmax(axis=1))
             #         # lr_sched.step(train_loss)
@@ -144,7 +143,7 @@ class RepairModel:
 
 
     def infer_values(self, infer_data):
-        Y_preds = [self.__predict__(batch_X, batch_var_mask) for batch_X, _, batch_var_mask in tqdm(DataLoader(infer_data, batch_size=self.env['batch_size'], num_workers=self.featurization_batch_size))]
+        Y_preds = [self.__predict__(batch_X, batch_var_mask) for batch_X, _, batch_var_mask in tqdm(DataLoader(infer_data, batch_size=self.env['featurization_batch_size'], num_workers=self.env['threads'] - 1))]
         return torch.cat(Y_preds)
 
     def __train__(self, loss, optimizer, X_train, Y_train, mask_train):
