@@ -114,14 +114,14 @@ class RepairModel:
             # logging.debug('overall training loss: %f', train_loss)
             # lr_sched.step(train_loss)
 
-            if self.env['verbose']:
-                # Compute and print accuracy at the end of epoch
-                grdt = Y_train.numpy().flatten()
-                Y_pred = self.__predict__(X_train, mask_train)
-                Y_assign = Y_pred.data.numpy().argmax(axis=1)
-                logging.debug("Epoch %d, cost = %f, acc = %.2f%%",
-                        i + 1, cost / num_batches,
-                        100. * np.mean(Y_assign == grdt))
+            # if self.env['verbose']:
+            #     # Compute and print accuracy at the end of epoch
+            #     grdt = Y_train.numpy().flatten()
+            #     Y_pred = self.__predict__(X_train, mask_train)
+            #     Y_assign = Y_pred.data.numpy().argmax(axis=1)
+            #     logging.debug("Epoch %d, cost = %f, acc = %.2f%%",
+            #             i + 1, cost / num_batches,
+            #             100. * np.mean(Y_assign == grdt))
 
 
     def infer_values(self, X_pred, mask_pred):
