@@ -33,12 +33,12 @@ class FeaturizedDataset:
 
         logging.debug('DONE featurization.')
 
-        if self.env['debug_mode']:
-            weights_df = pd.DataFrame(self.tensor.reshape(-1, self.tensor.shape[-1]).numpy())
-            weights_df.columns = ["{}::{}".format(f.name, featname) for f in featurizers for featname in f.feature_names()]
-            weights_df.insert(0, 'vid', np.floor_divide(np.arange(weights_df.shape[0]), self.tensor.shape[1]) + 1)
-            weights_df.insert(1, 'val_idx', np.tile(np.arange(self.tensor.shape[1]), self.tensor.shape[0]))
-            weights_df.to_pickle('debug/{}_train_features.pkl'.format(self.ds.id))
+        # if self.env['debug_mode']:
+            # weights_df = pd.DataFrame(self.tensor.reshape(-1, self.tensor.shape[-1]).numpy())
+            # weights_df.columns = ["{}::{}".format(f.name, featname) for f in featurizers for featname in f.feature_names()]
+            # weights_df.insert(0, 'vid', np.floor_divide(np.arange(weights_df.shape[0]), self.tensor.shape[1]) + 1)
+            # weights_df.insert(1, 'val_idx', np.tile(np.arange(self.tensor.shape[1]), self.tensor.shape[0]))
+            # weights_df.to_pickle('debug/{}_train_features.pkl'.format(self.ds.id))
 
         # TODO: remove after we validate it is not needed.
         self.in_features = self.tensor.shape[2]
