@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
+import tempfile
 
 from dataset import AuxTables, CellStatus
 

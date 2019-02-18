@@ -5,6 +5,7 @@ import torch
 from .featurizer import Featurizer
 from dataset import AuxTables
 from dcparser.constraint import is_symmetric
+import torch.nn.functional as F
 
 # unary_template is used for constraints where the current predicate
 # used for detecting violations in pos_values have a reference to only
@@ -96,7 +97,7 @@ class ConstraintFeaturizer(Featurizer):
                     violation_count = featurization_map[vid][val_id]
                     tensor[val_id][0] = violation_count
             tensors.append(tensor)
-        combined = torch.cat(tensors, dim=1)
+        combined = F.normalize(torch.cat(tensors, dim=1), p=2, dim=0)
         return combined
 
     def _get_featurization_query_results(self):

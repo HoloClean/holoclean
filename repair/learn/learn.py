@@ -113,8 +113,7 @@ class RepairModel:
         epochs = self.env['epochs']
         for i in tqdm(range(epochs)):
             cost = 0.
-            # Each iteration of training_data_iterator will return env['batch_size'] examples
-            # Randomly shuffle X, Y, and mask every time
+            # Each iteration of training_data_iterator will return env['featurization_batch_size'] examples
             for batch_X, batch_Y, batch_var_mask in tqdm(DataLoader(training_data, batch_size=self.env['featurization_batch_size'], num_workers=self.env['threads'] - 1)):
                 num_batches = len(batch_X) // self.env['batch_size']
                 for k in range(num_batches):
