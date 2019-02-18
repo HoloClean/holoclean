@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-import tempfile
 
 from dataset import AuxTables, CellStatus
 
@@ -186,7 +185,7 @@ class TorchFeaturizedDataset(torch.utils.data.Dataset):
 
         if batch_number >= len(self.batch_number_to_file_path):
             assert(batch_number == len(self.batch_number_to_file_path))
-            cached_batch_file_path = '../tmp/cached_tensor' + str(batch_number)
+            cached_batch_file_path = "../cache/%dtensor_batch%d" %(id(self), batch_number)
             self.batch_number_to_file_path.append(cached_batch_file_path)
             cached_tensor = self._featurize_batch(batch_number)
             torch.save(cached_tensor, cached_batch_file_path)

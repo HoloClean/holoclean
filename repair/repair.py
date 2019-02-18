@@ -1,5 +1,6 @@
 import logging
 import time
+import os
 
 import pandas as pd
 
@@ -89,3 +90,14 @@ class RepairEngine:
         toc = time.clock()
         report_time = toc - tic
         return report, report_time
+
+    def clear_cache(self):
+        tic = time.clock()
+        directory_path = '../cache/'
+        for file_name in os.listdir(directory_path):
+            file_path = os.path.join(directory_path, file_name)
+            os.unlink(file_path)
+        toc = time.clock()
+        status = "DONE clearing cache."
+        infer_time = toc - tic
+        return status, infer_time

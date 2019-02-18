@@ -333,6 +333,9 @@ class Session:
         status, time = self.ds.get_repaired_dataset()
         logging.info(status)
         logging.debug('Time to store repaired dataset: %.2f secs', time)
+        status, time = self.repair_engine.clear_cache()
+        logging.info(status)
+        logging.debug('Time to clear cache: %.2f secs', time)
         if self.env['print_fw']:
             status, time = self.repair_engine.get_featurizer_weights()
             logging.info(status)
