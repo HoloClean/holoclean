@@ -1,4 +1,0 @@
-{
-  "tests/detection/test_errorsloaderdetector.py": true, 
-  "tests/test_holoclean_repair.py": true
-}

@@ -116,7 +116,7 @@ class RepairModel:
             cost = 0.
             # Each iteration of training_data_iterator will return env['batch_size'] examples
             # Randomly shuffle X, Y, and mask every time
-            for batch_X, batch_Y, batch_var_mask in tqdm(DataLoader(training_data, batch_size=self.env['featurization_batch_size'], shuffle=True, num_workers=self.featurization_batch_size)):
+            for batch_X, batch_Y, batch_var_mask in tqdm(DataLoader(training_data, batch_size=self.env['featurization_batch_size'], num_workers=self.featurization_batch_size)):
                 num_batches = len(batch_X) // self.env['batch_size']
                 for k in range(num_batches):
                     start, end = k * self.env['batch_size'], (k + 1) * self.env['batch_size']

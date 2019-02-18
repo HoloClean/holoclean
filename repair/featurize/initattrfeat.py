@@ -48,7 +48,7 @@ class InitAttrFeaturizer(Featurizer):
         vid = int(input[0])
         attr_idx = self.attr_to_idx[input[1]]
         init_idx = int(input[2])
-        tensor = torch.zeros(self.classes, self.total_attrs)
+        tensor = -1*torch.ones(self.classes, self.total_attrs)
         tensor[init_idx][attr_idx] = 1.0
         return tensor
 

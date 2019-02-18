@@ -25,7 +25,7 @@ def test_hospital():
         feature_norm=False,
         weight_norm=False,
         print_fw=True,
-        featurization_batch_size=100
+        featurization_batch_size=1000
     ).session
 
     # 2. Load training data and denial constraints.
