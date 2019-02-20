@@ -19,7 +19,6 @@ before_script:
   - psql -U postgres -c 'create database holo;'
   - psql -U postgres -c 'CREATE USER holocleanuser;'
   - psql -U postgres -c "ALTER USER holocleanuser WITH PASSWORD 'abcd1234';"
-  - psql -U postgres -c 'ALTER USER holocleanuser WITH SUPERUSER;'
   - psql -U postgres -c 'GRANT ALL PRIVILEGES ON DATABASE holo TO holocleanuser;'
   - psql -U postgres -d holo -c 'ALTER SCHEMA public OWNER TO holocleanuser;'
 
