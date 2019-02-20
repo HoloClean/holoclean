@@ -1,3 +1,12 @@
+# Some constants.
+
+# How we represent nulls in holoclean.
+NULL_REPR = '_nan_'
+
+# A feature value to represent co-occurrence with NULLs, which is not applicable.
+NA_COOCCUR_FV = 0
+
+
 def dictify_df(frame):
     """
     dictify_df converts a frame with columns
