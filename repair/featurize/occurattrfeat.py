@@ -47,7 +47,7 @@ class OccurAttrFeaturizer(Featurizer):
     def gen_feat_tensor(self, row, tuple):
         tensor = torch.zeros(1, self.classes, self.attrs_number*self.attrs_number)
         rv_attr = row['attribute']
-        domain = row['domain'].split('|||')
+        domain = row['domain']
         rv_domain_idx = {val: idx for idx, val in enumerate(domain)}
         rv_attr_idx = self.ds.attr_to_idx[rv_attr]
         for attr in self.all_attrs:

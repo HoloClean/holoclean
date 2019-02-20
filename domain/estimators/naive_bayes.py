@@ -66,7 +66,7 @@ class NaiveBayes(Estimator):
         val is the domain value and proba is the estimator's posterior probability estimate.
         """
         for row in tqdm(self.domain_df.to_records()):
-            yield self.predict_pp(self._raw_records_by_tid[row['_tid_']], row['attribute'], row['domain'].split('|||'))
+            yield self.predict_pp(self._raw_records_by_tid[row['_tid_']], row['attribute'], row['domain'])
 
     def _get_corr_attributes(self, attr):
         """

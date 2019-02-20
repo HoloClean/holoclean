@@ -124,7 +124,7 @@ class DomainEngine:
             self.ds.generate_aux_table(AuxTables.cell_domain, domain, store=True, index_attrs=['_vid_'])
             self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_tid_'])
             self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_cid_'])
-            query = "SELECT _vid_, _cid_, _tid_, attribute, a.rv_val, a.val_id from %s , unnest(string_to_array(regexp_replace(domain,\'[{\"\"}]\',\'\',\'gi\'),\'|||\')) WITH ORDINALITY a(rv_val,val_id)" % AuxTables.cell_domain.name
+            query = "SELECT _vid_, _cid_, _tid_, attribute, a.rv_val, a.val_id from %s , unnest(domain::TEXT[]) WITH ORDINALITY a(rv_val,val_id)" % AuxTables.cell_domain.name
             self.ds.generate_aux_table_sql(AuxTables.pos_values, query, index_attrs=['_tid_', 'attribute'])
 
     def setup_attributes(self):
@@ -219,8 +219,7 @@ class DomainEngine:
             _cid_: cell ID (unique for every entity-attribute)
             _vid_: variable ID (1-1 correspondence with _cid_)
             attribute: attribute name
-            domain: ||| separated string of domain values
-            domain_size: length of domain
+            domain: array of domain values
             init_value: initial value for this cell
             init_value_idx: domain index of init_value
             fixed: 1 if a random sample was taken since no correlated attributes/top K values
@@ -252,8 +251,7 @@ class DomainEngine:
                                 "attribute": attr,
                                 "_cid_": cid,
                                 "_vid_": vid,
-                                "domain": "|||".join(dom),
-                                "domain_size": len(dom),
+                                "domain": dom,
                                 "init_value": init_value,
                                 "init_index": init_value_idx,
                                 "weak_label": weak_label,
@@ -270,8 +268,7 @@ class DomainEngine:
                                     "attribute": attr,
                                     "_cid_": cid,
                                     "_vid_": vid,
-                                    "domain": "|||".join(dom),
-                                    "domain_size": len(dom),
+                                    "domain": dom,
                                     "init_value": init_value,
                                     "init_index": init_value_idx,
                                     "weak_label": init_value,
@@ -323,8 +320,7 @@ class DomainEngine:
                 domain_values.append(row['init_value'])
             domain_values = sorted(domain_values)
             # update our memoized domain values for this row again
-            row['domain'] = '|||'.join(domain_values)
-            row['domain_size'] = len(domain_values)
+            row['domain'] = domain_values
             row['weak_label_idx'] = domain_values.index(row['weak_label'])
             row['init_index'] = domain_values.index(row['init_value'])
 

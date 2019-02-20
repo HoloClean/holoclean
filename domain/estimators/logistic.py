@@ -29,7 +29,7 @@ class Logistic(Estimator, torch.nn.Module):
         """
         :param dataset: (Dataset) original dataset
         :param domain_df: (DataFrame) currently populated domain dataframe.
-            Required columns are: _vid_, _tid_, attribute, domain, domain_size, init_value
+            Required columns are: _vid_, _tid_, attribute, domain, init_value
         :param active_attrs: (list[str]) attributes that have random values
         """
         torch.nn.Module.__init__(self)
@@ -44,7 +44,7 @@ class Logistic(Estimator, torch.nn.Module):
         # self.dom maps tid --> attr --> list of domain values
         # we need to find the number of domain values we will be generating
         # a training sample for.
-        self.n_samples = int(domain_df['domain_size'].sum())
+        self.n_samples = int(domain_df['domain'].apply(len).sum())
 
         # Create and initialize featurizers.
         self.featurizers = [CooccurAttrFeaturizer(self.ds)]
@@ -90,7 +90,7 @@ class Logistic(Estimator, torch.nn.Module):
         self.vid_to_idxs = {}
         for rec in tqdm(list(self.domain_records)):
             init_row = raw_data_dict[rec['_tid_']]
-            domain_vals = rec['domain'].split('|||')
+            domain_vals = rec['domain']
 
             # Generate the feature tensor for all the domain values for this
             # cell.
@@ -170,7 +170,7 @@ class Logistic(Estimator, torch.nn.Module):
         start_idx, end_idx = self.vid_to_idxs[row['_vid_']]
         pred_X = self._X[start_idx:end_idx]
         pred_Y = self.forward(pred_X)
-        values = self.domain_records[row['_vid_']]['domain'].split('|||')
+        values = self.domain_records[row['_vid_']]['domain']
         return zip(values, map(float, pred_Y))
 
     def predict_pp_batch(self, raw_records_by_tid=None, cell_domain_rows=None):
@@ -183,7 +183,7 @@ class Logistic(Estimator, torch.nn.Module):
         """
         pred_Y = self.forward(self._X)
         for rec in self.domain_records:
-            values = rec['domain'].split('|||')
+            values = rec['domain']
             start_idx, end_idx = self.vid_to_idxs[rec['_vid_']]
             yield zip(values, map(float, pred_Y[start_idx:end_idx]))
 

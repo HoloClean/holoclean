@@ -101,7 +101,7 @@ class FeaturizedDataset:
             is valid for the i-th VID and tensor[i][j] = -10e6 otherwise.
         """
         var_to_domsize = {}
-        query = 'SELECT _vid_, domain_size FROM %s' % AuxTables.cell_domain.name
+        query = 'SELECT _vid_, LENGTH(domain) FROM %s' % AuxTables.cell_domain.name
         res = self.ds.engine.execute_query(query)
         mask = torch.zeros(self.total_vars,self.classes)
         for tuple in tqdm(res):
