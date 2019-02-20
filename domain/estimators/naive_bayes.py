@@ -3,7 +3,6 @@ import math
 from tqdm import tqdm
 
 from ..estimator import Estimator
-from utils import NULL_REPR
 
 
 class NaiveBayes(Estimator):
@@ -42,12 +41,6 @@ class NaiveBayes(Estimator):
                 if at == attr or at == '_tid_':
                     continue
                 val2 = row[at]
-                # Since we do not have co-occurrence stats with NULL values,
-                # we skip them.
-                # It also doesn't make sense for our likelihood to be conditioned
-                # on a NULL value.
-                if val2 == NULL_REPR:
-                    continue
                 val2_val1_count = 0.1
                 if val1 in self._cooccur_freq[attr][at]:
                     if val2 in self._cooccur_freq[attr][at][val1]:
