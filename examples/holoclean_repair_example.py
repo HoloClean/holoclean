@@ -27,8 +27,8 @@ hc = holoclean.HoloClean(
 ).session
 
 # 2. Load training data and denial constraints.
-hc.load_data('hospital', '../testdata/hospital.csv')
-hc.load_dcs('../testdata/hospital_constraints.txt')
+hc.load_data('hospital', '../testdata/met_1000_transformed.csv')
+hc.load_dcs('../testdata/met_constraints.txt')
 hc.ds.set_constraints(hc.get_dcs())
 
 # 3. Detect erroneous cells using these two detectors.
@@ -42,13 +42,12 @@ featurizers = [
     OccurAttrFeaturizer(),
     FreqFeaturizer(),
     ConstraintFeaturizer(),
-    LangModelFeaturizer(),
 ]
 
 hc.repair_errors(featurizers)
 
 # 5. Evaluate the correctness of the results.
-hc.evaluate(fpath='../testdata/hospital_clean.csv',
-            tid_col='tid',
-            attr_col='attribute',
-            val_col='correct_val')
+# hc.evaluate(fpath='../testdata/hospital_clean.csv',
+#             tid_col='tid',
+#             attr_col='attribute',
+#             val_col='correct_val')
