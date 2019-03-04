@@ -279,7 +279,7 @@ class Dataset:
         query = "SELECT t1._tid_, t1.attribute, domain[inferred_val_idx + 1] as rv_value " \
                 "FROM " \
                 "(SELECT _tid_, attribute, " \
-                "_vid_, init_value, domain" \
+                "_vid_, init_value, domain::TEXT[] " \
                 "FROM %s) as t1, %s as t2 " \
                 "WHERE t1._vid_ = t2._vid_"%(AuxTables.cell_domain.name, AuxTables.inf_values_idx.name)
         self.generate_aux_table_sql(AuxTables.inf_values_dom, query, index_attrs=['_tid_'])
