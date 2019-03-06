@@ -95,8 +95,9 @@ class RepairEngine:
         tic = time.clock()
         directory_path = "%s/cache/" % os.environ['HOLOCLEANHOME']
         for file_name in os.listdir(directory_path):
-            file_path = os.path.join(directory_path, file_name)
-            os.unlink(file_path)
+            if "tensor" in file_name:
+                file_path = os.path.join(directory_path, file_name)
+                os.unlink(file_path)
         toc = time.clock()
         status = "DONE clearing cache."
         infer_time = toc - tic
