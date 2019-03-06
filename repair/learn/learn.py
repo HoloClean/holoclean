@@ -142,6 +142,7 @@ class RepairModel:
 
 
     def infer_values(self, infer_data):
+        logging.info('inferring on %d examples (cells)', infer_data.num_examples)
         Y_preds = [self.__predict__(batch_X, batch_var_mask) for batch_X, _, batch_var_mask in tqdm(DataLoader(infer_data, batch_size=self.env['featurization_batch_size'], num_workers=self.env['threads'] - 1))]
         return torch.cat(Y_preds)
 

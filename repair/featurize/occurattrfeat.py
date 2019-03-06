@@ -6,13 +6,14 @@ from tqdm import tqdm
 
 from .featurizer import Featurizer
 from dataset import AuxTables
+from utils import NULL_REPR, NA_COOCCUR_FV
 
 
 class OccurAttrFeaturizer(Featurizer):
     def specific_setup(self):
         self.name = 'OccurAttrFeaturizer'
         if not self.setup_done:
-            raise Exception('Featurizer %s is not properly setup.'%self.name)
+            raise Exception('Featurizer {} is not properly setup.'.format(self.name))
         self.all_attrs = self.ds.get_attributes()
         self.attrs_number = len(self.ds.attr_to_idx)
         self.raw_data_dict = {}
@@ -46,29 +47,28 @@ class OccurAttrFeaturizer(Featurizer):
         rv_attr = row['attribute']
         domain = row['domain'].split('|||')
         rv_domain_idx = {val: idx for idx, val in enumerate(domain)}
+        # We should not have any NULLs in our domain.
+        assert NULL_REPR not in rv_domain_idx
         rv_attr_idx = self.ds.attr_to_idx[rv_attr]
         for attr in self.all_attrs:
-            if attr != rv_attr and (not pd.isnull(tuple[attr])):
-                attr_idx = self.ds.attr_to_idx[attr]
-                val = tuple[attr]
-                count1 = float(self.single_stats[attr][val])
-                # Get topK values
-                if val not in self.pair_stats[attr][rv_attr]:
-                    if not pd.isnull(tuple[rv_attr]):
-                        logging.error('Cannot find attribute: %s with value %s in pair-wise statistics' % (attr, val))
-                        raise Exception('Something is wrong with the pairwise statistics. <Val> should be present in dictionary.')
-                else:
-                    all_vals = self.pair_stats[attr][rv_attr][val]
-                    if len(all_vals) <= len(rv_domain_idx):
-                        candidates = all_vals
-                    else:
-                        candidates = domain
-                    for rv_val in candidates:
-                        count2 = float(all_vals.get(rv_val,0.0))
-                        prob = count2/count1
-                        if rv_val in rv_domain_idx:
-                            index = rv_attr_idx * self.attrs_number + attr_idx
-                            tensor[rv_domain_idx[rv_val]][index] = prob
+            val = tuple[attr]
+
+            # Ignore co-occurrences of same attribute or with null values.
+            # It's possible a value is not in pair_stats if it only co-occurred
+            # with NULL values.
+            if attr == rv_attr \
+                    or val == NULL_REPR \
+                    or val not in self.pair_stats[attr][rv_attr]:
+                continue
+            attr_idx = self.ds.attr_to_idx[attr]
+            count1 = float(self.single_stats[attr][val])
+            all_vals = self.pair_stats[attr][rv_attr][val]
+            for rv_val in domain:
+                count2 = float(all_vals.get(rv_val, 0.0))
+                prob = count2 / count1
+                if rv_val in rv_domain_idx:
+                    index = rv_attr_idx * self.attrs_number + attr_idx
+                    tensor[rv_domain_idx[rv_val]][index] = prob
         return tensor
 
     def feature_names(self):

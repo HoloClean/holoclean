@@ -8,6 +8,7 @@ import torch
 import torch.nn.functional as F
 
 from dataset import AuxTables, CellStatus
+from utils import NULL_REPR
 
 FeatInfo = namedtuple('FeatInfo', ['name', 'size', 'learnable', 'init_weight', 'feature_names'])
 Example = namedtuple('Example', ['X', 'Y', 'var_mask'])
@@ -47,13 +48,17 @@ class FeaturizedDataset:
             contains the domain index of the initial value for the i-th
             variable/VID.
         """
-        # Trains with clean cells AND cells that have been weak labelled.
-        query = 'SELECT _vid_, weak_label_idx, fixed, (t2._cid_ IS NULL) AS clean ' \
-                'FROM {} AS t1 LEFT JOIN {} AS t2 ON t1._cid_ = t2._cid_ ' \
-                'WHERE t2._cid_ is NULL ' \
-                '   OR t1.fixed != {};'.format(AuxTables.cell_domain.name,
-                                               AuxTables.dk_cells.name,
-                                               CellStatus.NOT_SET.value)
+        # Generate weak labels for clean cells AND cells that have been weak
+        # labelled. Do not train on cells with NULL weak labels (i.e.
+        # NULL init values that were not weak labelled).
+        query = """
+        SELECT _vid_, weak_label_idx, fixed, (t2._cid_ IS NULL) AS clean
+        FROM {cell_domain} AS t1 LEFT JOIN {dk_cells} AS t2 ON t1._cid_ = t2._cid_
+        WHERE weak_label != '{null_repr}' AND (t2._cid_ is NULL OR t1.fixed != {cell_status});
+        """.format(cell_domain=AuxTables.cell_domain.name,
+                dk_cells=AuxTables.dk_cells.name,
+                null_repr=NULL_REPR,
+                cell_status=CellStatus.NOT_SET.value)
         res = self.ds.engine.execute_query(query)
         if len(res) == 0:
             raise Exception("No weak labels available. Reduce pruning threshold.")

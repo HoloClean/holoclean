@@ -1,7 +1,7 @@
 import sys
 sys.path.append('../')
 import holoclean
-from detect import NullDetector, ViolationDetector
+from detect import ErrorsLoaderDetector
 from repair.featurize import *
 
 
@@ -23,8 +23,7 @@ hc = holoclean.HoloClean(
     timeout=3*60000,
     feature_norm=False,
     weight_norm=False,
-    print_fw=True,
-    featurization_batch_size=1000
+    print_fw=True
 ).session
 
 # 2. Load training data and denial constraints.
@@ -32,14 +31,17 @@ hc.load_data('hospital', '../testdata/hospital.csv')
 hc.load_dcs('../testdata/hospital_constraints.txt')
 hc.ds.set_constraints(hc.get_dcs())
 
-# 3. Detect erroneous cells using these two detectors.
-detectors = [NullDetector(), ViolationDetector()]
-hc.detect_errors(detectors)
+# 3. Detect erroneous cells.
+error_loader = ErrorsLoaderDetector(
+        db_engine=hc.ds.engine,
+        schema_name='hospital',
+        table_name='dk_cells'
+)
+hc.detect_errors([error_loader])
 
 # 4. Repair errors utilizing the defined features.
 hc.setup_domain()
 featurizers = [
-    InitAttrFeaturizer(),
     OccurAttrFeaturizer(),
     FreqFeaturizer(),
     ConstraintFeaturizer(),
