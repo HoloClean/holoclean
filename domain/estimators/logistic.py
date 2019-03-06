@@ -1,16 +1,14 @@
 from abc import ABCMeta, abstractmethod
 import logging
 
-import pandas as pd
 import time
 import torch
-import torch.nn.functional as F
 from torch.optim import Adam, SGD
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 
 from ..estimator import Estimator
-from utils import dictify_df
+from utils import NULL_REPR, NA_COOCCUR_FV
 
 
 class Logistic(Estimator, torch.nn.Module):
@@ -20,8 +18,12 @@ class Logistic(Estimator, torch.nn.Module):
     value in a cell given all other initial values using features
     of the other initial values such as co-occurrence.
     """
+    # We should not use weight decay for this posterior model since we'd
+    # like to overfit as much as possible to the co-occurrence features.
+    # This is fine since we take only samples with high predicted probabilities.
+    WEIGHT_DECAY = 0
 
-    def __init__(self, env, dataset, domain_df, active_attrs, batch_size=32):
+    def __init__(self, env, dataset, domain_df, active_attrs):
         """
         :param dataset: (Dataset) original dataset
         :param domain_df: (DataFrame) currently populated domain dataframe.
@@ -59,9 +61,9 @@ class Logistic(Estimator, torch.nn.Module):
         self._loss = torch.nn.BCELoss()
         if self.env['optimizer'] == 'sgd':
             self._optimizer = SGD(self.parameters(), lr=self.env['learning_rate'], momentum=self.env['momentum'],
-                                  weight_decay=self.env['weight_decay'])
+                                  weight_decay=self.WEIGHT_DECAY)
         else:
-            self._optimizer = Adam(self.parameters(), lr=self.env['learning_rate'], weight_decay=self.env['weight_decay'])
+            self._optimizer = Adam(self.parameters(), lr=self.env['learning_rate'], weight_decay=self.WEIGHT_DECAY)
 
     def _gen_training_data(self):
         """
@@ -74,6 +76,9 @@ class Logistic(Estimator, torch.nn.Module):
         # and given TID
         self._X = torch.zeros(self.n_samples, self.num_features)
         self._Y = torch.zeros(self.n_samples)
+        # Keeps track of cells with NULL init_value to ignore in training.
+        # We only train on cells when train_idx[idx] == 1.
+        self._train_idx = torch.zeros(self.n_samples)
 
         """
         Iterate through the domain for every cell and create a sample
@@ -94,17 +99,26 @@ class Logistic(Estimator, torch.nn.Module):
             assert(feat_tensor.shape[0] == len(domain_vals))
             self._X[sample_idx:sample_idx+len(domain_vals)] = feat_tensor
 
+            self.vid_to_idxs[rec['_vid_']] = (sample_idx, sample_idx+len(domain_vals))
+
+            # If the initial value is NULL, we do not want to train on it
+            # nor assign it a weak label.
+            if rec['init_value'] == NULL_REPR:
+                sample_idx += len(domain_vals)
+                continue
+
+            # If the init value is not NULL, then we want to use these possible
+            # value samples during training.
+            self._train_idx[sample_idx:sample_idx + len(domain_vals)] = 1
             # Assign the tensor corresponding to the initial value with
             # a target label of 1.
-            try:
-                init_idx = domain_vals.index(rec['init_value'])
-                self._Y[sample_idx + init_idx] = 1
-            except ValueError:
-                logging.error('init value "%s" should be in domain "%s" for VID %d', rec['init_value'], rec['domain'], rec['_vid_'])
-                raise
+            init_idx = domain_vals.index(rec['init_value'])
+            self._Y[sample_idx + init_idx] = 1
 
-            self.vid_to_idxs[rec['_vid_']] = (sample_idx, sample_idx+len(domain_vals))
             sample_idx += len(domain_vals)
+
+        # Convert this to a vector of indices rather than a vector mask.
+        self._train_idx = (self._train_idx == 1).nonzero()[:,0]
 
         logging.debug('Logistic: DONE featurization in %.2fs', time.clock() - tic)
 
@@ -134,7 +148,9 @@ class Logistic(Estimator, torch.nn.Module):
         :param num_epochs: (int) number of epochs.
         """
         batch_losses = []
-        torch_ds = TensorDataset(self._X, self._Y)
+        # We train only on cells that do not have their initial value as NULL.
+        X_train, Y_train = self._X.index_select(0, self._train_idx), self._Y.index_select(0, self._train_idx)
+        torch_ds = TensorDataset(X_train, Y_train)
 
         # Main training loop.
         for epoch_idx in range(1, num_epochs+1):
@@ -169,13 +185,9 @@ class Logistic(Estimator, torch.nn.Module):
         values = self.domain_records[row['_vid_']]['domain'].split('|||')
         return zip(values, map(float, pred_Y))
 
-    def predict_pp_batch(self, raw_records_by_tid=None, cell_domain_rows=None):
+    def predict_pp_batch(self):
         """
         Performs batch prediction.
-
-        Parameters are ignored: instead it returns the predictions for cells
-        and domain values ordered by VID of the initial domain dataframe
-        passed into the constructor.
         """
         pred_Y = self.forward(self._X)
         for rec in self.domain_records:
@@ -248,14 +260,19 @@ class CooccurAttrFeaturizer(Featurizer):
                 if attr == other_attr:
                     continue
 
+                other_val = row[other_attr]
+
                 # calculate p(val | other_val)
                 # there may not be co-occurrence frequencies for some value pairs since
                 # our possible values were from correlation with only
                 # one other attribute
-                cooccur = self.cooccur_freq[attr][other_attr][val].get(row[other_attr], 0)
-                freq = self.freq[other_attr][row[other_attr]]
+                if val == NULL_REPR or other_val == NULL_REPR:
+                    fv = NA_COOCCUR_FV
+                else:
+                    cooccur = self.cooccur_freq[attr][other_attr].get(val, {}).get(other_val, NA_COOCCUR_FV)
+                    freq = self.freq[other_attr][row[other_attr]]
+                    fv = float(cooccur) / float(freq)
 
                 feat_idx = self.attr_to_idx[attr] * self.n_attrs + other_attr_idx
-
-                tensor[val_idx,feat_idx] = float(cooccur) / float(freq)
+                tensor[val_idx, feat_idx] = fv
         return tensor
