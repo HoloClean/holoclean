@@ -93,7 +93,7 @@ class RepairEngine:
 
     def clear_cache(self):
         tic = time.clock()
-        directory_path = '../cache/'
+        directory_path = "%s/cache/" % os.environ['HOLOCLEANHOME']
         for file_name in os.listdir(directory_path):
             file_path = os.path.join(directory_path, file_name)
             os.unlink(file_path)

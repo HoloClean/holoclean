@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
+import os
 
 from dataset import AuxTables, CellStatus
 from utils import NULL_REPR
@@ -170,7 +171,7 @@ class TorchFeaturizedDataset(torch.utils.data.Dataset):
 
     def _featurize_batch(self, batch_number):
         start_idx, end_idx = self.batch_size * batch_number, min(self.num_examples, self.batch_size * (batch_number + 1))
-        featurized_examples = [torch.cat([featurizer.gen_feat_tensor(self.vids[idx]) for featurizer in self.featurizers], dim=1) for idx in range(start_idx, end_idx)]
+        featurized_examples = [torch.cat([featurizer.gen_feat_tensor(self.vids[idx].item()) for featurizer in self.featurizers], dim=1) for idx in range(start_idx, end_idx)]
         featurized_tensor = torch.stack(featurized_examples)
         if self.feature_norm:
             featurized_tensor = F.normalize(featurized_tensor, p=2, dim=1)
@@ -190,7 +191,7 @@ class TorchFeaturizedDataset(torch.utils.data.Dataset):
 
         if batch_number >= len(self.batch_number_to_file_path):
             assert(batch_number == len(self.batch_number_to_file_path))
-            cached_batch_file_path = "../cache/%dtensor_batch%d" %(id(self), batch_number)
+            cached_batch_file_path = "%s/cache/%dtensor_batch%d" %(os.environ['HOLOCLEANHOME'], id(self), batch_number)
             self.batch_number_to_file_path.append(cached_batch_file_path)
             cached_tensor = self._featurize_batch(batch_number)
             torch.save(cached_tensor, cached_batch_file_path)
