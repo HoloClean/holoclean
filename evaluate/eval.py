@@ -10,10 +10,13 @@ from dataset import AuxTables
 from dataset.table import Table, Source
 from utils import NULL_REPR
 
-EvalReport = namedtuple('EvalReport', ['precision', 'recall', 'repair_recall',
-    'f1', 'repair_f1', 'detected_errors', 'total_errors', 'correct_repairs',
-    'total_repairs',
-    'total_repairs_grdt', 'total_repairs_grdt_correct', 'total_repairs_grdt_incorrect'])
+report_name_list = ['precision', 'recall', 'repair_recall',
+                    'f1', 'repair_f1', 'detected_errors', 'total_errors', 'correct_repairs', 'total_repairs',
+                    'total_repairs_grdt', 'total_repairs_grdt_correct', 'total_repairs_grdt_incorrect',
+                    'rms']
+
+EvalReport = namedtuple('EvalReport', report_name_list)
+EvalReport.__new__.__defaults__ = (0,) * len(report_name_list)
 
 errors_template = Template('SELECT count(*) ' \
                            'FROM  "$init_table" as t1, "$grdt_table" as t2 ' \
@@ -42,6 +45,16 @@ correct_repairs_template = Template('SELECT COUNT(*) FROM '
                                     '  AND errors._value_ = repairs.rv_value')
 
 
+"""
+Calculates RMS error for the given attribute.
+"""
+rms_template = Template('SELECT SQRT(AVG(POWER(grdt._value_::NUMERIC -repairs.rv_value::NUMERIC, 2))) FROM '
+                        '"$grdt_table" as grdt, $inf_dom as repairs '
+                        'WHERE grdt._tid_ = repairs._tid_ '
+                        '  AND grdt._attribute_ = repairs.attribute'
+                        '  AND grdt._attribute_ IN $attrs_list')
+
+
 class EvalEngine:
     def __init__(self, env, dataset):
         self.env = env
@@ -63,8 +76,14 @@ class EvalEngine:
                             inplace=True)
             raw_data = raw_data[['_tid_', '_attribute_', '_value_']]
             raw_data['_tid_'] = raw_data['_tid_'].astype(int)
+
             # Normalize string to whitespaces.
-            raw_data['_value_'] = raw_data['_value_'].str.strip().str.lower()
+            categorical_attrs = self.ds.categorical_attrs
+            if categorical_attrs:
+                cat_cells = raw_data['_attribute_'].isin(categorical_attrs)
+                raw_data.loc[cat_cells, '_value_'] = \
+                    raw_data.loc[cat_cells, '_value_'].astype(str).str.strip().str.lower()
+
             self.clean_data = Table(name, Source.DF, df=raw_data)
             self.clean_data.store_to_db(self.ds.engine.engine)
             self.clean_data.create_db_index(self.ds.engine, ['_tid_'])
@@ -77,63 +96,110 @@ class EvalEngine:
         load_time = toc - tic
         return status, load_time
 
-    def evaluate_repairs(self):
-        self.compute_total_repairs()
-        self.compute_total_repairs_grdt()
-        self.compute_total_errors()
-        self.compute_detected_errors()
-        self.compute_correct_repairs()
-        prec = self.compute_precision()
-        rec = self.compute_recall()
-        rep_recall = self.compute_repairing_recall()
-        f1 = self.compute_f1()
-        rep_f1 = self.compute_repairing_f1()
-
-        if self.env['verbose']:
-            self.log_weak_label_stats()
-
-        return prec, rec, rep_recall, f1, rep_f1
-
-    def eval_report(self):
+    def eval_report(self, attr=None):
         """
         Returns an EvalReport named tuple containing the experiment results.
+        :param attr: if attr is not None, compute results for attr:
+                        if attr is numerical, then only report rms
+                        if attr is categorical, then report precision, recall etc.
+                     if attr is None, compute results for all attrs
         """
         tic = time.clock()
-        try:
-            prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
-            report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs on correct cells (Grdth present) = %d, Total Repairs on incorrect cells (Grdth present) = %d" % (
-                      prec, rec, rep_recall, f1, rep_f1,
-                      self.detected_errors, self.total_errors, self.correct_repairs,
-                      self.total_repairs, self.total_repairs_grdt_correct, self.total_repairs_grdt_incorrect)
-            eval_report = EvalReport(prec, rec, rep_recall, f1, rep_f1, self.detected_errors, self.total_errors,
-                           self.correct_repairs, self.total_repairs, self.total_repairs_grdt,
-                           self.total_repairs_grdt_correct, self.total_repairs_grdt_incorrect)
-        except Exception as e:
-            logging.error("ERROR generating evaluation report %s" % e)
-            raise
+        eval_report_dict = {}
+        # attr is not None and is numerical
+        # or attr is None(query on all attrs) and no categorical
+        if attr is None or attr in self.ds.numerical_attrs:
+            eval_report_dict['rms'] = self.compute_rms(attr)
+
+        if attr is None or attr in self.ds.categorical_attrs:
+            # if attr in self.ds.categorical_attrs or attr is None
+            # attr is not None and is categorical
+            # attr is None and should query on all
+            correct_repairs = self.compute_correct_repairs(attr)
+            total_repairs = self.compute_total_repairs(attr)
+            detected_errors = self.compute_detected_errors(attr)
+            total_errors = self.compute_total_errors(attr)
+            total_repairs_grdt_correct, total_repairs_grdt_incorrect, \
+                total_repairs_grdt = self.compute_total_repairs_grdt(attr)
+
+            eval_report_dict['detected_errors'] = detected_errors
+            eval_report_dict['total_errors'] = total_errors
+            eval_report_dict['correct_repairs'] = correct_repairs
+            eval_report_dict['total_repairs'] = total_repairs
+            eval_report_dict['total_repairs_grdt'] = total_repairs_grdt
+            eval_report_dict['total_repairs_grdt_correct'] = total_repairs_grdt_correct
+            eval_report_dict['total_repairs_grdt_incorrect'] = total_repairs_grdt_incorrect
+
+            eval_report_dict['precision'] = self.compute_precision(correct_repairs, total_repairs_grdt)
+            eval_report_dict['recall'] = self.compute_recall(correct_repairs, total_errors)
+            eval_report_dict['repair_recall'] = self.compute_repairing_recall(correct_repairs, detected_errors)
+            eval_report_dict['f1'] = self.compute_f1(correct_repairs, total_errors, total_repairs_grdt)
+            eval_report_dict['repair_f1'] = self.compute_repairing_f1(correct_repairs, detected_errors,
+                                                                      total_repairs_grdt)
+
+        report = EvalReport(**eval_report_dict)
+        report_str = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, " \
+                     "F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, " \
+                     "Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, " \
+                     "Total Repairs on correct cells (Grdth present) = %d, " \
+                     "Total Repairs on incorrect cells (Grdth present) = %d, " \
+                     "RMS = %.2f" % (report.precision, report.recall, report.repair_recall, report.f1, report.repair_f1,
+                                     report.detected_errors, report.total_errors, report.correct_repairs,
+                                     report.total_repairs,
+                                     report.total_repairs_grdt_correct, report.total_repairs_grdt_incorrect,
+                                     report.rms)
+
+        if attr:
+            report_str = "# Attribute:{};{}".format(attr, report_str)
 
         toc = time.clock()
         report_time = toc - tic
-        return report, report_time, eval_report
+        return report_str, report_time, report
 
-    def compute_total_repairs(self):
+    """
+    All these compute_xxx methods are aimed at categorical attributes
+    All numerical attrs should not be involved in computing precision, recall, etc.
+    """
+    def get_categorical_clause(self, attr):
+        """
+        Get where condition on which attr should be queried
+        :param attr: if attr is None, generate condition on all categorical attrs
+        :return: str type attr_clause showing: 'AND t1.attribute = attr' to only do query on target attr
+                if attr is None, then 'AND (t1.attribute = attr1 OR t1.attribute = attr2 ...) for all categorical attrs
+        """
+        query_attrs = [attr] if attr else self.ds.categorical_attrs
+        query_attrs_str = ["\'{}\'".format(attr) for attr in query_attrs]
+        categorical_where = 't1.attribute IN (%s)' % ','.join(query_attrs_str)
+
+        return categorical_where
+
+    def compute_total_repairs(self, attr=None):
         """
         compute_total_repairs memoizes the number of repairs:
         the # of cells that were inferred and where the inferred value
         is not equal to the initial value.
+        :param attr: if attr is not None, it must be categorical
         """
+        assert attr is None or attr in self.ds.categorical_attrs
 
+        if not self.ds.categorical_attrs:
+            return 0.
+        # do not query on numerical attrs (when attr is None, indicating we want query on all categorical attrs)
+        # if there are no numerical attrs, then no condition should be added, just query on all attributes
+        attr_clause = self.get_categorical_clause(attr) if self.ds.numerical_attrs else "TRUE"
         query = "SELECT count(*) FROM " \
                 "  (SELECT _vid_ " \
                 "     FROM {} as t1, {} as t2 " \
                 "    WHERE t1._tid_ = t2._tid_ " \
                 "      AND t1.attribute = t2.attribute " \
-                "      AND t1.init_value != t2.rv_value) AS t".format(AuxTables.cell_domain.name,
-                                                                      AuxTables.inf_values_dom.name)
+                "      AND t1.init_value != t2.rv_value " \
+                "      AND {}) AS t".format(AuxTables.cell_domain.name,
+                                            AuxTables.inf_values_dom.name,
+                                            attr_clause)
         res = self.ds.engine.execute_query(query)
-        self.total_repairs = float(res[0][0])
+        return res[0][0]
 
-    def compute_total_repairs_grdt(self):
+    def compute_total_repairs_grdt(self, attr=None):
         """
         compute_total_repairs_grdt memoizes the number of repairs for cells
         that are specified in the clean/ground truth data. Otherwise repairs
@@ -141,134 +207,207 @@ class EvalEngine:
 
         We also distinguish between repairs on correct cells and repairs on
         incorrect cells (correct cells are cells where init == ground truth).
+        :param attr: if attr is not None, it must be categorical
         """
+
+        assert attr is None or attr in self.ds.categorical_attrs
+        if not self.ds.categorical_attrs:
+            return 0.
+        # do not query on numerical attrs (when attr is None, indicating we want query on all categorical attrs)
+        # if there are no numerical attrs, then no condition should be added, just query on all attributes
+        attr_clause = self.get_categorical_clause(attr) if self.ds.numerical_attrs else "TRUE"
+
         query = """
-        SELECT
-            (t1.init_value = t3._value_) AS is_correct,
-            count(*)
-        FROM   {} as t1, {} as t2, {} as t3
-        WHERE  t1._tid_ = t2._tid_
-          AND  t1.attribute = t2.attribute
-          AND  t1.init_value != t2.rv_value
-          AND  t1._tid_ = t3._tid_
-          AND  t1.attribute = t3._attribute_
-        GROUP BY is_correct
-          """.format(AuxTables.cell_domain.name,
-                  AuxTables.inf_values_dom.name,
-                  self.clean_data.name)
+            SELECT
+                (t1.init_value = t3._value_) AS is_correct,
+                count(*)
+            FROM   {} as t1, {} as t2, {} as t3
+            WHERE  t1._tid_ = t2._tid_
+              AND  t1.attribute = t2.attribute
+              AND  t1.init_value != t2.rv_value
+              AND  t1._tid_ = t3._tid_
+              AND  t1.attribute = t3._attribute_ 
+              AND  {}
+            GROUP BY is_correct
+              """.format(AuxTables.cell_domain.name,
+                         AuxTables.inf_values_dom.name,
+                         self.clean_data.name,
+                         attr_clause)
+
         res = self.ds.engine.execute_query(query)
 
         # Memoize the number of repairs on correct cells and incorrect cells.
         # Since we do a GROUP BY we need to check which row of the result
         # corresponds to the correct/incorrect counts.
-        self.total_repairs_grdt_correct, self.total_repairs_grdt_incorrect = 0, 0
-        self.total_repairs_grdt = 0
+        total_repairs_grdt_correct, total_repairs_grdt_incorrect = 0, 0
         if not res:
-            return
+            return 0, 0, 0
 
         if res[0][0]:
             correct_idx, incorrect_idx = 0, 1
         else:
             correct_idx, incorrect_idx = 1, 0
         if correct_idx < len(res):
-            self.total_repairs_grdt_correct = float(res[correct_idx][1])
+            total_repairs_grdt_correct = float(res[correct_idx][1])
         if incorrect_idx < len(res):
-            self.total_repairs_grdt_incorrect =  float(res[incorrect_idx][1])
-        self.total_repairs_grdt = self.total_repairs_grdt_correct + self.total_repairs_grdt_incorrect
+            total_repairs_grdt_incorrect = float(res[incorrect_idx][1])
+        total_repairs_grdt = total_repairs_grdt_correct + total_repairs_grdt_incorrect
 
-    def compute_total_errors(self):
+        return total_repairs_grdt_correct, total_repairs_grdt_incorrect, total_repairs_grdt
+
+    def compute_total_errors(self, attr=None):
         """
         compute_total_errors memoizes the number of cells that have a
         wrong initial value: requires ground truth data.
+        :param attr: if attr is not None, it must be categorical
         """
+        assert attr is None or attr in self.ds.categorical_attrs
+        if not self.ds.categorical_attrs:
+            return 0.
+
         queries = []
         total_errors = 0.0
-        for attr in self.ds.get_attributes():
+
+        query_attrs = [attr] if attr else self.ds.categorical_attrs
+        for attr in query_attrs:
             query = errors_template.substitute(init_table=self.ds.raw_data.name,
                                                grdt_table=self.clean_data.name,
                                                attr=attr)
             queries.append(query)
         results = self.ds.engine.execute_queries(queries)
-        for res in results:
-            total_errors += float(res[0][0])
-        self.total_errors = total_errors
 
-    def compute_detected_errors(self):
+        for i in range(len(results)):
+            res = results[i]
+            total_errors += float(res[0][0])
+
+        return total_errors
+
+    def compute_detected_errors(self, attr=None):
         """
         compute_detected_errors memoizes the number of error cells that
         were detected in error detection: requires ground truth.
 
         This value is always equal or less than total errors (see
         compute_total_errors).
+        :param attr: if attr is not None, it must be categorical
         """
+        assert attr is None or attr in self.ds.categorical_attrs
+        if not self.ds.categorical_attrs:
+            return 0.
+        # do not query on numerical attrs (when attr is None, indicating we want query on all categorical attrs)
+        # if there are no numerical attrs, then no condition should be added, just query on all attributes
+        attr_clause = self.get_categorical_clause(attr) if self.ds.numerical_attrs else "TRUE"
+
         query = "SELECT count(*) FROM " \
                 "  (SELECT _vid_ " \
-                "   FROM   %s as t1, %s as t2, %s as t3 " \
-                "   WHERE  t1._tid_ = t2._tid_ AND t1._cid_ = t3._cid_ " \
-                "     AND  t1.attribute = t2._attribute_ " \
-                "     AND  t1.init_value != t2._value_) AS t" \
-                % (AuxTables.cell_domain.name, self.clean_data.name, AuxTables.dk_cells.name)
+                "   FROM {} as t1, {} as t2, {} as t3 " \
+                "   WHERE t1._tid_ = t2._tid_ " \
+                "     AND t1._cid_ = t3._cid_ " \
+                "     AND t1.attribute = t2._attribute_ " \
+                "     AND t1.init_value != t2._value_ " \
+                "     AND {}) AS t".format(AuxTables.cell_domain.name,
+                                           self.clean_data.name,
+                                           AuxTables.dk_cells.name,
+                                           attr_clause)
         res = self.ds.engine.execute_query(query)
-        self.detected_errors = float(res[0][0])
+        return float(res[0][0])
 
-    def compute_correct_repairs(self):
+    def compute_correct_repairs(self, attr=None):
         """
         compute_correct_repairs memoizes the number of error cells
         that were correctly inferred.
 
         This value is always equal or less than total errors (see
         compute_total_errors).
+        :param attr： if attr is not None, it must be categorical
         """
+        assert attr is None or attr in self.ds.categorical_attrs
+        if not self.ds.categorical_attrs:
+            return 0.
+
         queries = []
         correct_repairs = 0.0
-        for attr in self.ds.get_attributes():
-            query = correct_repairs_template.substitute(init_table=self.ds.raw_data.name, grdt_table=self.clean_data.name,
+
+        query_attrs = [attr] if attr else self.ds.categorical_attrs
+        for attr in query_attrs:
+            query = correct_repairs_template.substitute(init_table=self.ds.raw_data.name,
+                                                        grdt_table=self.clean_data.name,
                                                         attr=attr, inf_dom=AuxTables.inf_values_dom.name)
             queries.append(query)
         results = self.ds.engine.execute_queries(queries)
-        for res in results:
-            correct_repairs += float(res[0][0])
-        self.correct_repairs = correct_repairs
 
-    def compute_recall(self):
+        for i in range(len(results)):
+            res = results[i]
+            correct_repairs += float(res[0][0])
+
+        return correct_repairs
+
+    def compute_rms(self, attr=None):
+        """
+        Should check all the dk_cells in numerical attributes
+        compute RMS error for all dk_cells in numerical attributes
+        :return:
+        """
+        assert attr is None or attr in self.ds.numerical_attrs
+        if not self.ds.numerical_attrs:
+            return 0.
+
+        query_attrs = [attr] if attr else self.ds.numerical_attrs
+        query_attrs_str = ["\'{}\'".format(attr) for attr in query_attrs]
+        query_attrs_sql = '(%s)' % ','.join(query_attrs_str)
+        query = rms_template.substitute(grdt_table=self.clean_data.name, inf_dom=AuxTables.inf_values_dom.name,
+                                        attrs_list=query_attrs_sql)
+        res = self.ds.engine.execute_query(query)
+
+        return res[0][0]
+
+    @staticmethod
+    def compute_recall(correct_repairs, total_errors):
         """
         Computes the recall (# of correct repairs / # of total errors).
         """
-        if self.total_errors == 0:
+        if total_errors == 0:
             return 0
-        return self.correct_repairs / self.total_errors
+        return correct_repairs / total_errors
 
-    def compute_repairing_recall(self):
+    @staticmethod
+    def compute_repairing_recall(correct_repairs, detected_errors):
         """
         Computes the _repairing_ recall (# of correct repairs / # of total
         _detected_ errors).
         """
-        if self.detected_errors == 0:
+        if detected_errors == 0:
             return 0
-        return self.correct_repairs / self.detected_errors
+        return correct_repairs / detected_errors
 
-    def compute_precision(self):
+    @staticmethod
+    def compute_precision(correct_repairs, total_repairs_grdt):
         """
         Computes precision (# correct repairs / # of total repairs w/ ground truth)
         """
-        if self.total_repairs_grdt == 0:
+        if total_repairs_grdt == 0:
             return 0
-        return self.correct_repairs / self.total_repairs_grdt
+        return correct_repairs / total_repairs_grdt
 
-    def compute_f1(self):
-        prec = self.compute_precision()
-        rec = self.compute_recall()
-        if prec+rec == 0:
-            return 0
-        f1 = 2*(prec*rec)/(prec+rec)
+    @staticmethod
+    def compute_f1(correct_repairs, total_errors, total_repairs_grdt):
+        prec = EvalEngine.compute_precision(correct_repairs, total_repairs_grdt)
+        rec = EvalEngine.compute_recall(correct_repairs, total_errors)
+        if prec + rec == 0:
+            f1 = 0
+        else:
+            f1 = 2 * (prec * rec) / (prec + rec)
         return f1
 
-    def compute_repairing_f1(self):
-        prec = self.compute_precision()
-        rec = self.compute_repairing_recall()
-        if prec+rec == 0:
-            return 0
-        f1 = 2*(prec*rec)/(prec+rec)
+    @staticmethod
+    def compute_repairing_f1(correct_repairs, detected_errors, total_repairs_grdt):
+        prec = EvalEngine.compute_precision(correct_repairs, total_repairs_grdt)
+        rec = EvalEngine.compute_repairing_recall(correct_repairs, detected_errors)
+        if prec == 0 and rec == 0:
+            f1 = 0
+        else:
+            f1 = 2 * (prec * rec) / (prec + rec)
+
         return f1
 
     def log_weak_label_stats(self):

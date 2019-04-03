@@ -31,6 +31,7 @@ class NullDetector(Detector):
             tmp_df = self.df[self.df[attr] == NULL_REPR]['_tid_'].to_frame()
             tmp_df.insert(1, "attribute", attr)
             errors.append(tmp_df)
+
         errors_df = pd.concat(errors, ignore_index=True)
         return errors_df
 
