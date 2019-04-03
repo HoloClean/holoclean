@@ -17,7 +17,7 @@ unary_template = Template('SELECT _vid_, val_id, count(*) violations '
                           'WHERE  t1._tid_ = t2._tid_ '
                           '  AND  t2.attribute = \'$rv_attr\' '
                           '  AND  $orig_predicates '
-                          '  AND  t2.rv_val $operation $rv_val '
+                          '  AND  t2.rv_val::$cast_type $operation $rv_val '
                           'GROUP BY _vid_, val_id')
 
 # binary_template is used for constraints where the current predicate
@@ -29,7 +29,7 @@ binary_template = Template('SELECT _vid_, val_id, count(*) violations '
                            '  AND  $join_rel._tid_ = t3._tid_ '
                            '  AND  t3.attribute = \'$rv_attr\' '
                            '  AND  $orig_predicates '
-                           '  AND  t3.rv_val $operation $rv_val '
+                           '  AND  t3.rv_val::$cast_type $operation $rv_val '
                            'GROUP BY _vid_, val_id')
 
 # ex_binary_template is used as a fallback for binary_template in case
@@ -43,7 +43,7 @@ ex_binary_template = Template('SELECT _vid_, val_id, 1 violations '
                               '              FROM   "$init_table" AS $other_rel '
                               '              WHERE  $join_rel._tid_ != $other_rel._tid_ '
                               '                AND  $orig_predicates '
-                              '                AND  t3.rv_val $operation $rv_val)')
+                              '                AND  t3.rv_val::$cast_type $operation $rv_val)')
 
 
 def gen_feat_tensor(violations, total_vars, classes):
@@ -61,13 +61,13 @@ class ConstraintFeaturizer(Featurizer):
     def specific_setup(self):
         self.name = 'ConstraintFeaturizer'
         self.constraints = self.ds.constraints
-        self.init_table_name = self.ds.raw_data.name
+        self.table_name = self.ds.quantized_data.name if self.ds.do_quantization else self.ds.raw_data.name
 
     def create_tensor(self):
         queries = self.generate_relaxed_sql()
         results = self.ds.engine.execute_queries_w_backup(queries)
         tensors = self._apply_func(partial(gen_feat_tensor, total_vars=self.total_vars, classes=self.classes), results)
-        combined = torch.cat(tensors,2)
+        combined = torch.cat(tensors, 2)
         combined = F.normalize(combined, p=2, dim=1)
         return combined
 
@@ -83,7 +83,7 @@ class ConstraintFeaturizer(Featurizer):
             query_list.extend(queries)
         return query_list
 
-    def execute_queries(self,queries):
+    def execute_queries(self, queries):
         return self.ds.engine.execute_queries_w_backup(queries)
 
     def relax_unary_predicate(self, predicate):
@@ -101,6 +101,7 @@ class ConstraintFeaturizer(Featurizer):
         const = comp if comp.startswith('\'') else '"{}"'.format(comp)
         return attr, op, const
 
+    # TODO(stoke): symmetric problem when > or <
     def relax_binary_predicate(self, predicate, rel_idx):
         """
         relax_binary_predicate returns the attribute, operation, and
@@ -140,12 +141,13 @@ class ConstraintFeaturizer(Featurizer):
             if len(orig_cnf) == 0:
                 orig_cnf = 'TRUE'
             rv_attr, op, rv_val = self.relax_unary_predicate(predicates[k])
-            query = unary_template.substitute(init_table=self.init_table_name,
-                                              pos_values=AuxTables.pos_values.name,
-                                              orig_predicates=orig_cnf,
-                                              rv_attr=rv_attr,
-                                              operation=op,
-                                              rv_val=rv_val)
+            cast_type = 'NUMERIC'
+            if rv_attr in self.ds.categorical_attrs:
+                cast_type = 'TEXT'
+
+            query = unary_template.substitute(init_table=self.table_name, pos_values=AuxTables.pos_values.name,
+                                              orig_predicates=orig_cnf, rv_attr=rv_attr, operation=op,
+                                              rv_val=rv_val, cast_type=cast_type)
             queries.append((query, ''))
         return queries
 
@@ -162,34 +164,33 @@ class ConstraintFeaturizer(Featurizer):
             is_binary, join_rel, other_rel = self.get_binary_predicate_join_rel(predicates[k])
             if not is_binary:
                 rv_attr, op, rv_val = self.relax_unary_predicate(predicates[k])
-                query = binary_template.substitute(init_table=self.init_table_name,
-                                                   pos_values=AuxTables.pos_values.name,
-                                                   join_rel=join_rel[0],
-                                                   orig_predicates=orig_cnf,
-                                                   rv_attr=rv_attr,
-                                                   operation=op,
-                                                   rv_val=rv_val)
+                cast_type = 'NUMERIC'
+                if rv_attr in self.ds.categorical_attrs:
+                    cast_type = 'TEXT'
+                query = binary_template.substitute(init_table=self.table_name,
+                                                   pos_values=AuxTables.pos_values.name, join_rel=join_rel[0],
+                                                   orig_predicates=orig_cnf, rv_attr=rv_attr, operation=op,
+                                                   rv_val=rv_val, cast_type=cast_type)
                 queries.append((query, ''))
             else:
                 for idx, rel in enumerate(join_rel):
                     rv_attr, op, rv_val = self.relax_binary_predicate(predicates[k], idx)
+
+                    cast_type = 'NUMERIC'
+                    if rv_attr in self.ds.categorical_attrs:
+                        cast_type = 'TEXT'
                     # count # of queries
-                    query = binary_template.substitute(init_table=self.init_table_name,
-                                                       pos_values=AuxTables.pos_values.name,
-                                                       join_rel=rel,
-                                                       orig_predicates=orig_cnf,
-                                                       rv_attr=rv_attr,
-                                                       operation=op,
-                                                       rv_val=rv_val)
+                    query = \
+                        binary_template.substitute(init_table=self.table_name,
+                                                   pos_values=AuxTables.pos_values.name, join_rel=rel,
+                                                   orig_predicates=orig_cnf, rv_attr=rv_attr, operation=op,
+                                                   rv_val=rv_val, cast_type=cast_type)
                     # fallback 0-1 query instead of count
-                    ex_query = ex_binary_template.substitute(init_table=self.init_table_name,
-                                                             pos_values=AuxTables.pos_values.name,
-                                                             join_rel=rel,
-                                                             orig_predicates=orig_cnf,
-                                                             rv_attr=rv_attr,
-                                                             operation=op,
-                                                             rv_val=rv_val,
-                                                             other_rel=other_rel[idx])
+                    ex_query = \
+                        ex_binary_template.substitute(init_table=self.table_name,
+                                                      pos_values=AuxTables.pos_values.name, join_rel=rel,
+                                                      orig_predicates=orig_cnf, rv_attr=rv_attr, operation=op,
+                                                      rv_val=rv_val, other_rel=other_rel[idx], cast_type=cast_type)
                     queries.append((query, ex_query))
         return queries
 

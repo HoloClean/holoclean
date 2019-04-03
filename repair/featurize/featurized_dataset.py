@@ -73,9 +73,9 @@ class FeaturizedDataset:
         FROM {cell_domain} AS t1 LEFT JOIN {dk_cells} AS t2 ON t1._cid_ = t2._cid_
         WHERE weak_label != '{null_repr}' AND (t2._cid_ is NULL OR t1.fixed != {cell_status});
         """.format(cell_domain=AuxTables.cell_domain.name,
-                dk_cells=AuxTables.dk_cells.name,
-                null_repr=NULL_REPR,
-                cell_status=CellStatus.NOT_SET.value)
+                   dk_cells=AuxTables.dk_cells.name,
+                   null_repr=NULL_REPR,
+                   cell_status=CellStatus.NOT_SET.value)
         res = self.ds.engine.execute_query(query)
         if len(res) == 0:
             raise Exception("No weak labels available. Reduce pruning threshold.")

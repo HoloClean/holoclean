@@ -46,6 +46,7 @@ class DomainEngine:
         'cell_domain', 'pos_values').
         """
         tic = time.time()
+        self.do_quantization = False
         self.compute_correlations()
         self.setup_attributes()
         self.domain_df = self.generate_domain()
@@ -62,9 +63,11 @@ class DomainEngine:
         discrete categories).
         """
         logging.debug("Computing correlations...")
-        self.correlations = compute_norm_cond_entropy_corr(self.ds.get_raw_data(),
-                                                                self.ds.get_attributes(),
-                                                                self.ds.get_attributes())
+        data_df = self.ds.get_quantized_data() if self.do_quantization \
+            else self.ds.get_raw_data()
+        self.correlations = compute_norm_cond_entropy_corr(data_df,
+                                                           self.ds.get_attributes(),
+                                                           self.ds.get_attributes())
 
     def store_domains(self, domain):
         """
@@ -171,17 +174,16 @@ class DomainEngine:
                 "Call <setup_attributes> to setup active attributes. Error detection should be performed before setup.")
 
         logging.debug('generating initial set of un-pruned domain values...')
-        records = self.ds.get_raw_data().to_records()
-        self.all_attrs = list(records.dtype.names)
-        vid = 0
-        domain_df = None
-
         tic = time.clock()
         # Iterate over dataset rows.
         cells = []
         vid = 0
-        records = self.ds.get_raw_data().to_records()
+        raw_df = self.ds.get_quantized_data() if self.do_quantization else self.ds.get_raw_data()
+        records = raw_df.to_records()
         self.all_attrs = list(records.dtype.names)
+
+        # TODO(stoke): generate the label indicating whether it is clean
+        # dk_dict = self.ds.aux_table[AuxTables.dk_cells].df[['_tid_', 'attribute']].to_dict()
 
         for row in tqdm(list(records)):
             tid = row['_tid_']
@@ -227,17 +229,20 @@ class DomainEngine:
                     # not be modified by the estimator.
                     cell_status = CellStatus.SINGLE_VALUE.value
 
+                dom_vals = "|||".join(dom)
                 cells.append({"_tid_": tid,
                               "attribute": attr,
                               "_cid_": cid,
                               "_vid_": vid,
-                              "domain": "|||".join(dom),
+                              "domain": dom_vals,
                               "domain_size": len(dom),
                               "init_value": init_value,
                               "init_index": init_value_idx,
                               "weak_label": init_value,
                               "weak_label_idx": init_value_idx,
-                              "fixed": cell_status})
+                              "fixed": cell_status,
+                              # TODO: "is_dk": (tid, attr) in dk_dict,
+                              })
                 vid += 1
         domain_df = pd.DataFrame(data=cells).sort_values('_vid_')
         logging.debug('domain size stats: %s', domain_df['domain_size'].describe())
@@ -444,6 +449,8 @@ class DomainEngine:
             if row['fixed'] == CellStatus.SINGLE_VALUE.value:
                 updated_domain_df.append(row)
                 continue
+            # TODO(stoke): for clean cells, weak labels should always be their init values.
+            #   Do not re-label clean cells.
 
             # prune domain if any of the values are above our domain_thresh_2
             preds = [[val, proba] for val, proba in preds if proba >= self.domain_thresh_2] or preds
@@ -452,8 +459,9 @@ class DomainEngine:
             domain_values = [val for val, proba in sorted(preds, key=lambda pred: pred[1], reverse=True)[:self.max_domain]]
 
             # ensure the initial value is included even if its probability is low.
-            if row['init_value'] not in domain_values and row['init_value'] != NULL_REPR:
-                domain_values.append(row['init_value'])
+            init_val = row['init_value']
+            if init_val not in domain_values and init_val != NULL_REPR:
+                domain_values.append(init_val)
             domain_values = sorted(domain_values)
             # update our memoized domain values for this row again
             row['domain'] = '|||'.join(domain_values)

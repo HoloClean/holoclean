@@ -1,6 +1,3 @@
-import logging
-
-import pandas as pd
 import torch
 from tqdm import tqdm
 
@@ -31,7 +28,8 @@ class OccurAttrFeaturizer(Featurizer):
         self.setup_stats()
 
     def setup_stats(self):
-        self.raw_data_dict = self.ds.raw_data.df.set_index('_tid_').to_dict('index')
+        raw_df = self.ds.get_quantized_data() if self.ds.do_quantization else self.ds.get_raw_data()
+        self.raw_data_dict = raw_df.set_index('_tid_').to_dict('index')
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = float(total)
         self.single_stats = single_stats
@@ -61,6 +59,7 @@ class OccurAttrFeaturizer(Featurizer):
         rv_attr = row['attribute']
         domain = row['domain'].split('|||')
         rv_domain_idx = {val: idx for idx, val in enumerate(domain)}
+
         # We should not have any NULLs in our domain.
         assert NULL_REPR not in rv_domain_idx
         rv_attr_idx = self.active_attr_to_idx[rv_attr]

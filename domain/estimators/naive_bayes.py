@@ -25,7 +25,8 @@ class NaiveBayes(Estimator):
 
         # TID to raw data tuple for prediction.
         self._raw_records_by_tid = {}
-        for row in self.ds.get_raw_data().to_records():
+        raw_df = self.ds.get_quantized_data() if self.ds.do_quantization else self.ds.get_raw_data()
+        for row in raw_df.to_records():
             self._raw_records_by_tid[row['_tid_']] = row
 
     def train(self, num_epochs=None, batch_size=None):
