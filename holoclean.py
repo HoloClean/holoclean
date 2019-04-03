@@ -5,12 +5,14 @@ import random
 import torch
 import numpy as np
 
-from dataset import Dataset
+from dataset import Dataset, Table, Source
 from dcparser import Parser
 from domain import DomainEngine
 from detect import DetectEngine
 from repair import RepairEngine
 from evaluate import EvalEngine
+from dataset.quantization import quantize_km
+from utils import NULL_REPR
 
 logging.basicConfig(format="%(asctime)s - [%(levelname)5s] - %(message)s", datefmt='%H:%M:%S')
 root_logger = logging.getLogger()
@@ -291,7 +293,8 @@ class Session:
         self.repair_engine = RepairEngine(env, self.ds)
         self.eval_engine = EvalEngine(env, self.ds)
 
-    def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None):
+    def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None,
+                  exclude_attr_cols=None, numerical_attrs=None):
         """
         load_data takes the filepath to a CSV file to load as the initial dataset.
 
@@ -305,12 +308,16 @@ class Session:
         :param src_col: (str) if not None, for fusion tasks
             specifies the column containing the source for each "mention" of an
             entity.
+        :param exclude_attr_cols: (str list)
+        :param numerical_attrs: (str list)
         """
         status, load_time = self.ds.load_data(name,
                                               fpath,
                                               na_values=na_values,
                                               entity_col=entity_col,
-                                              src_col=src_col)
+                                              src_col=src_col,
+                                              exclude_attr_cols=exclude_attr_cols,
+                                              numerical_attrs=numerical_attrs)
         logging.info(status)
         logging.debug('Time to load dataset: %.2f secs', load_time)
 
@@ -331,6 +338,28 @@ class Session:
         status, detect_time = self.detect_engine.detect_errors(detect_list)
         logging.info(status)
         logging.debug('Time to detect errors: %.2f secs', detect_time)
+
+    def setup_quantization_dict(self, do_quantization, bin_number_dict):
+        self.do_quantization = do_quantization
+        self.ds.do_quantization = self.do_quantization
+        self.domain_engine.do_quantization = self.do_quantization
+
+        status, quantize_time, quantized_data = \
+            quantize_km(self.ds.get_raw_data(), bin_number_dict, self.ds.numerical_attrs)
+
+        name = self.ds.raw_data.name + '_quantized'
+        self.ds.quantized_data = Table(name, Source.DF, df=quantized_data)
+
+        # Do similar thing to store the correct type into db
+        df_correct_type = quantized_data.copy()
+        for attr in self.ds.numerical_attrs:
+            df_correct_type.loc[df_correct_type[attr] == NULL_REPR, attr] = np.nan
+            df_correct_type[attr] = df_correct_type[attr].astype(float)
+        df_correct_type.to_sql(name, self.ds.engine.engine, if_exists='replace', index=False,
+                               index_label=None)
+
+        logging.info(status)
+        logging.debug('Time to quantize the dataset: %.2f secs' % quantize_time)
 
     def generate_domain(self):
         status, domain_time = self.domain_engine.setup()

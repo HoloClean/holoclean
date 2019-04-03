@@ -533,6 +533,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
     WEIGHT_DECAY = 0.
     INIT_BIAS = 0.
 
+    # TODO: replace numerical_attrs references with self.ds.numerical_attrs
     def __init__(self, env, dataset, domain_df,
             numerical_attrs=None,
             memoize=False,
