@@ -1,14 +1,16 @@
+import collections
+from functools import lru_cache
 import logging
 import pandas as pd
 import time
 
 import itertools
 import numpy as np
-from pyitlib import discrete_random_variable as drv
 from tqdm import tqdm
 
 from dataset import AuxTables, CellStatus
-from .estimators import NaiveBayes
+from .estimators import *
+from .correlations import compute_norm_cond_entropy_corr
 from utils import NULL_REPR
 
 
@@ -25,17 +27,19 @@ class DomainEngine:
         self.weak_label_thresh = env["weak_label_thresh"]
         self.domain_thresh_2 = env["domain_thresh_2"]
         self.max_domain = env["max_domain"]
+        self.cor_strength = env["cor_strength"]
+        self.estimator_type = env["estimator_type"]
+
         self.setup_complete = False
-        self.active_attributes = None
         self.domain = None
         self.total = None
         self.correlations = None
         self._corr_attrs = {}
-        self.cor_strength = env["cor_strength"]
         self.max_sample = max_sample
         self.single_stats = {}
         self.pair_stats = {}
         self.all_attrs = {}
+        self.domain_df = None
 
     def setup(self):
         """
@@ -51,60 +55,17 @@ class DomainEngine:
         toc = time.time()
         return status, toc - tic
 
+    # TODO(richardwu): move this to Dataset after loading data.
     def compute_correlations(self):
         """
         compute_correlations memoizes to self.correlations; a data structure
         that contains pairwise correlations between attributes (values are treated as
         discrete categories).
         """
-        self.correlations = self._compute_norm_cond_entropy_corr()
-
-    def _compute_norm_cond_entropy_corr(self):
-        """
-        Computes the correlations between attributes by calculating
-        the normalized conditional entropy between them. The conditional
-        entropy is asymmetric, therefore we need pairwise computation.
-
-        The computed correlations are stored in a dictionary in the format:
-        {
-          attr_a: { cond_attr_i: corr_strength_a_i,
-                    cond_attr_j: corr_strength_a_j, ... },
-          attr_b: { cond_attr_i: corr_strength_b_i, ...}
-        }
-
-        :return a dictionary of correlations
-        """
-        data_df = self.ds.get_raw_data()
-        attrs = self.ds.get_attributes()
-
-        corr = {}
-        # Compute pair-wise conditional entropy.
-        for x in attrs:
-            corr[x] = {}
-            x_vals = data_df[x]
-            x_domain_size = x_vals.nunique()
-            for y in attrs:
-                # Set correlation to 0.0 if entropy of x is 1 (only one possible value).
-                if x_domain_size == 1:
-                    corr[x][y] = 0.0
-                    continue
-
-                # Set correlation to 1 for same attributes.
-                if x == y:
-                    corr[x][y] = 1.0
-                    continue
-
-                # Compute the conditional entropy H(x|y) = H(x,y) - H(y).
-                # H(x,y) denotes H(x U y).
-                # If H(x|y) = 0, then y determines x, i.e., y -> x.
-                # Use the domain size of x as a log base for normalization.
-                y_vals = data_df[y]
-                x_y_entropy = drv.entropy_conditional(x_vals, y_vals, base=x_domain_size)
-
-                # The conditional entropy is 0 for strongly correlated attributes and 1 for
-                # completely independent attributes. We reverse this to reflect the correlation.
-                corr[x][y] = 1.0 - x_y_entropy
-        return corr
+        logging.debug("Computing correlations...")
+        self.correlations = compute_norm_cond_entropy_corr(self.ds.get_raw_data(),
+                                                                self.ds.get_attributes(),
+                                                                self.ds.get_attributes())
 
     def store_domains(self, domain):
         """
@@ -116,20 +77,17 @@ class DomainEngine:
             _tid_: entity/tuple ID
             _cid_: cell ID
             _vid_: random variable ID (all cells with more than 1 domain value)
-            _
-
         """
         if domain.empty:
             raise Exception("ERROR: Generated domain is empty.")
-        else:
-            self.ds.generate_aux_table(AuxTables.cell_domain, domain, store=True, index_attrs=['_vid_'])
-            self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_tid_'])
-            self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_cid_'])
-            query = "SELECT _vid_, _cid_, _tid_, attribute, a.rv_val, a.val_id from %s , unnest(string_to_array(regexp_replace(domain,\'[{\"\"}]\',\'\',\'gi\'),\'|||\')) WITH ORDINALITY a(rv_val,val_id)" % AuxTables.cell_domain.name
-            self.ds.generate_aux_table_sql(AuxTables.pos_values, query, index_attrs=['_tid_', 'attribute'])
+        self.ds.generate_aux_table(AuxTables.cell_domain, domain, store=True)
+        self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_vid_'])
+        self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_tid_'])
+        self.ds.aux_table[AuxTables.cell_domain].create_db_index(self.ds.engine, ['_cid_'])
+        query = "SELECT _vid_, _cid_, _tid_, attribute, a.rv_val, a.val_id from %s , unnest(string_to_array(regexp_replace(domain,\'[{\"\"}]\',\'\',\'gi\'),\'|||\')) WITH ORDINALITY a(rv_val,val_id)" % AuxTables.cell_domain.name
+        self.ds.generate_aux_table_sql(AuxTables.pos_values, query, index_attrs=['_tid_', 'attribute'])
 
     def setup_attributes(self):
-        self.active_attributes = self.get_active_attributes()
         total, single_stats, pair_stats = self.ds.get_statistics()
         self.total = total
         self.single_stats = single_stats
@@ -164,23 +122,11 @@ class DomainEngine:
                     # based on the co-occurrence probability threshold
                     # domain_thresh_1.
                     tau = float(self.domain_thresh_1*denominator)
-                    top_cands = [val2 for (val2, count) in pair_stats[attr1][attr2][val1].items() if count > tau]
+                    top_cands = [(val2, count/denominator) for (val2, count) in pair_stats[attr1][attr2][val1].items() if count > tau]
                     out[attr1][attr2][val1] = top_cands
         return out
 
-    def get_active_attributes(self):
-        """
-        get_active_attributes returns the attributes to be modeled.
-        These attributes correspond only to attributes that contain at least
-        one potentially erroneous cell.
-        """
-        query = 'SELECT DISTINCT attribute as attribute FROM {}'.format(AuxTables.dk_cells.name)
-        result = self.ds.engine.execute_query(query)
-        if not result:
-            raise Exception("No attribute contains erroneous cells.")
-        # Sort the active attributes to maintain the order of the ids of random variable.
-        return sorted(itertools.chain(*result))
-
+    @lru_cache(maxsize=None)
     def get_corr_attributes(self, attr, thres):
         """
         get_corr_attributes returns attributes from self.correlations
@@ -190,17 +136,12 @@ class DomainEngine:
         :param attr: (string) the original attribute to get the correlated attributes for.
         :param thres: (float) correlation threshold (absolute) for returned attributes.
         """
-        # Not memoized: find correlated attributes from correlation dictionary.
-        if (attr, thres) not in self._corr_attrs:
-            self._corr_attrs[(attr, thres)] = []
-
-            if attr in self.correlations:
-                attr_correlations = self.correlations[attr]
-                self._corr_attrs[(attr, thres)] = sorted([corr_attr
-                                                   for corr_attr, corr_strength in attr_correlations.items()
-                                                   if corr_attr != attr and corr_strength > thres])
-
-        return self._corr_attrs[(attr, thres)]
+        if attr not in self.correlations:
+            return []
+        attr_correlations = self.correlations[attr]
+        return sorted([corr_attr
+            for corr_attr, corr_strength in attr_correlations.items()
+            if corr_attr != attr and corr_strength > thres])
 
     def generate_domain(self):
         """
@@ -222,7 +163,7 @@ class DomainEngine:
             domain: ||| separated string of domain values
             domain_size: length of domain
             init_value: initial value for this cell
-            init_value_idx: domain index of init_value
+            init_index: domain index of init_value
             fixed: 1 if a random sample was taken since no correlated attributes/top K values
         """
 
@@ -231,16 +172,23 @@ class DomainEngine:
                 "Call <setup_attributes> to setup active attributes. Error detection should be performed before setup.")
 
         logging.debug('generating initial set of un-pruned domain values...')
+        records = self.ds.get_raw_data().to_records()
+        self.all_attrs = list(records.dtype.names)
+        vid = 0
+        domain_df = None
+
         tic = time.clock()
         # Iterate over dataset rows.
         cells = []
         vid = 0
         records = self.ds.get_raw_data().to_records()
         self.all_attrs = list(records.dtype.names)
+
         for row in tqdm(list(records)):
             tid = row['_tid_']
-            for attr in self.active_attributes:
+            for attr in self.ds.get_active_attributes():
                 init_value, init_value_idx, dom = self.get_domain_cell(attr, row)
+
                 # We will use an estimator model for additional weak labelling
                 # below, which requires an initial pruned domain first.
                 # Weak labels will be trained on the init values.
