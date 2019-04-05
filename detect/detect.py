@@ -33,11 +33,14 @@ class DetectEngine:
 
         # Get unique errors only that might have been detected from multiple detectors.
         errors_df = pd.concat(errors, ignore_index=True).drop_duplicates().reset_index(drop=True)
-        errors_df['_cid_'] = errors_df.apply(lambda x: self.ds.get_cell_id(x['_tid_'], x['attribute']), axis=1)
+        if errors_df.shape[0]:
+            errors_df['_cid_'] = errors_df.apply(lambda x: self.ds.get_cell_id(x['_tid_'], x['attribute']), axis=1)
         logging.info("detected %d potentially erroneous cells", errors_df.shape[0])
 
         # Store errors to db.
         self.store_detected_errors(errors_df)
+        # Store the active attributes to Dataset.
+        self.store_active_attributes(errors_df)
         status = "DONE with error detection."
         toc_total = time.clock()
         detect_time = toc_total - tic_total
@@ -49,3 +52,7 @@ class DetectEngine:
         self.ds.generate_aux_table(AuxTables.dk_cells, errors_df, store=True)
         self.ds.aux_table[AuxTables.dk_cells].create_db_index(self.ds.engine, ['_cid_'])
 
+    def store_active_attributes(self, errors_df):
+        if errors_df.empty:
+            raise Exception("ERROR: Detected errors dataframe is empty.")
+        self.ds._active_attributes = sorted(errors_df['attribute'].unique())

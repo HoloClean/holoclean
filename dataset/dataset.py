@@ -58,6 +58,10 @@ class Dataset:
         self.single_attr_stats = {}
         # Domain stats for attribute pairs
         self.pair_attr_stats = {}
+        # Active attributes (attributes with errors)
+        self._active_attributes = None
+        # Attributes to train on
+        self.train_attrs = env["train_attrs"]
 
     # TODO(richardwu): load more than just CSV files
     def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None):
@@ -186,6 +190,20 @@ class Dataset:
         if self.raw_data is None:
             raise Exception('ERROR No dataset loaded')
         return self.raw_data.get_attributes()
+
+    def get_active_attributes(self):
+        """
+        get_active_attributes returns the attributes to be modeled.
+        These attributes correspond only to attributes that contain at least
+        one potentially erroneous cell, and if applicable, in the provided :param:`train_attrs` variable.
+        """
+        if self._active_attributes is None:
+            raise Exception('ERROR no active attributes loaded. Run error detection first.')
+
+        if self.train_attrs is None:
+            self.train_attrs = self.get_attributes()
+
+        return sorted([attr for attr in self._active_attributes if attr in self.train_attrs])
 
     def get_cell_id(self, tuple_id, attr_name):
         """

@@ -48,7 +48,9 @@ class ViolationDetector(Detector):
             attr_list = attrs[i]
             tmp_df = self.gen_tid_attr_output(res, attr_list)
             errors.append(tmp_df)
-        errors_df = pd.concat(errors, ignore_index=True).drop_duplicates().reset_index(drop=True)
+        errors_df = pd.concat(errors, ignore_index=True)
+        if errors_df.shape[0]:
+            errors_df = errors_df.drop_duplicates().reset_index(drop=True)
         return errors_df
 
     def to_sql(self, tbl, c):
