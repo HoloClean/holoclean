@@ -39,7 +39,6 @@ class DomainEngine:
         self.single_stats = {}
         self.pair_stats = {}
         self.all_attrs = {}
-        self.domain_df = None
 
     def setup(self):
         """
@@ -49,7 +48,7 @@ class DomainEngine:
         tic = time.time()
         self.compute_correlations()
         self.setup_attributes()
-        self.generate_domain()
+        self.domain_df = self.generate_domain()
         self.store_domains(self.domain_df)
         status = "DONE with domain preparation."
         toc = time.time()
@@ -248,7 +247,6 @@ class DomainEngine:
         logging.debug('domain size stats: %s', domain_df['domain_size'].describe())
         logging.debug('DONE generating initial set of domain values in %.2f', time.clock() - tic)
 
-        self.domain_df = domain_df
         return domain_df
 
     def get_domain_cell(self, attr, row):

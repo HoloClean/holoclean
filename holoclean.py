@@ -138,7 +138,7 @@ arguments = [
     (('-fn', '--feature-norm'),
      {'metavar': 'FEATURE_NORM',
       'dest': 'feature_norm',
-      'default': True,
+      'default': False,
       'type': bool,
       'help': 'Normalize the features before training.'}),
     (('-wn', '--weight_norm'),
@@ -147,10 +147,16 @@ arguments = [
       'default': False,
       'type': bool,
       'help': 'Normalize the weights after every forward pass during training.'}),
+    (('-et', '--estimator_type'),
+     {'metavar': 'ESTIMATOR_TYPE',
+      'dest': 'estimator_type',
+      'default': 'NaiveBayes',
+      'type': str,
+      'help': 'Which weak labelling and domain generation estimator to use. One of {NaiveBayes, Logistic, TupleEmbedding}.'}),
     (('-ee', '--estimator_epochs'),
      {'metavar': 'ESTIMATOR_EPOCHS',
       'dest': 'estimator_epochs',
-      'default': 3,
+      'default': 10,
       'type': int,
       'help': 'Number of epochs to run the weak labelling and domain generation estimator.'}),
     (('-ebs', '--estimator_batch_size'),
@@ -159,6 +165,12 @@ arguments = [
       'default': 32,
       'type': int,
       'help': 'Size of batch used in SGD in the weak labelling and domain generation estimator.'}),
+    (('-ta', '--train_attrs'),
+     {'metavar': 'TRAIN_ATTRS',
+      'dest': 'train_attrs',
+      'default': None,
+      'type': list,
+      'help': 'List of attributes to train and infer on. If None, train and infer on all columns. For example passing a list of one column allows one to train HoloClean on one column.'}),
 ]
 
 # Flags for Holoclean mode
@@ -267,7 +279,6 @@ class Session:
         self.repair_engine = RepairEngine(env, self.ds)
         self.eval_engine = EvalEngine(env, self.ds)
 
-
     def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None):
         """
         load_data takes the filepath to a CSV file to load as the initial dataset.
@@ -309,10 +320,16 @@ class Session:
         logging.info(status)
         logging.debug('Time to detect errors: %.2f secs', detect_time)
 
-    def setup_domain(self):
+    def generate_domain(self):
         status, domain_time = self.domain_engine.setup()
         logging.info(status)
-        logging.debug('Time to setup the domain: %.2f secs', domain_time)
+        logging.debug('Time to generate the domain: %.2f secs', domain_time)
+
+    def run_estimator(self):
+        """
+        Uses estimator to weak label and prune domain.
+        """
+        self.domain_engine.run_estimator()
 
     def repair_errors(self, featurizers):
         status, feat_time = self.repair_engine.setup_featurized_ds(featurizers)
