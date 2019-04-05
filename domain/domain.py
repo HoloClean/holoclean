@@ -49,8 +49,8 @@ class DomainEngine:
         tic = time.time()
         self.compute_correlations()
         self.setup_attributes()
-        domain = self.generate_domain()
-        self.store_domains(domain)
+        self.generate_domain()
+        self.store_domains(self.domain_df)
         status = "DONE with domain preparation."
         toc = time.time()
         return status, toc - tic
@@ -245,22 +245,192 @@ class DomainEngine:
                               "fixed": cell_status})
                 vid += 1
         domain_df = pd.DataFrame(data=cells).sort_values('_vid_')
+        logging.debug('domain size stats: %s', domain_df['domain_size'].describe())
         logging.debug('DONE generating initial set of domain values in %.2f', time.clock() - tic)
 
+        self.domain_df = domain_df
+        return domain_df
+
+    def get_domain_cell(self, attr, row):
+        """
+        get_domain_cell returns a list of all domain values for the given
+        entity (row) and attribute. the domain never has null as a possible value.
+
+        we define domain values as values in 'attr' that co-occur with values
+        in attributes ('cond_attr') that are correlated with 'attr' at least in
+        magnitude of self.cor_strength (init parameter).
+
+        for example:
+
+                cond_attr       |   attr
+                h                   b                   <-- current row
+                h                   c
+                i                   d
+                h                   e
+
+        this would produce [b,c,e] as domain values.
+
+        :return: (initial value of entity-attribute, domain values for entity-attribute).
+        """
+
+        domain = collections.OrderedDict()
+        init_value = row[attr]
+        correlated_attributes = self.get_corr_attributes(attr, self.cor_strength)
+        # iterate through all correlated attributes and take the top k co-occurrence values
+        # for 'attr' with the current row's 'cond_attr' value.
+        for cond_attr in correlated_attributes:
+            # ignore correlations with index, tuple id or the same attribute.
+            if cond_attr == attr or cond_attr == '_tid_':
+                continue
+            if not self.pair_stats[cond_attr][attr]:
+                logging.warning("domain generation could not find pair_statistics between attributes: {}, {}".format(cond_attr, attr))
+                continue
+            cond_val = row[cond_attr]
+            # ignore co-occurrence with a null cond init value since we do not
+            # store them.
+            # also it does not make sense to retrieve the top co-occuring
+            # values with a null value.
+            # it is possible for cond_val to not be in pair stats if it only co-occurs
+            # with null values.
+            if cond_val == NULL_REPR or cond_val not in self.pair_stats[cond_attr][attr]:
+                continue
+
+            # update domain with top co-occuring values with the cond init value.
+            candidates = self.pair_stats[cond_attr][attr][cond_val]
+            for val, freq in candidates:
+                if val in domain and domain[val] > freq:
+                    continue
+                domain[val] = freq
+
+        # We should not have any NULLs since we do not store co-occurring NULL
+        # values.
+        assert NULL_REPR not in domain
+
+        # Add the initial value to the domain if it is not NULL.
+        if init_value != NULL_REPR:
+            domain[init_value] = 1
+
+        domain = [val for (val, freq) in reversed(sorted(domain.items(), key=lambda t: t[1]))][:self.max_domain]
+
+        # Convert to ordered list to preserve order.
+        domain_lst = sorted(list(domain))
+
+        # Get the index of the initial value.
+        # NULL values are not in the domain so we set their index to -1.
+        init_value_idx = -1
+        if init_value != NULL_REPR:
+            init_value_idx = domain_lst.index(init_value)
+
+        return init_value, init_value_idx, domain_lst
+
+    def get_random_domain(self, attr, cur_value):
+        """
+        get_random_domain returns a random sample of at most size
+        'self.max_sample' of domain values for 'attr' that is NOT 'cur_value'.
+        """
+        domain_pool = set(self.single_stats[attr].keys())
+        # We should not have any NULLs since we do not keep track of their
+        # counts.
+        assert NULL_REPR not in domain_pool
+        domain_pool.discard(cur_value)
+        domain_pool = sorted(list(domain_pool))
+        size = len(domain_pool)
+        if size > 0:
+            k = min(self.max_sample, size)
+            additional_values = np.random.choice(domain_pool, size=k, replace=False)
+        else:
+            additional_values = []
+        return sorted(additional_values)
+
+    def generate_domain_embedding(self, domain_attrs):
+        """
+        Simple version of generate_domain (for TupleEmbedding) (no random
+        sampling).
+
+        Generates domains for the attributes in domain_attrs.
+
+        :return: DataFrame with columns
+            _tid_: entity/tuple ID
+            attribute: attribute name
+            _cid_: cell ID (one for every cell in the raw data in active attributes)
+            _vid_: random variable ID (one for every cell with a domain of at least size 2)
+            domain: ||| separated string of domain values
+            domain_size: length of domain
+            init_value: initial value for this cell
+            init_index: domain index of init_value
+        """
+        self.compute_correlations()
+        self.setup_attributes()
+
+        logging.debug('generating initial set of un-pruned domain values...')
+        records = self.ds.get_raw_data().to_records()
+        self.all_attrs = list(records.dtype.names)
+        vid = 0
+        domain_df = None
+
+        cells = []
+        for row in tqdm(list(records)):
+            tid = row['_tid_']
+            for attr in domain_attrs:
+                init_value, init_value_idx, dom = self.get_domain_cell(attr, row)
+                cid = self.ds.get_cell_id(tid, attr)
+                cells.append({"_tid_": tid,
+                              "attribute": attr,
+                              "_cid_": cid,
+                              "_vid_": vid,
+                              "domain": "|||".join(dom),
+                              "domain_size": len(dom),
+                              "init_value": init_value,
+                              "init_index": init_value_idx,
+                              })
+                vid += 1
+
+        if domain_df is not None:
+            domain_df = pd.concat([domain_df, pd.DataFrame(data=cells)]).reset_index(drop=True)
+        else:
+            domain_df = pd.DataFrame(data=cells)
+
+        domain_df = domain_df.sort_values('_vid_')
+        return domain_df
+
+    def run_estimator(self):
+        """
+        Runs weak labelling and domain pruning using estimator on domain
+        dataframe.
+        """
+        self.domain_df = self._run_estimator()
+        self.store_domains(self.domain_df)
+
+    def _run_estimator(self):
         # Skip estimator model since we do not require any weak labelling or domain
-        # pruning based on posterior probabilities.
-        if self.env['weak_label_thresh'] == 1 and self.env['domain_thresh_2'] == 0:
-            return domain_df
+        # pruning based on estimator's posterior probabilities.
+        if self.env['estimator_type'] is None \
+                or (self.env['weak_label_thresh'] == 1 \
+                and self.env['domain_thresh_2'] == 0):
+            return self.domain_df
+
+        domain_df = self.domain_df.sort_values('_vid_')
 
         # Run pruned domain values from correlated attributes above through
-        # posterior model for a naive probability estimation.
-        logging.debug('training posterior model for estimating domain value probabilities...')
+        # estimator model for a naive probability estimation.
+        logging.debug('training estimator for estimating domain value probabilities...')
         tic = time.clock()
-        estimator = NaiveBayes(self.env, self.ds, domain_df, self.correlations)
-        logging.debug('DONE training posterior model in %.2fs', time.clock() - tic)
+
+        logging.debug('using estimator: %s', self.env['estimator_type'])
+        estimator = None
+        if self.env['estimator_type'] == 'NaiveBayes':
+            estimator = NaiveBayes(self.env, self.ds, domain_df, self.correlations)
+        elif self.env['estimator_type'] == 'Logistic':
+            estimator = Logistic(self.env, self.ds, domain_df)
+        elif self.env['estimator_type'] == 'TupleEmbedding':
+            estimator = TupleEmbedding(self.env, self.ds, domain_df)
+        else:
+            raise Exception('estimator_type must be one of {NaiveBayes, Logistic, TupleEmbedding}')
+        estimator.train(self.env['estimator_epochs'], self.env['estimator_batch_size'])
+        logging.debug('DONE training estimator in %.2fs', time.clock() - tic)
 
         # Predict probabilities for all pruned domain values.
-        logging.debug('predicting domain value probabilities from posterior model...')
+        logging.debug('predicting domain value probabilities from estimator...')
         tic = time.clock()
         preds_by_cell = estimator.predict_pp_batch()
         logging.debug('DONE predictions in %.2f secs, re-constructing cell domain...', time.clock() - tic)
@@ -271,7 +441,9 @@ class DomainEngine:
         # weak labelling
         num_weak_labels = 0
         updated_domain_df = []
-        for preds, row in tqdm(zip(preds_by_cell, domain_df.to_records())):
+
+        # TODO(richardwu): we currently do not do anything with is_cat.
+        for (vid, is_cat, preds), row in tqdm(list(zip(preds_by_cell, domain_df.to_records()))):
             # Do not re-label single valued cells.
             if row['fixed'] == CellStatus.SINGLE_VALUE.value:
                 updated_domain_df.append(row)
@@ -312,96 +484,12 @@ class DomainEngine:
             updated_domain_df.append(row)
 
         # update our cell domain df with our new updated domain
-        domain_df = pd.DataFrame.from_records(updated_domain_df, columns=updated_domain_df[0].dtype.names).drop('index', axis=1).sort_values('_vid_')
+        domain_df = pd.DataFrame.from_records(updated_domain_df,
+                columns=updated_domain_df[0].dtype.names)\
+                        .drop('index', axis=1).sort_values('_vid_')
         logging.debug('DONE assembling cell domain table in %.2fs', time.clock() - tic)
 
-        logging.info('number of (additional) weak labels assigned from posterior model: %d', num_weak_labels)
+        logging.info('number of (additional) weak labels assigned from estimator: %d', num_weak_labels)
 
         logging.debug('DONE generating domain and weak labels')
         return domain_df
-
-    def get_domain_cell(self, attr, row):
-        """
-        get_domain_cell returns a list of all domain values for the given
-        entity (row) and attribute. The domain never has null as a possible value.
-
-        We define domain values as values in 'attr' that co-occur with values
-        in attributes ('cond_attr') that are correlated with 'attr' at least in
-        magnitude of self.cor_strength (init parameter).
-
-        For example:
-
-                cond_attr       |   attr
-                H                   B                   <-- current row
-                H                   C
-                I                   D
-                H                   E
-
-        This would produce [B,C,E] as domain values.
-
-        :return: (initial value of entity-attribute, domain values for entity-attribute).
-        """
-
-        domain = set()
-        init_value = row[attr]
-        correlated_attributes = self.get_corr_attributes(attr, self.cor_strength)
-        # Iterate through all correlated attributes and take the top K co-occurrence values
-        # for 'attr' with the current row's 'cond_attr' value.
-        for cond_attr in correlated_attributes:
-            # Ignore correlations with index, tuple id or the same attribute.
-            if cond_attr == attr or cond_attr == '_tid_':
-                continue
-            if not self.pair_stats[cond_attr][attr]:
-                logging.warning("domain generation could not find pair_statistics between attributes: {}, {}".format(cond_attr, attr))
-                continue
-            cond_val = row[cond_attr]
-            # Ignore co-occurrence with a NULL cond init value since we do not
-            # store them.
-            # Also it does not make sense to retrieve the top co-occuring
-            # values with a NULL value.
-            # It is possible for cond_val to not be in pair stats if it only co-occurs
-            # with NULL values.
-            if cond_val == NULL_REPR or cond_val not in self.pair_stats[cond_attr][attr]:
-                continue
-
-            # Update domain with top co-occuring values with the cond init value.
-            candidates = self.pair_stats[cond_attr][attr][cond_val]
-            domain.update(candidates)
-
-        # We should not have any NULLs since we do not store co-occurring NULL
-        # values.
-        assert NULL_REPR not in domain
-
-        # Add the initial value to the domain if it is not NULL.
-        if init_value != NULL_REPR:
-            domain.add(init_value)
-
-        # Convert to ordered list to preserve order.
-        domain_lst = sorted(list(domain))
-
-        # Get the index of the initial value.
-        # NULL values are not in the domain so we set their index to -1.
-        init_value_idx = -1
-        if init_value != NULL_REPR:
-            init_value_idx = domain_lst.index(init_value)
-
-        return init_value, init_value_idx, domain_lst
-
-    def get_random_domain(self, attr, cur_value):
-        """
-        get_random_domain returns a random sample of at most size
-        'self.max_sample' of domain values for 'attr' that is NOT 'cur_value'.
-        """
-        domain_pool = set(self.single_stats[attr].keys())
-        # We should not have any NULLs since we do not keep track of their
-        # counts.
-        assert NULL_REPR not in domain_pool
-        domain_pool.discard(cur_value)
-        domain_pool = sorted(list(domain_pool))
-        size = len(domain_pool)
-        if size > 0:
-            k = min(self.max_sample, size)
-            additional_values = np.random.choice(domain_pool, size=k, replace=False)
-        else:
-            additional_values = []
-        return sorted(additional_values)
