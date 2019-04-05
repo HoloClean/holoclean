@@ -33,8 +33,8 @@ def test_hospital_with_init():
         ).session
 
         # 2. Load training data and denial constraints.
-        hc.load_data('hospital', '../testdata/hospital.csv')
-        hc.load_dcs('../testdata/hospital_constraints.txt')
+        hc.load_data('hospital', '../testdata/hospital/hospital.csv')
+        hc.load_dcs('../testdata/hospital/hospital_constraints.txt')
         hc.ds.set_constraints(hc.get_dcs())
 
         # 3. Detect erroneous cells using these two detectors.
