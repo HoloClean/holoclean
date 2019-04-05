@@ -10,12 +10,20 @@ from utils import NULL_REPR, NA_COOCCUR_FV
 
 
 class OccurAttrFeaturizer(Featurizer):
+    """
+    Generates co-occurrence features for
+        RV ATTR | COND ATTR
+    where RV ATTR are all attributes that are "active" i.e. those that
+    we want to learn for (in domain) and COND ATTR are all attributes in the
+    dataset.
+    """
     def specific_setup(self):
         self.name = 'OccurAttrFeaturizer'
         if not self.setup_done:
             raise Exception('Featurizer {} is not properly setup.'.format(self.name))
+        self.active_attrs = self.ds.get_active_attributes()
+        self.active_attr_to_idx = {attr: idx for idx, attr in enumerate(self.active_attrs)}
         self.all_attrs = self.ds.get_attributes()
-        self.attrs_number = len(self.ds.attr_to_idx)
         self.raw_data_dict = {}
         self.total = None
         self.single_stats = None
@@ -46,13 +54,17 @@ class OccurAttrFeaturizer(Featurizer):
         return combined
 
     def gen_feat_tensor(self, row, tuple):
-        tensor = torch.zeros(1, self.classes, self.attrs_number * self.attrs_number)
+        # We only generate co-occurrence features for cells that are 'active' or
+        # in our domain. Each active attribute will have co-occurrences with
+        # all other attributes, hence the following product.
+        tensor = torch.zeros(1, self.classes, len(self.active_attrs) * len(self.all_attrs))
         rv_attr = row['attribute']
         domain = row['domain'].split('|||')
         rv_domain_idx = {val: idx for idx, val in enumerate(domain)}
         # We should not have any NULLs in our domain.
         assert NULL_REPR not in rv_domain_idx
-        rv_attr_idx = self.ds.attr_to_idx[rv_attr]
+        rv_attr_idx = self.active_attr_to_idx[rv_attr]
+        # Iterate through all /given/ or /conditional/ attributes
         for attr in self.all_attrs:
             val = tuple[attr]
 
@@ -70,9 +82,9 @@ class OccurAttrFeaturizer(Featurizer):
                 count2 = float(all_vals.get(rv_val, 0.0))
                 prob = count2 / count1
                 if rv_val in rv_domain_idx:
-                    index = rv_attr_idx * self.attrs_number + attr_idx
+                    index = rv_attr_idx * len(self.active_attrs) + attr_idx
                     tensor[0][rv_domain_idx[rv_val]][index] = prob
         return tensor
 
     def feature_names(self):
-        return ["{} X {}".format(attr1, attr2) for attr1 in self.all_attrs for attr2 in self.all_attrs]
+        return ["{} | {}".format(attr1, attr2) for attr1 in self.active_attrs for attr2 in self.all_attrs]
