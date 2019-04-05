@@ -8,7 +8,9 @@ _static
 _templates
 .DS_store
 .venv
+*.swo
 *.swp
+*.swn
 *.pyc
 .cache/
 
