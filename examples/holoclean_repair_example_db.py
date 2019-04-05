@@ -38,7 +38,7 @@ error_loader = ErrorsLoaderDetector(
 hc.detect_errors([error_loader])
 
 # 4. Repair errors utilizing the defined features.
-hc.setup_domain()
+hc.generate_domain()
 featurizers = [
     OccurAttrFeaturizer(),
     FreqFeaturizer(),

@@ -31,7 +31,8 @@ detectors = [NullDetector(), ViolationDetector()]
 hc.detect_errors(detectors)
 
 # 4. Repair errors utilizing the defined features.
-hc.setup_domain()
+hc.generate_domain()
+hc.run_estimator()
 featurizers = [
     OccurAttrFeaturizer(),
     FreqFeaturizer(),
