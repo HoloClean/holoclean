@@ -50,19 +50,19 @@ class EvalEngine:
     def load_data(self, name, fpath, tid_col, attr_col, val_col, na_values=None):
         tic = time.clock()
         try:
-            raw_data = pd.read_csv(fpath, na_values=na_values, encoding='utf-8')
+            raw_data = pd.read_csv(fpath, na_values=na_values, dtype=str, encoding='utf-8')
             # We drop any ground truth values that are NULLs since we follow
             # the closed-world assumption (if it's not there it's wrong).
             # TODO: revisit this once we allow users to specify which
             # attributes may be NULL.
             raw_data.dropna(subset=[val_col], inplace=True)
-            raw_data.fillna(NULL_REPR, inplace=True)
             raw_data.rename({tid_col: '_tid_',
                              attr_col: '_attribute_',
                              val_col: '_value_'},
                             axis='columns',
                             inplace=True)
             raw_data = raw_data[['_tid_', '_attribute_', '_value_']]
+            raw_data['_tid_'] = raw_data['_tid_'].astype(int)
             # Normalize string to whitespaces.
             raw_data['_value_'] = raw_data['_value_'].str.strip().str.lower()
             self.clean_data = Table(name, Source.DF, df=raw_data)
@@ -312,11 +312,10 @@ class EvalEngine:
                     "w. label = init", "w. label = grdth", "w. label = inferred",
                     "infer = grdth", "count"])
         df_stats = df_stats.sort_values(list(df_stats.columns)).reset_index(drop=True)
-        logging.debug("weak label statistics:")
         pd.set_option('display.max_columns', None)
         pd.set_option('display.max_rows', len(df_stats))
         pd.set_option('display.max_colwidth', -1)
-        logging.debug("%s", df_stats)
+        logging.debug("weak label statistics:\n%s", df_stats)
         pd.reset_option('display.max_columns')
         pd.reset_option('display.max_rows')
         pd.reset_option('display.max_colwidth')
