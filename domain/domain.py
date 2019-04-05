@@ -418,6 +418,8 @@ class DomainEngine:
             estimator = Logistic(self.env, self.ds, domain_df)
         elif self.env['estimator_type'] == 'TupleEmbedding':
             estimator = TupleEmbedding(self.env, self.ds, domain_df)
+            # Memoize embedding model for later use (e.g. in featurizers).
+            self.ds.load_embedding_model(estimator)
         else:
             raise Exception('estimator_type must be one of {NaiveBayes, Logistic, TupleEmbedding}')
         estimator.train(self.env['estimator_epochs'], self.env['estimator_batch_size'])

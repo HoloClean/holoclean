@@ -6,6 +6,7 @@ from .initattrfeat import InitAttrFeaturizer
 from .initsimfeat import InitSimFeaturizer
 from .langmodelfeat import LangModelFeaturizer
 from .occurattrfeat import OccurAttrFeaturizer
+from .embeddingfeat import EmbeddingFeaturizer
 
 __all__ = ['ConstraintFeaturizer',
            'FeaturizedDataset',
@@ -14,4 +15,6 @@ __all__ = ['ConstraintFeaturizer',
            'InitAttrFeaturizer',
            'InitSimFeaturizer',
            'LangModelFeaturizer',
-           'OccurAttrFeaturizer']
+           'OccurAttrFeaturizer',
+           'EmbeddingFeaturizer',
+           ]

@@ -5,18 +5,20 @@ from multiprocessing import Pool
 class Featurizer:
     __metaclass__ = ABCMeta
 
-    def __init__(self, learnable=True, init_weight=1.0):
+    def __init__(self, learnable=True, init_weight=1.0, **kwargs):
         self.name = None
         self.setup_done = False
         self.learnable = learnable
         self.init_weight = init_weight
+        self.addn_kwargs = kwargs
 
-    def setup_featurizer(self, dataset, processes=20, batch_size=32):
+    def setup_featurizer(self, env, dataset):
+        self.env = env
         self.ds = dataset
         self.total_vars, self.classes = self.ds.get_domain_info()
         # only create a pool if processes > 1
-        self._pool = Pool(processes) if processes > 1 else None
-        self._batch_size = batch_size
+        self._pool = Pool(env['threads']) if env['threads'] > 1 else None
+        self._batch_size = env['batch_size']
         self.setup_done = True
         self.specific_setup()
 
