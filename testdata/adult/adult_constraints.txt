@@ -1,0 +1,4 @@
+t1&t2&EQ(t1.education,t2.education)&IQ(t1.education_num,t2.education_num)
+t1&t2&EQ(t1.education_num,t2.education_num)&IQ(t1.education,t2.education)
+t1&EQ(t1.sex,"female")&EQ(t1.relationship,"husband")
+t1&EQ(t1.sex,"male")&EQ(t1.relationship,"wife")
