@@ -63,6 +63,10 @@ class Dataset:
         # Attributes to train on
         self.train_attrs = env["train_attrs"]
 
+        # Embedding model for learned embedding vectors of domain values and
+        # tuple context
+        self._embedding_model = None
+
     # TODO(richardwu): load more than just CSV files
     def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None):
         """
@@ -336,3 +340,19 @@ class Dataset:
         toc = time.clock()
         total_time = toc - tic
         return status, total_time
+
+    def load_embedding_model(self, model):
+        """
+        Memoize the TupleEmbedding model for retrieving learned embeddings
+        later (e.g. in EmbeddingFeaturizer).
+        """
+        self._embedding_model = model
+
+    def get_embedding_model(self):
+        """
+        Retrieve the memoized embedding model.
+        """
+        if self._embedding_model is None:
+            raise Exception("cannot retrieve embedding model: it was never trained and loaded!")
+        return self._embedding_model
+

@@ -207,7 +207,7 @@ class LookupDataset(Dataset):
         self._raw_data_dict = self._raw_data.set_index('_tid_').to_dict('index')
 
         self._vid_to_idx = {vid: idx for idx, vid in enumerate(domain_df['_vid_'].values)}
-        self._train_records = domain_df[['_tid_', 'attribute', 'init_value',
+        self._train_records = domain_df[['_vid_', '_tid_', 'attribute', 'init_value',
                                          'init_index', 'domain', 'domain_size', 'is_clean']].to_records()
 
         # Maximum domain size
@@ -375,8 +375,9 @@ class LookupDataset(Dataset):
 
         domain_idxs = self._get_domain_idxs(idx)
         dom_size = cur['domain_size']
-        # Add negative samples to a most likely correct (clean) cell
-        if self._neg_sample and dom_size < self._max_domain and cur['is_clean']:
+        # During training, add negative samples to a most likely correct (clean) cell
+        if not self.inference_mode and self._neg_sample \
+                and dom_size < self._max_domain and cur['is_clean']:
             # It is faster not to memoize these.
             neg_idxs = self._get_neg_dom_idxs(idx)
             neg_sample = torch.LongTensor(np.random.choice(neg_idxs,
@@ -399,16 +400,19 @@ class LookupDataset(Dataset):
         """
         :param:`vid` is the desired VID.
 
-        Returns (vid,
-            is_categorical,
-            attr_idx,
-            init_cat_idxs,
-            init_numvals,
-            init_nummask,
-            domain_idxs (if categorical),
-            domain_mask (if categorical),
-            target_numvals (if numerical),
-            cat_target (if categorical),
+        In parenthese is the size of the tensor. torch.DataLoader will stack these
+        into (batch size, *tensor size).
+
+        Returns (vid: (1),
+            is_categorical: (1),
+            attr_idx: (1),
+            init_cat_idxs: (n_init_cat_attrs),
+            init_numvals: (n_init_num_attrs, max num dim),
+            init_nummask: (n_init_num_attrs),
+            domain_idxs (if categorical): (max domain),
+            domain_mask (if categorical): (max domain),
+            target_numvals (if numerical): (max num dim),
+            cat_target (if categorical): (1),
             )
 
         where if VID is not categorical/numerical, then the corresponding
@@ -418,6 +422,7 @@ class LookupDataset(Dataset):
         """
         idx = self._vid_to_idx[vid]
         cur = self._train_records[idx]
+        assert cur['_vid_'] == vid
 
         is_categorical = torch.ByteTensor([int(cur['attribute'] in self._train_cat_attrs)])
         attr_idx  = torch.LongTensor([self._train_attr_idxs[cur['attribute']]])
@@ -502,7 +507,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
     def __init__(self, env, dataset, domain_df,
             numerical_attrs=None,
             memoize=False,
-            embed_size=10,
             neg_sample=True,
             validate_fpath=None, validate_tid_col=None, validate_attr_col=None,
             validate_val_col=None):
@@ -526,6 +530,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         torch.nn.Module.__init__(self)
         Estimator.__init__(self, env, dataset, domain_df)
 
+        self._embed_size = self.env['estimator_embedding_size']
         train_attrs = self.env['train_attrs']
 
         # Check is train attributes exist
@@ -584,11 +589,11 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         self._dataset = LookupDataset(env, dataset, self.domain_df,
                 numerical_attrs, neg_sample, memoize)
 
-        if len(self._dataset._num_attr_dim) and max(self._dataset._num_attr_dim.values()) > embed_size:
+        if len(self._dataset._num_attr_dim) and max(self._dataset._num_attr_dim.values()) > self._embed_size:
             logging.error("%s: maximum numeric value dimension %d must be <= embedding size %d",
                     type(self).__name__,
                     max(self._dataset._num_attr_dim.values()),
-                    embed_size)
+                    self._embed_size)
             sys.exit(1)
 
         self._train_cat_attrs = self._dataset._train_cat_attrs
@@ -610,7 +615,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         self._max_domain = self._dataset._max_domain
         self._max_num_dim = self._dataset._max_num_dim
-        self._embed_size = embed_size
 
         self.in_W = torch.nn.Parameter(torch.zeros(self._n_init_vals, self._embed_size))
         self.out_W = torch.nn.Parameter(torch.zeros(self._n_train_vals, self._embed_size))
@@ -631,6 +635,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         self.out_num_bases = torch.nn.Parameter(torch.zeros(self._n_train_num_attrs, self._embed_size, self._max_num_dim))
 
         # Mask for _num_forward to restrict which dimensions are active for each attribute.
+        # Hadamard/elementwise multiply this mask.
         self.out_num_masks = torch.zeros(self._n_train_num_attrs, self._max_num_dim, dtype=torch.float32)
         for idx, attr in enumerate(self._dataset._train_num_attrs):
             dim = self._dataset._num_attr_dim[attr]
@@ -706,7 +711,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         init_cat_idxs: (batch, n_init_cat_attrs)
         init_numvals: (batch, n_init_num_attrs, max_num_dim)
         init_nummasks: (batch, n_init_num_attrs)
-        attr_idxs: (batch)
+        attr_idxs: (batch, 1)
         """
         init_cat_vecs = torch.zeros(init_cat_idxs.shape[0], 0, self._embed_size)
         if self._n_init_cat_attrs:
@@ -734,7 +739,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         init_vecs = F.normalize(init_vecs, p=2, dim=2)
 
         # (batch, 1, n_init_attrs)
-        attr_logits = self.attr_W.index_select(0, attr_idxs).unsqueeze(1)
+        attr_logits = self.attr_W.index_select(0, attr_idxs.view(-1)).unsqueeze(1)
         # (batch, 1, n_init_attrs)
         attr_weights = Softmax(dim=2)(attr_logits)
 
@@ -751,7 +756,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         combined_init: (batch, embed size, 1)
         domain_idxs: (batch, max domain)
         domain_masks: (batch, max domain)
-        cat_targets: (batch)
+        cat_targets: (batch, 1)
 
         Returns logits: (batch, max domain)
         """
@@ -772,8 +777,8 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         # Init bias
         if self.INIT_BIAS != 0.:
-            logits.scatter_add_(1, cat_targets.unsqueeze(-1),
-                    self.INIT_BIAS * torch.ones_like(cat_targets.unsqueeze(-1), dtype=torch.float32))
+            logits.scatter_add_(1, cat_targets,
+                    self.INIT_BIAS * torch.ones_like(cat_targets, dtype=torch.float32))
 
         # Add mask to void out-of-domain indexes
         # (batch, max domain)
@@ -784,14 +789,14 @@ class TupleEmbedding(Estimator, torch.nn.Module):
     def _num_forward(self, combined_init, num_attr_idxs):
         """
         combined_init: (batch, embed size, 1)
-        num_attr_idxs: (batch)
+        num_attr_idxs: (batch, 1)
 
         Returns pred_numvals: (batch, max_num_dim)
         """
         # (batch, embed size, max num dim)
-        out_num_bases = self.out_num_bases.index_select(0, num_attr_idxs)
+        out_num_bases = self.out_num_bases.index_select(0, num_attr_idxs.view(-1))
         # (batch, max num dim)
-        out_num_masks = self.out_num_masks.index_select(0, num_attr_idxs)
+        out_num_masks = self.out_num_masks.index_select(0, num_attr_idxs.view(-1))
 
         """
         Use pseudo-inverse for regression
@@ -822,11 +827,11 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # dim = 0 of inverse_num_bases.
         # e.g. given
         #     unique_num_attr_idxs = [2,5,1]
-        #     num_attr_idxs = [1,5,2,5,1]
+        #     num_attr_idxs = [[1,5,2,5,1]]
         # then temp = [[ 1, -3,  0, -3,  1],
         #         [ 4,  0,  3,  0,  4],
         #         [ 0, -4, -1, -4,  0]]
-        temp = unique_num_attr_idxs.unsqueeze(1) - num_attr_idxs.unsqueeze(0)
+        temp = unique_num_attr_idxs.unsqueeze(1) - num_attr_idxs.t()
         # e.g. temp = [[0, 0, 1],
         #         [0, 1, 0],
         #         [1, 0, 0],
@@ -853,7 +858,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         batch_pinverses = pinverse_num_bases.index_select(0, num_attr_idxs_pinverses)
 
         # (batch, embed size, 1)
-        out_num_zero_vecs = self.out_num_zero_vecs.index_select(0, num_attr_idxs).unsqueeze(-1)
+        out_num_zero_vecs = self.out_num_zero_vecs.index_select(0, num_attr_idxs.view(-1)).unsqueeze(-1)
 
         # (batch, max_num_dim)
         pred_numvals = batch_pinverses.matmul(projected_inits - out_num_zero_vecs).squeeze(-1)
@@ -869,31 +874,62 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                 domain_idxs, domain_masks, cat_targets):
         """
         Performs one forward pass.
+
+        is_categorical: (batch, 1)
+        attr_idxs: (batch, 1)
+        cat_targets: (batch, 1)
         """
         # (batch, embed size, 1)
-        combined_init = self._get_combined_init_vec(init_cat_idxs, init_numvals, init_nummasks, attr_idxs)
+        combined_init = self._get_combined_init_vec(init_cat_idxs, init_numvals,
+                init_nummasks, attr_idxs)
 
         # (# of cat VIDs), (# of num VIDs)
-        # TODO: convert is_categorical to ByteTensor and use torch.mask_tensor
-        cat_mask, num_mask = is_categorical.nonzero().view(-1), (is_categorical == 0).nonzero().view(-1)
+        cat_mask, num_mask = self._cat_num_masks(is_categorical)
 
         cat_logits = torch.empty(0, self._max_domain)
         if len(cat_mask):
-            cat_combined_init, domain_idxs, domain_masks, cat_targets = combined_init[cat_mask], \
-                domain_idxs[cat_mask], \
-                domain_masks[cat_mask], \
-                cat_targets[cat_mask]
+            cat_combined_init, domain_idxs, domain_masks, cat_targets = \
+                    combined_init[cat_mask], \
+                    domain_idxs[cat_mask], \
+                    domain_masks[cat_mask], \
+                    cat_targets[cat_mask]
             # (# of cat VIDs, max_domain)
             cat_logits = self._cat_forward(cat_combined_init, domain_idxs, domain_masks, cat_targets)
 
         pred_numvals = torch.empty(0, self._max_num_dim)
         if len(num_mask):
             num_combined_init, num_attr_idxs = combined_init[num_mask], \
-                attr_idxs[num_mask] - self._n_train_cat_attrs   # shift attribute indexes back to 0
+                    self._num_attr_idxs(is_categorical, attr_idxs)
             # (# of num VIDs, max_num_dim)
             pred_numvals = self._num_forward(num_combined_init, num_attr_idxs)
 
         return cat_logits, pred_numvals
+
+    def _cat_num_masks(self, is_categorical):
+        """
+        is_categorical: (batch, 1)
+        """
+        # TODO: convert is_categorical to ByteTensor and use torch.mask_tensor
+        cat_mask, num_mask = is_categorical.view(-1).nonzero().view(-1),\
+            (is_categorical.view(-1) == 0).nonzero().view(-1)
+        return cat_mask, num_mask
+
+    def _num_attr_idxs(self, is_categorical, attr_idxs):
+        """
+        Returns the 0-indexed numerical attribute indexes from a batch of
+        attribute indexes.
+
+        is_categorical: (batch, 1)
+        attr_idxs: (batch, 1)
+
+        Returns tensor of shape (# of numerical examples, 1)
+        """
+        _, num_mask = self._cat_num_masks(is_categorical)
+        # shift attribute indexes back to 0
+        num_attr_idxs = attr_idxs[num_mask] - self._n_train_cat_attrs
+
+        # (# of numerical examples, 1)
+        return num_attr_idxs
 
     def train(self, num_epochs=10, batch_size=32, weight_entropy_lambda=0.,
             shuffle=True, train_only_clean=True):
@@ -933,17 +969,15 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                 domain_idxs, domain_masks, \
                 target_numvals, cat_targets \
                 in tqdm(DataLoader(self._dataset, batch_size=batch_size, sampler=sampler)):
-                is_categorical = is_categorical.view(-1)
-                attr_idxs = attr_idxs.view(-1)
-                cat_targets = cat_targets.view(-1)
 
                 cat_preds, numval_preds = self.forward(is_categorical, attr_idxs,
                         init_cat_idxs, init_numvals, init_nummasks,
                         domain_idxs, domain_masks, cat_targets)
 
                 # Select out the appropriate targets
-                cat_targets = cat_targets[is_categorical.nonzero().view(-1)]
-                target_numvals = target_numvals[(is_categorical == 0).nonzero().view(-1)]
+                cat_mask, num_mask = self._cat_num_masks(is_categorical)
+                cat_targets = cat_targets.view(-1)[cat_mask]
+                target_numvals = target_numvals[num_mask]
 
                 assert cat_preds.shape[0] == cat_targets.shape[0]
                 assert numval_preds.shape == target_numvals.shape
@@ -982,6 +1016,86 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                     sum(batch_losses[-1 * batch_cnt:]) / batch_cnt)
 
         return batch_losses
+
+    def _get_dataset_vecs(self, vids):
+        """
+        Returns the vectors from Dataset for the given VIDs that has been
+        reshaped to be in the proper format for forward.
+
+        Returns (vids,
+            is_categorical,
+            attr_idxs,
+            init_cat_idxs,
+            init_numvals,
+            init_nummasks,
+            domain_idxs,
+            domain_masks,
+            target_numvals,
+            cat_targets,
+        )
+        """
+        self._dataset.set_mode(inference_mode=True)
+        ds_tuples = [self._dataset[vid] for vid in vids]
+        self._dataset.set_mode(inference_mode=False)
+
+        return tuple(map(torch.stack, list(zip(*ds_tuples))))
+
+    def get_context_vecs(self, vids):
+        """
+        Returns (# of vids, embed_size) context DETACHED pytorch tensors for
+        the given VIDs.
+        """
+        _, _, attr_idxs, init_cat_idxs, init_numvals, init_nummasks, \
+                _, _, _, _ = self._get_dataset_vecs(vids)
+
+        # (# of vids, embed_size, 1)
+        context_vec = self._get_combined_init_vec(init_cat_idxs, init_numvals, init_nummasks, attr_idxs)
+        # (# of vids, embed_size)
+        return context_vec.squeeze(-1).detach()
+
+    def get_target_vecs(self, vids):
+        """
+        Returns a (# of vids, max domain values, embed_size) the target
+        DETACHED pytorch tensors for each domain value for each VID.
+
+        Note for each VID the domain target vectors are padded up to the maximum
+        domain size.
+        """
+        _, is_categorical, attr_idxs, _, _, _, \
+                domain_idxs, _, target_numvals, _ = self._get_dataset_vecs(vids)
+
+        # (# of cats), (# of num)
+        cat_masks, num_masks = self._cat_num_masks(is_categorical)
+
+        # TODO: should we also return the biases?
+        # (batch, max_domain, embed_size)
+        target_vecs = self.out_W.index_select(0, domain_idxs.view(-1))\
+                .view(*domain_idxs.shape, self._embed_size)
+
+        # Replace the target vectors with our numerical spanned vector if
+        # we have numerical values.
+        if len(num_masks):
+            # (# of num, 1)
+            num_attr_idxs = self._num_attr_idxs(is_categorical, attr_idxs)
+
+            # (batch, embed_size, max num dim)
+            out_num_bases = self.out_num_bases.index_select(0, num_attr_idxs.view(-1))
+            # (batch, max num dim)
+            out_num_masks = self.out_num_masks.index_select(0, num_attr_idxs.view(-1))
+            # (batch, embed_size, max num dim)
+            out_num_bases.mul_(out_num_masks.unsqueeze(1))
+
+            # (batch, embed_size, 1)
+            num_vecs = out_num_bases.matmul(target_numvals.unsqueeze(-1))
+            # (batch, 1, embed_size)
+            num_vecs = num_vecs.view(-1, 1, self._embed_size)
+            # (batch, self._max_domain, embed_size)
+            num_vecs = num_vecs.expand(-1, self._max_domain, -1)
+
+            target_vecs[num_masks] = num_vecs[num_masks]
+
+        # (batch, max_domain, embed_size)
+        return target_vecs.detach()
 
     def dump_model(self, prefix):
         """
@@ -1124,16 +1238,10 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             df = self.domain_df
 
         logging.debug('%s: getting dataset indices...', type(self).__name__)
-        self._dataset.set_mode(inference_mode=True)
-        ds_tuples = [self._dataset[vid] for vid in df['_vid_'].values]
-        self._dataset.set_mode(inference_mode=False)
         vids, is_categorical, attr_idxs, \
             init_cat_idxs, init_numvals, init_nummasks, \
             domain_idxs, domain_masks, \
-            target_numvals, cat_targets = map(torch.stack, list(zip(*ds_tuples)))
-        is_categorical = is_categorical.view(-1)
-        attr_idxs = attr_idxs.view(-1)
-        cat_targets = cat_targets.view(-1)
+            target_numvals, cat_targets = self._get_dataset_vecs(df['_vid_'].values)
         logging.debug('%s: done getting dataset indices.', type(self).__name__)
 
         logging.debug('%s: starting batch prediction...', type(self).__name__)
@@ -1145,7 +1253,8 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         pred_cat_idx = 0
         pred_num_idx = 0
-        for idx, is_cat in enumerate(is_categorical):
+
+        for idx, is_cat in enumerate(is_categorical.view(-1)):
             vid = int(vids[idx, 0])
             if is_cat:
                 logits = pred_cats[pred_cat_idx]
@@ -1154,7 +1263,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                 continue
 
             # Real valued prediction
-            dim = self.out_num_masks[attr_idxs[idx] - self._n_train_cat_attrs].nonzero().max()
+            dim = self.out_num_masks[attr_idxs[idx,0] - self._n_train_cat_attrs].nonzero().max()
             pred_num = pred_nums[pred_num_idx][:dim+1]
             pred_num_idx += 1
             yield vid, False, pred_num.detach().numpy()

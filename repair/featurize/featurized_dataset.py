@@ -18,9 +18,8 @@ class FeaturizedDataset:
         self.ds = dataset
         self.env = env
         self.total_vars, self.classes = self.ds.get_domain_info()
-        self.processes = self.env['threads']
         for f in featurizers:
-            f.setup_featurizer(self.ds, self.processes, self.env['batch_size'])
+            f.setup_featurizer(self.env, self.ds)
         logging.debug('featurizing training data...')
         tensors = [f.create_tensor() for f in featurizers]
         self.featurizer_info = [FeatInfo(featurizer.name,
@@ -32,7 +31,7 @@ class FeaturizedDataset:
         tensor = torch.cat(tensors, 2)
         self.tensor = tensor
 
-        logging.debug('DONE featurization.')
+        logging.debug('DONE featurization. Feature tensor size: %s', self.tensor.shape)
 
         if self.env['debug_mode']:
             weights_df = pd.DataFrame(self.tensor.reshape(-1, self.tensor.shape[-1]).numpy())
