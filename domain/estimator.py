@@ -9,35 +9,27 @@ class Estimator:
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, env, dataset):
+    def __init__(self, env, dataset, domain_df):
         """
         :param env: (dict) dict containing environment/parameters settings.
         :param dataset: (Dataset)
         """
         self.env = env
         self.ds = dataset
+        self.domain_df = domain_df.sort_values('_vid_')
         self.attrs = self.ds.get_attributes()
 
     @abstractmethod
-    def train(self, **kwargs):
-        raise NotImplementedError
-
-    @abstractmethod
-    def predict_pp(self, row, attr, values):
-        """
-        :param row: (namedtuple) current values of the target row.
-        :param attr: (str) attribute of row (i.e. cell) to generate posteriors for.
-        :param values: (list[str]) list of values (for this attr) to generate posteriors for.
-
-        :return: iterator of tuples (value, proba) for each value in :param values:
-        """
+    def train(self, num_epochs, batch_size):
         raise NotImplementedError
 
     @abstractmethod
     def predict_pp_batch(self):
         """
-        predict_pp_batch is like predict_pp but with a batch of cells.
+        predict_pp_batch predicts the probabilities for a batch of cells corresponding
+        to the cells specified in domain_df.
 
-        :return: iterator of iterator of tuples (value, proba) (one iterator per cell/row in cell_domain_rows)
+        :return: iterator of (vid, is categorical (bool), [(value, proba)])
+        for each random var in domain_df.
         """
         raise NotImplementedError
