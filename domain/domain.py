@@ -241,7 +241,7 @@ class DomainEngine:
                 vid += 1
         domain_df = pd.DataFrame(data=cells).sort_values('_vid_')
         logging.debug('domain size stats: %s', domain_df['domain_size'].describe())
-        logging.debug('DONE generating initial set of domain values in %.2f', time.clock() - tic)
+        logging.debug('DONE generating initial set of domain values in %.2fs', time.clock() - tic)
 
         return domain_df
 

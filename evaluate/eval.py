@@ -276,10 +276,7 @@ class EvalEngine:
         select
             (t3._tid_ is NULL) as clean,
             (t1.fixed) as status,
-            (t4._tid_ is NOT NULL) as inferred,
             (t1.init_value = t2._value_) as init_eq_grdth,
-            (t1.init_value = t4.rv_value) as init_eq_infer,
-            (t1.weak_label = t1.init_value) as wl_eq_init,
             (t1.weak_label = t2._value_) as wl_eq_grdth,
             (t1.weak_label = t4.rv_value) as wl_eq_infer,
             (t2._value_ = t4.rv_value) as infer_eq_grdth,
@@ -292,10 +289,7 @@ class EvalEngine:
         group by
             clean,
             status,
-            inferred,
             init_eq_grdth,
-            init_eq_infer,
-            wl_eq_init,
             wl_eq_grdth,
             wl_eq_infer,
             infer_eq_grdth
@@ -307,15 +301,14 @@ class EvalEngine:
         res = self.ds.engine.execute_query(query)
 
         df_stats = pd.DataFrame(res,
-                columns=["is_clean", "cell_status", "is_inferred",
-                    "init = grdth", "init = inferred",
-                    "w. label = init", "w. label = grdth", "w. label = inferred",
+                columns=["is_clean", "cell_status",
+                    "init = grdth", "wlabel = grdth", "wlabel = infer",
                     "infer = grdth", "count"])
         df_stats = df_stats.sort_values(list(df_stats.columns)).reset_index(drop=True)
         pd.set_option('display.max_columns', None)
         pd.set_option('display.max_rows', len(df_stats))
         pd.set_option('display.max_colwidth', -1)
-        logging.debug("weak label statistics:\n%s", df_stats)
+        logging.debug("weak label statistics: (cell_status: 0 - none, 1 - wlabelled, 2 - single value)\n%s", df_stats)
         pd.reset_option('display.max_columns')
         pd.reset_option('display.max_rows')
         pd.reset_option('display.max_colwidth')

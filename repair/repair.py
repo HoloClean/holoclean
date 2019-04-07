@@ -25,7 +25,9 @@ class RepairEngine:
         tic = time.clock()
         feat_info = self.feat_dataset.featurizer_info
         output_dim = self.feat_dataset.classes
-        self.repair_model = RepairModel(self.env, feat_info, output_dim, bias=self.env['bias'])
+        self.repair_model = RepairModel(self.env, feat_info, output_dim,
+                                        bias=self.env['bias'],
+                                        layer_sizes=self.env['layer_sizes'])
         toc = time.clock()
         status = "DONE setting up repair model."
         setup_time = toc - tic
