@@ -1,4 +1,5 @@
 import logging
+import os
 import pickle
 import sys
 
@@ -116,7 +117,6 @@ class LookupDataset(Dataset):
         # Assign index for every unique value-attr (train/possible values, target)
         self._train_val_idxs = {attr: {} for attr in self._train_cat_attrs}
 
-        self._train_idx_to_val = {0: NULL_REPR}
         # Reserve the 0th index as placeholder for padding in domain_idx and
         # for NULL values.
         cur_init_idx = 1
@@ -193,7 +193,6 @@ class LookupDataset(Dataset):
 
             # Assign index for train/domain values
             self._train_val_idxs[attr][val] = cur_train_idx
-            self._train_idx_to_val[cur_train_idx] = val
             cur_train_idx += 1
 
         # Unique train values (their indexes) by attr
@@ -219,22 +218,31 @@ class LookupDataset(Dataset):
             self._max_num_dim = max(self._num_attr_dim.values())
             self._total_num_dim = sum(self._num_attr_dim.values())
 
+        self._init_dummies()
+        self._init_memoize_vecs()
 
+    def _init_dummies(self):
         # Dummy vectors
-        self._dummy_domain_mask = torch.zeros(self._max_domain, dtype=torch.float)
-        self._dummy_domain_idxs = torch.zeros(self._max_domain, dtype=torch.long)
-        self._dummy_target_numvals = torch.zeros(self._max_num_dim, dtype=torch.float)
+        self._dummy_domain_mask = torch.zeros(self._max_domain,
+                                              dtype=torch.float)
+        self._dummy_domain_idxs = torch.zeros(self._max_domain,
+                                              dtype=torch.long)
+        self._dummy_target_numvals = torch.zeros(self._max_num_dim,
+                                                 dtype=torch.float)
         self._dummy_cat_target = torch.LongTensor([-1])
 
+    def _init_memoize_vecs(self):
         # Memoize certain lookups.
-        if memoize:
-            self._domain_idxs = self.MemoizeVec(len(self), torch.int64, self._max_domain)
-            self._init_cat_idxs = self.MemoizeVec(len(self), torch.int64, self._n_init_cat_attrs)
-            if self._total_num_dim > 0:
-                self._target_numvals = self.MemoizeVec(len(self), torch.float32, self._max_num_dim)
-                self._init_numvals = self.MemoizeVec(len(self), torch.float32, self._n_init_num_attrs, self._max_num_dim)
-                self._init_nummask = self.MemoizeVec(len(self), torch.float32, self._n_init_num_attrs)
-            self._neg_idxs = self.MemoizeVec(len(self), None, None)
+        if not self.memoize:
+            return
+        self._domain_idxs = self.MemoizeVec(len(self), torch.int64, self._max_domain)
+        self._init_cat_idxs = self.MemoizeVec(len(self), torch.int64, self._n_init_cat_attrs)
+        self._neg_idxs = self.MemoizeVec(len(self), None, None)
+
+        if self._total_num_dim > 0:
+            self._target_numvals = self.MemoizeVec(len(self), torch.float32, self._max_num_dim)
+            self._init_numvals = self.MemoizeVec(len(self), torch.float32, self._n_init_num_attrs, self._max_num_dim)
+            self._init_nummask = self.MemoizeVec(len(self), torch.float32, self._n_init_num_attrs)
 
     def _split_cat_num_attrs(self, attrs):
         """
@@ -467,17 +475,38 @@ class LookupDataset(Dataset):
         assert cur['attribute'] in self._train_cat_attrs
         return cur['domain'].split('|||')
 
-    def dump_state(self):
-        return {'init_val_idxs': self._init_val_idxs,
-            'train_val_idxs': self._train_val_idxs,
-            'init_attr_idxs': self._init_attr_idxs,
-            'train_attr_idxs': self._train_attr_idxs,
-            'init_cat_attrs': self._init_cat_attrs,
-            'init_num_attrs': self._init_num_attrs,
-            'train_cat_attrs': self._train_cat_attrs,
-            'train_num_attrs': self._train_num_attrs,
-            'num_attr_dim': self._num_attr_dim,
-            }
+    def _state_attrs(self):
+        """
+        Attributes/local vars to dump as state. Basically everything
+        used when __getitem__ is invoked.
+        """
+        return ['_vid_to_idx',
+                '_train_records',
+                '_raw_data_dict',
+                '_max_domain',
+                '_max_num_dim',
+                '_init_val_idxs',
+                '_train_val_idxs',
+                '_init_attr_idxs',
+                '_train_attr_idxs',
+                '_init_cat_attrs',
+                '_init_num_attrs',
+                '_train_cat_attrs',
+                '_train_num_attrs',
+                '_num_attr_dim',
+                '_n_init_cat_attrs',
+                '_n_init_num_attrs',
+                '_train_val_idxs_by_attr',
+                ]
+
+    def get_state(self):
+        return {attr: getattr(self, attr) for attr in self._state_attrs()}
+
+    def load_state(self, state):
+        for attr, val in state.items():
+            setattr(self, attr, val)
+        self._init_dummies()
+        self._init_memoize_vecs()
 
 class VidSampler(Sampler):
     def __init__(self, domain_df, shuffle=True, train_only_clean=True):
@@ -598,7 +627,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         self._train_cat_attrs = self._dataset._train_cat_attrs
         self._train_num_attrs = self._dataset._train_num_attrs
-        self._train_idx_to_val = self._dataset._train_idx_to_val
 
         # word2vec-like model.
 
@@ -1055,8 +1083,9 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
     def get_target_vecs(self, vids):
         """
-        Returns a (# of vids, max domain values, embed_size) the target
-        DETACHED pytorch tensors for each domain value for each VID.
+        Returns a (# of vids, max domain values, embed_size + 1) the target
+        DETACHED pytorch tensors for each domain value for each VID (+1 for
+        bias).
 
         Note for each VID the domain target vectors are padded up to the maximum
         domain size.
@@ -1094,16 +1123,59 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
             target_vecs[num_masks] = num_vecs[num_masks]
 
-        # (batch, max_domain, embed_size)
+        # TODO: mask/handle numeric bias. Note this should still select
+        # the 0th bias which is 0
+        # (batch, max_domain, 1)
+        target_bias = self.out_B.index_select(0, domain_idxs.view(-1))\
+            .view(*domain_idxs.shape, 1)
+
+        # (batch, max_domain, embed_size + 1)
+        target_vecs = torch.cat([target_vecs, target_bias], dim=-1)
+        # (batch, max_domain, embed_size + 1)
         return target_vecs.detach()
+
+    def _model_fpaths(self, prefix):
+        return '%s_sdict.pkl' % prefix, '%s_ds_state.pkl' % prefix
 
     def dump_model(self, prefix):
         """
-        Dump this model's parameters and other metadata (e.g. attr-val to corresponding
-        index in embedding matrix) with the given :param:`prefix`.
+        Dump this model's parameters and other metadata (e.g. attr-val to
+        corresponding index in embedding matrix) with the given
+        :param:`prefix`.
+
+        When loading the model one must use the same domain DF.
         """
-        torch.save(self.state_dict(), '%s_sdict.pkl' % prefix)
-        pickle.dump(self._dataset.dump_state(), open('%s_ds_state.pkl' % prefix, 'wb'))
+        sdict_fpath, ds_fpath = self._model_fpaths(prefix)
+        logging.debug('%s: saving model to %s and %s',
+                      type(self).__name__, sdict_fpath, ds_fpath)
+
+        torch.save(self.state_dict(), sdict_fpath)
+        with open(ds_fpath, 'wb') as f:
+            pickle.dump(self._dataset.get_state(), f)
+
+    def load_model(self, prefix):
+        """
+        Tries to load the parameters and state from the given dump prefix.
+        Note this EmbeddingModel must be initialized with the same domain DF
+        (otherwise it does not make sense to load the same parameters).
+
+        Returns whether the model could be loaded.
+        """
+        sdict_fpath, ds_fpath = self._model_fpaths(prefix)
+
+        if not os.path.exists(sdict_fpath) or not os.path.exists(ds_fpath):
+            logging.warning('%s: cannot load model from prefix %s',
+                    type(self).__name__,
+                    prefix)
+            return False
+
+        logging.debug('%s: loading saved model from %s and %s',
+                      type(self).__name__, sdict_fpath, ds_fpath)
+
+        self.load_state_dict(torch.load(sdict_fpath))
+        with open(ds_fpath, 'rb') as f:
+            self._dataset.load_state(pickle.load(f))
+        return True
 
     def dump_predictions(self, prefix):
         """
@@ -1111,7 +1183,8 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         """
         preds = self.predict_pp_batch()
 
-        logging.debug('%s: constructing and dumping predictions...'. type(self).__name__)
+        logging.debug('%s: constructing and dumping predictions...'.
+                      type(self).__name__)
         results = []
         for ((vid, is_cat, pred), row) in zip(preds, self.domain_recs):
            assert vid == row['_vid_']
