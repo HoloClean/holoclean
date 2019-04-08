@@ -39,7 +39,7 @@ correct_repairs_template = Template('SELECT COUNT(*) FROM '
                                     '     FROM "$init_table" as t1, "$grdt_table" as t2 '
                                     '    WHERE t1._tid_ = t2._tid_ '
                                     '      AND t2._attribute_ = \'$attr\' '
-                                    '      AND t1."$attr" != t2._value_ ) as errors, $inf_dom as repairs '
+                                    '      AND t1."$attr" != t2._value_ ) as errors, "$inf_dom" as repairs '
                                     'WHERE errors._tid_ = repairs._tid_ '
                                     '  AND errors._attribute_ = repairs.attribute '
                                     '  AND errors._value_ = repairs.rv_value')
@@ -49,7 +49,7 @@ correct_repairs_template = Template('SELECT COUNT(*) FROM '
 Calculates RMS error for the given attribute.
 """
 rms_template = Template('SELECT SQRT(AVG(POWER(grdt._value_::NUMERIC -repairs.rv_value::NUMERIC, 2))) FROM '
-                        '"$grdt_table" as grdt, $inf_dom as repairs '
+                        '"$grdt_table" as grdt, "$inf_dom" as repairs '
                         'WHERE grdt._tid_ = repairs._tid_ '
                         '  AND grdt._attribute_ = repairs.attribute'
                         '  AND grdt._attribute_ IN $attrs_list')
@@ -189,7 +189,7 @@ class EvalEngine:
         attr_clause = self.get_categorical_clause(attr) if self.ds.numerical_attrs else "TRUE"
         query = "SELECT count(*) FROM " \
                 "  (SELECT _vid_ " \
-                "     FROM {} as t1, {} as t2 " \
+                '     FROM "{}" as t1, "{}" as t2 ' \
                 "    WHERE t1._tid_ = t2._tid_ " \
                 "      AND t1.attribute = t2.attribute " \
                 "      AND t1.init_value != t2.rv_value " \
@@ -221,12 +221,12 @@ class EvalEngine:
             SELECT
                 (t1.init_value = t3._value_) AS is_correct,
                 count(*)
-            FROM   {} as t1, {} as t2, {} as t3
+            FROM   "{}" as t1, "{}" as t2, "{}" as t3
             WHERE  t1._tid_ = t2._tid_
               AND  t1.attribute = t2.attribute
               AND  t1.init_value != t2.rv_value
               AND  t1._tid_ = t3._tid_
-              AND  t1.attribute = t3._attribute_ 
+              AND  t1.attribute = t3._attribute_
               AND  {}
             GROUP BY is_correct
               """.format(AuxTables.cell_domain.name,
@@ -300,7 +300,7 @@ class EvalEngine:
 
         query = "SELECT count(*) FROM " \
                 "  (SELECT _vid_ " \
-                "   FROM {} as t1, {} as t2, {} as t3 " \
+                '   FROM "{}" as t1, "{}" as t2, "{}" as t3 ' \
                 "   WHERE t1._tid_ = t2._tid_ " \
                 "     AND t1._cid_ = t3._cid_ " \
                 "     AND t1.attribute = t2._attribute_ " \
@@ -421,10 +421,10 @@ class EvalEngine:
             (t2._value_ = t4.rv_value) as infer_eq_grdth,
             count(*) as count
         from
-            {cell_domain} as t1,
-            {clean_data} as t2
-            left join {dk_cells} as t3 on t2._tid_ = t3._tid_ and t2._attribute_ = t3.attribute
-            left join {inf_values_dom} as t4 on t2._tid_ = t4._tid_ and t2._attribute_ = t4.attribute where t1._tid_ = t2._tid_ and t1.attribute = t2._attribute_
+            "{cell_domain}" as t1,
+            "{clean_data}" as t2
+            left join "{dk_cells}" as t3 on t2._tid_ = t3._tid_ and t2._attribute_ = t3.attribute
+            left join "{inf_values_dom}" as t4 on t2._tid_ = t4._tid_ and t2._attribute_ = t4.attribute where t1._tid_ = t2._tid_ and t1.attribute = t2._attribute_
         group by
             clean,
             status,

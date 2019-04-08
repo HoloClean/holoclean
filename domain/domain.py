@@ -34,6 +34,7 @@ class DomainEngine:
         self.domain = None
         self.total = None
         self.correlations = None
+        self.do_quantization = False
         self._corr_attrs = {}
         self.max_sample = max_sample
         self.single_stats = {}
@@ -46,7 +47,6 @@ class DomainEngine:
         'cell_domain', 'pos_values').
         """
         tic = time.time()
-        self.do_quantization = False
         self.compute_correlations()
         self.setup_attributes()
         self.domain_df = self.generate_domain()
