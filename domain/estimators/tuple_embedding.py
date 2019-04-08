@@ -1184,7 +1184,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         """
         preds = self.predict_pp_batch()
 
-        logging.debug('%s: constructing and dumping predictions...'.
+        logging.debug('%s: constructing and dumping predictions...',
                       type(self).__name__)
         results = []
         for ((vid, is_cat, pred), row) in zip(preds, self.domain_recs):
@@ -1213,7 +1213,10 @@ class TupleEmbedding(Estimator, torch.nn.Module):
     def validate(self):
         ### Categorical
         n_cat = 0
+        n_cat_dk = 0
         n_cat_repair = 0
+        n_cat_repair_dk = 0
+
         # repairs on clean + DK cells
         cor_repair = 0
         incor_repair = 0
@@ -1224,6 +1227,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         ### Numerical
         n_num = 0
+        n_num_dk = 0
         total_se = 0
         squared_resids = []
 
@@ -1236,11 +1240,16 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
             if is_cat:
                 n_cat += 1
+                if not row['is_clean']:
+                    n_cat_dk += 1
 
                 inf_val, inf_prob = max(preds, key=lambda t: t[1])
 
                 if row['init_value'] != inf_val:
                     n_cat_repair += 1
+                    if not row['is_clean']:
+                        n_cat_repair_dk += 1
+
                     # Correct val == inf val
                     if row['_value_'] == inf_val:
                         cor_repair += 1
@@ -1253,6 +1262,8 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                             incor_repair_dk += 1
                 continue
 
+            if not row['is_clean']:
+                n_num_dk += 1
             # Numerical
             n_num += 1
             cor_val = np.array(row['_value_'].split(NUMERICAL_SEP), dtype=np.float32)
@@ -1270,17 +1281,23 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             'recall': cor_repair / max(self._validate_total_errs, 1),
             'dk_precision': cor_repair_dk / max(cor_repair_dk + incor_repair_dk, 1),
             'repair_recall': cor_repair_dk / max(self._validate_detected_errs, 1),
-            # 'dk_recall': cor_repair_dk / max(self._validate_total_errs, 1),
             'n_cat': n_cat,
             'n_num': n_num,
+            'n_cat_dk': n_cat_dk,
+            'n_num_dk': n_num_dk,
             'n_cat_repair': n_cat_repair,
+            'n_cat_repair_dk': n_cat_repair_dk,
             'total_se': total_se,
             'squared_resids': pd.Series(squared_resids),
             }
 
-        logging.debug("%s: # categorical: %d (repairs: %d), # numerical: %d",
-                type(self).__name__, val_res['n_cat'], val_res['n_cat_repair'],
-                val_res['n_num'])
+        logging.debug("%s: # categorical: (all) %d, (dk) %d; # numerical: (all) %d, (dk) %d",
+                type(self).__name__, val_res['n_cat'], val_res['n_cat_dk'],
+                val_res['n_num'], val_res['n_num_dk'])
+        logging.debug("%s: # of errors: %d, # of detected errors: %d",
+                type(self).__name__, self._validate_total_errs, self._validate_detected_errs)
+        logging.debug("%s: # repairs (all): %d, # repairs (DK): %d",
+                type(self).__name__, val_res['n_cat_repair'], val_res['n_cat_repair_dk'])
         logging.debug("%s: (Infer on all) Precision: %.2f, Recall: %.2f",
                 type(self).__name__, val_res['precision'], val_res['recall'])
         logging.debug("%s: (Infer only on DK) Precision: %.2f, Repair Recall: %.2f",
