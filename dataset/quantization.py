@@ -1,12 +1,11 @@
 import time
 
+import numpy as np
 from sklearn.cluster import KMeans
 from utils import NULL_REPR
 
 
-# TODO(stoke):currently do only 1D data,
-#  will quantize N-dimensional data
-def quantize_km(df_raw, bin_number_dict, numerical_attrs):
+def quantize_km(env, df_raw, bin_number_dict, numerical_attrs):
     """
     Kmeans clustering using sklearn
     https://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html
@@ -23,21 +22,24 @@ def quantize_km(df_raw, bin_number_dict, numerical_attrs):
     for col in numerical_attrs:
         if col not in bin_number_dict:
             continue
-        df_col = df_quantized.loc[df_quantized[col] != NULL_REPR, [col]].astype(float)
-        df_col = df_col.reset_index(drop=True)
+        df_col = df_quantized.loc[df_quantized[col] != NULL_REPR, [col]].reset_index(drop=True)
+        # Matrix of possibly n-dimension values
+        X_col = np.array(list(map(lambda v: v.split(env['numerical_sep']), df_col[col].values)),
+                         dtype=np.float32)
 
         bin_number = bin_number_dict[col]
-        n_clusters = min(bin_number, df_col[col].nunique())
+        n_clusters = min(bin_number, np.unique(X_col, axis=0).shape[0])
 
         km = KMeans(n_clusters=n_clusters)
-        km.fit(df_col)
+        km.fit(X_col)
 
         label_pred = km.labels_
         centroids = km.cluster_centers_
 
+        # Lookup cluster centroids and concatenate their values again with
+        # env['numerical_sep'].
         def quantize_row(row):
-            # row.name can get index, but index is larger than the length
-            return str(centroids[label_pred[row.name], 0])
+            return env['numerical_sep'].join(map(str, centroids[label_pred[row.name]]))
         df_quantized.loc[df_quantized[col] != NULL_REPR, col] = df_col.apply(quantize_row, axis=1).values
 
     status = "DONE with quantization"

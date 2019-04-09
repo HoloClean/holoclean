@@ -185,6 +185,12 @@ arguments = [
       'default': None,
       'type': list,
       'help': 'List of attributes to train and infer on. If None, train and infer on all columns. For example passing a list of one column allows one to train HoloClean on one column.'}),
+    (('-ns', '--numerical_sep'),
+     {'metavar': 'NUMERICAL_SEP',
+      'dest': 'numerical_sep',
+      'default': '|',
+      'type': str,
+      'help': 'Delimiter for numerical attributes.'}),
 ]
 
 # Flags for Holoclean mode
@@ -345,7 +351,7 @@ class Session:
         self.domain_engine.do_quantization = self.do_quantization
 
         status, quantize_time, quantized_data = \
-            quantize_km(self.ds.get_raw_data(), bin_number_dict, self.ds.numerical_attrs)
+            quantize_km(self.env, self.ds.get_raw_data(), bin_number_dict, self.ds.numerical_attrs)
 
         name = self.ds.raw_data.name + '_quantized'
         self.ds.quantized_data = Table(name, Source.DF, df=quantized_data)
@@ -354,7 +360,13 @@ class Session:
         df_correct_type = quantized_data.copy()
         for attr in self.ds.numerical_attrs:
             df_correct_type.loc[df_correct_type[attr] == NULL_REPR, attr] = np.nan
-            df_correct_type[attr] = df_correct_type[attr].astype(float)
+            # Store n-dimensional values as arrays. Otherwise as floats.
+            vals = np.array(list(map(lambda v: v.split(self.env['numerical_sep']),
+                df_correct_type[attr].values)), dtype=np.float32)
+            if vals.shape[1] == 1:
+                df_correct_type[attr] = vals[:,0].tolist()
+            else:
+                df_correct_type[attr] = vals.tolist()
         df_correct_type.to_sql(name, self.ds.engine.engine, if_exists='replace', index=False,
                                index_label=None)
 
