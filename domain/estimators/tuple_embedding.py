@@ -17,7 +17,8 @@ from evaluate import EvalEngine
 from ..estimator import Estimator
 from utils import NULL_REPR
 
-NUMERICAL_SEP = "|"
+def nonnumerics(env):
+    return "[^0-9+-" + env['numerical_sep'] + "]"
 
 class LookupDataset(Dataset):
     # Memoizes vectors (e.g. init vector, domain vector, negative indexes)
@@ -139,10 +140,10 @@ class LookupDataset(Dataset):
         for attr in self._init_num_attrs:
             attr_col = self._raw_data[attr]
             fil_notnull = attr_col != NULL_REPR
-            fil_notnumeric = attr_col.str.contains('[^0-9.,]')
+            fil_notnumeric = attr_col.str.contains(nonnumerics(self.env))
 
             notnull_attr_col = attr_col[fil_notnull]
-            attr_dims = notnull_attr_col.str.split(NUMERICAL_SEP).apply(len)
+            attr_dims = notnull_attr_col.str.split(self.env['numerical_sep']).apply(len)
 
             attr_dim = attr_dims.values[0]
             if not (attr_dims == attr_dim).all():
@@ -173,7 +174,7 @@ class LookupDataset(Dataset):
             if attr in self._train_num_attrs:
                 # Check init value in domain dataframe has the right
                 # dimensions as the one detected in raw data
-                if len(val.split(NUMERICAL_SEP)) != self._num_attr_dim[attr]:
+                if len(val.split(self.env['numerical_sep'])) != self._num_attr_dim[attr]:
                     logging.error('%s: value "%s" in domain for vid %d for attribute "%s" must have %d ,-separate values',
                             type(self).__name__,
                             val,
@@ -297,7 +298,7 @@ class LookupDataset(Dataset):
             # value is a nan value.
             if not (self.inference_mode and cur['init_value'] == NULL_REPR):
                 target_numvals[:self._num_attr_dim[cur['attribute']]] = torch.FloatTensor(
-                        np.array(cur['init_value'].split(NUMERICAL_SEP), dtype=np.float32))
+                        np.array(cur['init_value'].split(self.env['numerical_sep']), dtype=np.float32))
 
             if not self.memoize:
                 return target_numvals
@@ -357,7 +358,7 @@ class LookupDataset(Dataset):
                     continue
 
                 attr_dim = self._num_attr_dim[attr]
-                init_numvals[idx,:attr_dim] = torch.FloatTensor(np.float32(val_str.split(NUMERICAL_SEP)))
+                init_numvals[idx,:attr_dim] = torch.FloatTensor(np.float32(val_str.split(self.env['numerical_sep'])))
 
             if not self.memoize:
                 return init_numvals, init_nummask
@@ -560,6 +561,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         torch.nn.Module.__init__(self)
         Estimator.__init__(self, env, dataset, domain_df)
 
+
         self._embed_size = self.env['estimator_embedding_size']
         train_attrs = self.env['train_attrs']
 
@@ -594,7 +596,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         if numerical_attrs is not None:
             fil_attr = self.domain_df['attribute'].isin(numerical_attrs)
             fil_notnull = self.domain_df['init_value'] != NULL_REPR
-            fil_notnumeric = self.domain_df['init_value'].str.contains('[^0-9.,]')
+            fil_notnumeric = self.domain_df['init_value'].str.contains(nonnumerics(self.env))
             bad_numerics = fil_attr & fil_notnull & fil_notnumeric
             if bad_numerics.sum():
                 self.domain_df.loc[bad_numerics, 'init_value'] = NULL_REPR
@@ -706,19 +708,26 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             and validate_tid_col is not None \
             and validate_attr_col is not None \
             and validate_val_col is not None:
-            eengine = EvalEngine(self.env, self.ds)
-            eengine.load_data(self.ds.raw_data.name + '_tuple_embedding_validate', validate_fpath,
-                tid_col=validate_tid_col,
-                attr_col=validate_attr_col,
-                val_col=validate_val_col)
-            self._validate_df = self.domain_df.merge(eengine.clean_data.df,
+            # eengine = EvalEngine(self.env, self.ds)
+            # eengine.load_data(self.ds.raw_data.name + '_tuple_embedding_validate', validate_fpath,
+            #     tid_col=validate_tid_col,
+            #     attr_col=validate_attr_col,
+            #     val_col=validate_val_col)
+            self._validate_df = pd.read_csv(validate_fpath, dtype=str)
+            self._validate_df.rename({validate_tid_col: '_tid_',
+                validate_attr_col: '_attribute_',
+                validate_val_col: '_value_',
+                }, axis=1, inplace=True)
+            self._validate_df['_tid_'] = self._validate_df['_tid_'].astype(int)
+            self._validate_df['_value_'] = self._validate_df['_value_'].str.strip().str.lower()
+            self._validate_df = self.domain_df.merge(self._validate_df, how='left',
                     left_on=['_tid_', 'attribute'], right_on=['_tid_', '_attribute_'])
 
             # Raise error if validation set has non-numerical values for numerical attrs
             if numerical_attrs is not None:
                 fil_attr = self._validate_df['attribute'].isin(numerical_attrs)
                 fil_notnull = self._validate_df['_value_'] != NULL_REPR
-                fil_notnumeric = self._validate_df['_value_'].str.contains('[^0-9.,]')
+                fil_notnumeric = self._validate_df['_value_'].str.contains(nonnumerics(self.env))
                 bad_numerics = fil_attr & fil_notnull & fil_notnumeric
                 if bad_numerics.sum():
                     logging.error('%s: validation dataframe contains %d non-numerical values in numerical attrs %s',
@@ -727,10 +736,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                         numerical_attrs)
                     sys.exit(1)
 
-            self._validate_recs = self._validate_df[['_vid_', 'init_value', '_value_', 'is_clean']] \
-                    .set_index('_vid_').to_dict('index')
-            self._validate_total_errs = (self._validate_df['init_value'] != self._validate_df['_value_']).sum()
-            self._validate_detected_errs = ((self._validate_df['init_value'] != self._validate_df['_value_']) & ~self._validate_df['is_clean']).sum()
+            self._validate_df = self._validate_df[['_vid_', 'init_value', '_value_', 'is_clean']]
             self._do_validation = True
 
     def _get_combined_init_vec(self, init_cat_idxs, init_numvals, init_nummasks, attr_idxs):
@@ -1197,7 +1203,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                    'inferred_val': max_val,
                    'proba': max_proba})
            else:
-               num_pred = NUMERICAL_SEP.join(map(str, pred))
+               num_pred = self.env['numerical_sep'].join(map(str, pred))
                results.append({'tid': row['_tid_'],
                    'vid': vid,
                    'attribute': row['attribute'],
@@ -1211,108 +1217,119 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         results.to_pickle(fpath)
 
     def validate(self):
-        ### Categorical
-        n_cat = 0
-        n_cat_dk = 0
-        n_cat_repair = 0
-        n_cat_repair_dk = 0
-
-        # repairs on clean + DK cells
-        cor_repair = 0
-        incor_repair = 0
-        # repairs only on DK cells
-        cor_repair_dk = 0
-        incor_repair_dk = 0
-
-
-        ### Numerical
-        n_num = 0
-        n_num_dk = 0
-        total_se = 0
-        squared_resids = []
-
         logging.debug('%s: running validation set...', type(self).__name__)
 
+        # Construct DataFrame with inferred values
         validation_preds = self.predict_pp_batch(self._validate_df)
-
+        df_pred = []
         for vid, is_cat, preds in tqdm(list(validation_preds)):
-            row = self._validate_recs[vid]
-
             if is_cat:
-                n_cat += 1
-                if not row['is_clean']:
-                    n_cat_dk += 1
-
                 inf_val, inf_prob = max(preds, key=lambda t: t[1])
+            else:
+                inf_val, inf_prob = self.env['numerical_sep'].join(map(str, preds)), -1
 
-                if row['init_value'] != inf_val:
-                    n_cat_repair += 1
-                    if not row['is_clean']:
-                        n_cat_repair_dk += 1
+            df_pred.append({'_vid_': vid,
+                'is_cat': is_cat,
+                'inferred_val': inf_val,
+                'proba': inf_prob})
+        df_pred = pd.DataFrame(df_pred)
+        df_res = self._validate_df.merge(df_pred, on=['_vid_'])
 
-                    # Correct val == inf val
-                    if row['_value_'] == inf_val:
-                        cor_repair += 1
-                        if not row['is_clean']:
-                            cor_repair_dk += 1
-                    # Correct val != inf val
-                    else:
-                        incor_repair += 1
-                        if not row['is_clean']:
-                            incor_repair_dk += 1
-                continue
 
-            if not row['is_clean']:
-                n_num_dk += 1
-            # Numerical
-            n_num += 1
-            cor_val = np.array(row['_value_'].split(NUMERICAL_SEP), dtype=np.float32)
-            assert cor_val.shape == preds.shape
-            sq_res = np.sum((cor_val - preds) ** 2)
-            squared_resids.append(sq_res)
-            total_se += sq_res
+        # General filters and metrics
+        fil_dk = ~df_res['is_clean']
+        fil_cat = df_res['is_cat']
+        fil_grdth = df_res['_value_'].notnull()
 
-        if self._validate_total_errs == 0:
+        if (~fil_grdth).sum():
+            logging.debug('%s: there are %d cells with no validation ground truth',
+                    type(self).__name__,
+                    (~fil_grdth).sum())
+
+        n_cat = fil_cat.sum()
+        n_num = (~fil_cat).sum()
+
+        n_cat_dk = (fil_dk & fil_cat).sum()
+        n_num_dk = (fil_dk & ~fil_cat).sum()
+
+        # Categorical filters and metrics
+        fil_err = (df_res['init_value'] != df_res['_value_']) & fil_cat & fil_grdth
+        fil_cor = (df_res['inferred_val'] == df_res['_value_']) & fil_cat & fil_grdth
+        fil_repair = (df_res['init_value'] != df_res['inferred_val']) & fil_cat
+
+        total_err = fil_err.sum()
+        detected_err = (fil_dk & fil_err).sum()
+
+        n_repair = fil_repair.sum()
+        n_repair_dk = (fil_dk & fil_repair).sum()
+        n_cor_repair = (fil_cor & fil_repair).sum()
+        n_cor_repair_dk = (fil_dk & fil_cor & fil_repair).sum()
+
+        if total_err == 0:
             logging.warning('%s: total errors in validation set is 0', type(self).__name__)
-        if self._validate_detected_errs == 0:
+        if detected_err == 0:
             logging.warning('%s: total detected errors in validation set is 0', type(self).__name__)
 
-        val_res = {'precision': cor_repair / max(cor_repair + incor_repair, 1),
-            'recall': cor_repair / max(self._validate_total_errs, 1),
-            'dk_precision': cor_repair_dk / max(cor_repair_dk + incor_repair_dk, 1),
-            'repair_recall': cor_repair_dk / max(self._validate_detected_errs, 1),
-            'n_cat': n_cat,
+        # In-sample accuracy (predict init value that is already correcT)
+        sample_acc = (~fil_err & fil_cor).sum() / (~fil_err).sum()
+
+        precision = n_cor_repair / max(n_repair, 1)
+        recall = n_cor_repair / max(total_err, 1)
+
+        precision_dk = n_cor_repair_dk / max(n_repair_dk, 1)
+        repair_recall = n_cor_repair_dk / max(detected_err, 1)
+
+        # Numerical filters and metrics
+        rmse = 0
+        if n_num:
+            X_cor = np.array(list(map(lambda v: v.split(self.env['numerical_sep']), df_res.loc[~fil_cat, '_value_'].values)),
+                             dtype=np.float32)
+            X_inferred = np.array(list(map(lambda v: v.split(self.env['numerical_sep']), df_res.loc[~fil_cat, 'inferred_val'].values)),
+                             dtype=np.float32)
+
+            rmse = np.sqrt(np.mean(np.sum((X_cor - X_inferred) ** 2, axis=1)))
+
+
+        # Compile results
+        val_res = {'n_cat': n_cat,
             'n_num': n_num,
             'n_cat_dk': n_cat_dk,
             'n_num_dk': n_num_dk,
-            'n_cat_repair': n_cat_repair,
-            'n_cat_repair_dk': n_cat_repair_dk,
-            'total_se': total_se,
-            'squared_resids': pd.Series(squared_resids),
+            'total_err': total_err,
+            'detected_err': detected_err,
+            'n_repair': n_repair,
+            'n_repair_dk': n_repair_dk,
+            'sample_acc': sample_acc,
+            'precision': precision,
+            'recall': recall,
+            'precision_dk': precision_dk,
+            'repair_recall': repair_recall,
+            'rmse': rmse,
             }
 
-        logging.debug("%s: # categorical: (all) %d, (dk) %d; # numerical: (all) %d, (dk) %d",
-                type(self).__name__, val_res['n_cat'], val_res['n_cat_dk'],
-                val_res['n_num'], val_res['n_num_dk'])
+        logging.debug("%s: # categoricals: (all) %d, (DK) %d",
+                type(self).__name__, val_res['n_cat'], val_res['n_cat_dk'])
+        logging.debug("%s: # numericals: (all) %d, (DK) %d",
+                type(self).__name__, val_res['n_num'], val_res['n_num_dk'])
+
         logging.debug("%s: # of errors: %d, # of detected errors: %d",
-                type(self).__name__, self._validate_total_errs, self._validate_detected_errs)
-        logging.debug("%s: # repairs (all): %d, # repairs (DK): %d",
-                type(self).__name__, val_res['n_cat_repair'], val_res['n_cat_repair_dk'])
-        logging.debug("%s: (Infer on all) Precision: %.2f, Recall: %.2f",
+                type(self).__name__, val_res['total_err'], val_res['detected_err'])
+
+        logging.debug("%s: In-sample accuracy: %.3f",
+                type(self).__name__, val_res['sample_acc'])
+
+        logging.debug("%s: # repairs: (all) %d, (DK) %d",
+                type(self).__name__, val_res['n_repair'], val_res['n_repair_dk'])
+
+        logging.debug("%s: (Infer on all) Precision: %.3f, Recall: %.3f",
                 type(self).__name__, val_res['precision'], val_res['recall'])
-        logging.debug("%s: (Infer only on DK) Precision: %.2f, Repair Recall: %.2f",
-                type(self).__name__, val_res['dk_precision'], val_res['repair_recall'])
+        logging.debug("%s: (Infer on DK) Precision: %.3f, Repair Recall: %.3f",
+                type(self).__name__, val_res['precision_dk'], val_res['repair_recall'])
+
         if val_res['n_num']:
-            logging.debug("%s: MSE: %.2f, RMSE: %2.f", type(self).__name__,
-                    val_res['total_se'] / val_res['n_num'],
-                    (val_res['total_se'] / val_res['n_num']) ** 0.5)
-            logging.debug("%s: Squared resids: %s", type(self).__name__,
-                    val_res['squared_resids'].describe())
+            logging.debug("RMSE: %3.f", type(self).__name__, val_res['rmse'])
 
         return val_res
-
-    def predict_pp(self, row, attr=None, values=None):
-        raise NotImplementedError
 
     def predict_pp_batch(self, df=None):
         """
