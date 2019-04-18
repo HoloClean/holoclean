@@ -345,13 +345,13 @@ class Session:
         logging.info(status)
         logging.debug('Time to detect errors: %.2f secs', detect_time)
 
-    def setup_quantization_dict(self, do_quantization, bin_number_dict):
-        self.do_quantization = do_quantization
-        self.ds.do_quantization = self.do_quantization
-        self.domain_engine.do_quantization = self.do_quantization
+    def setup_quantization_dict(self, bin_number_dict):
+        self.do_quantization = True
+        self.ds.do_quantization = True
+        self.domain_engine.do_quantization = True
 
         status, quantize_time, quantized_data = \
-            quantize_km(self.env, self.ds.get_raw_data(), bin_number_dict, self.ds.numerical_attrs)
+            quantize_km(self.env, self.ds.get_raw_data(), bin_number_dict)
 
         name = self.ds.raw_data.name + '_quantized'
         self.ds.quantized_data = Table(name, Source.DF, df=quantized_data)
