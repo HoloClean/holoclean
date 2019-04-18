@@ -5,7 +5,7 @@ from sklearn.cluster import KMeans
 from utils import NULL_REPR
 
 
-def quantize_km(env, df_raw, bin_number_dict, numerical_attrs):
+def quantize_km(env, df_raw, bin_number_dict):
     """
     Kmeans clustering using sklearn
     https://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html
@@ -13,15 +13,12 @@ def quantize_km(env, df_raw, bin_number_dict, numerical_attrs):
     :param df_raw: pandas.dataframe
     :param bin_number_dict: a dict existing requested number of bins for each numerical attrs,
     the numerical attrs not in this dict will not do quantization
-    :param numerical_attrs: str list, containing all numerical attrs in df_raw
     :return: pandas.dataframe after quantization
     """
     tic = time.time()
     df_quantized = df_raw.copy()
 
-    for col in numerical_attrs:
-        if col not in bin_number_dict:
-            continue
+    for col in bin_number_dict.keys():
         df_col = df_quantized.loc[df_quantized[col] != NULL_REPR, [col]].reset_index(drop=True)
         # Matrix of possibly n-dimension values
         X_col = np.array(list(map(lambda v: v.split(env['numerical_sep']), df_col[col].values)),
