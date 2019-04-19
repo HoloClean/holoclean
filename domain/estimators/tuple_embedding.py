@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch.optim import Adam
 from torch.utils.data import Dataset, DataLoader, Sampler
-from torch.nn import CrossEntropyLoss, Softmax, MSELoss
+from torch.nn import CrossEntropyLoss, Softmax, MSELoss, ReLU
 import torch.nn.functional as F
 from tqdm import tqdm
 
@@ -106,6 +106,14 @@ class LookupDataset(Dataset):
                 self._train_num_attrs)
 
         self._raw_data = self.ds.get_raw_data().copy()
+
+        # Mean-0 variance 1 normalize all numerical attributes in the context
+        for num_attr in self._init_num_attrs:
+            temp = np.array([np.array(v, dtype=np.float32)
+                for v in self._raw_data[num_attr].str.split(self.env['numerical_sep']).values])
+            temp = (temp - temp.mean(axis=0)) / temp.std(axis=0)
+            self._raw_data[num_attr] = [self.env['numerical_sep'].join(map(str, vals))
+                    for vals in temp]
 
         # Indexes assigned to attributes: first categorical then numerical.
         self._init_attr_idxs = {attr: idx for idx, attr in enumerate(self._init_cat_attrs + self._init_num_attrs)}
@@ -349,16 +357,17 @@ class LookupDataset(Dataset):
         if not self.memoize or idx not in self._init_numvals:
             cur = self._train_records[idx]
 
-            init_numvals = torch.zeros(self._n_init_num_attrs, self._max_num_dim)
+            init_numvals = torch.zeros(self._n_init_num_attrs, self._max_num_dim,
+                    dtype=torch.float32)
             init_nummask = torch.ones(self._n_init_num_attrs)
-            for idx, attr in enumerate(self._init_num_attrs):
+            for attr_idx, attr in enumerate(self._init_num_attrs):
                 val_str = self._raw_data_dict[cur['_tid_']][attr]
                 if attr == cur['attribute'] or val_str == NULL_REPR:
-                    init_nummask[idx] = 0.
+                    init_nummask[attr_idx] = 0.
                     continue
 
                 attr_dim = self._num_attr_dim[attr]
-                init_numvals[idx,:attr_dim] = torch.FloatTensor(np.float32(val_str.split(self.env['numerical_sep'])))
+                init_numvals[attr_idx,:attr_dim] = torch.FloatTensor(np.float32(val_str.split(self.env['numerical_sep'])))
 
             if not self.memoize:
                 return init_numvals, init_nummask
@@ -511,7 +520,7 @@ class LookupDataset(Dataset):
 
 class VidSampler(Sampler):
     def __init__(self, domain_df, shuffle=True, train_only_clean=True):
-        # No NULLs and non-zero domain
+        # No NULL targets
         domain_df = domain_df[domain_df['init_value'] != NULL_REPR]
 
         # Train on only clean cells
@@ -662,6 +671,11 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         #   will not be trained nor used.
         self.in_num_zero_vecs = torch.nn.Parameter(torch.zeros(self._n_init_num_attrs, self._embed_size))
         self.in_num_bases = torch.nn.Parameter(torch.zeros(self._n_init_num_attrs, self._embed_size, self._max_num_dim))
+
+        # Non-linearity for numerical init attrs
+        self.in_num_w1 = torch.nn.Parameter(torch.zeros(self._n_init_num_attrs, self._embed_size, self._embed_size))
+        self.in_num_bias1 = torch.nn.Parameter(torch.zeros(self._n_init_num_attrs, self._embed_size))
+
         self.out_num_zero_vecs = torch.nn.Parameter(torch.zeros(self._n_train_num_attrs, self._embed_size))
         self.out_num_bases = torch.nn.Parameter(torch.zeros(self._n_train_num_attrs, self._embed_size, self._max_num_dim))
 
@@ -689,6 +703,8 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         if self._n_init_num_attrs > 0:
             torch.nn.init.xavier_uniform_(self.in_num_zero_vecs)
             torch.nn.init.xavier_uniform_(self.in_num_bases)
+            torch.nn.init.xavier_uniform_(self.in_num_w1)
+            torch.nn.init.xavier_uniform_(self.in_num_bias1)
         if self._n_train_num_attrs > 0:
             torch.nn.init.xavier_uniform_(self.out_num_zero_vecs)
             torch.nn.init.xavier_uniform_(self.out_num_bases)
@@ -764,6 +780,15 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             # in_num_zero_vecs is shape (n_init_num_attrs, embed_size)
             # (batch, n_init_num_attrs, embed_size)
             init_num_vecs = in_num_bases.matmul(init_numvals).squeeze(-1) + self.in_num_zero_vecs.unsqueeze(0)
+
+            #### Add non-linearity to numerical attributes
+            # (batch, n_init_num_attrs, embed_size)
+            ReLU(inplace=True)(init_num_vecs)
+            # (batch, n_init_num_attrs, embed_size, embed_size)
+            in_num_w1 = self.in_num_w1.expand(init_numvals.shape[0], -1, -1, -1)
+            # (batch, n_init_num_attrs, embed_size)
+            init_num_vecs = init_num_vecs.unsqueeze(-2).matmul(in_num_w1).squeeze(-2) + self.in_num_bias1.unsqueeze(0)
+
             # (batch, n_init_num_attrs, embed_size)
             init_num_vecs.mul_(init_nummasks.unsqueeze(-1))
 
