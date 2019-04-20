@@ -591,6 +591,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         self._embed_size = self.env['estimator_embedding_size']
         train_attrs = self.env['train_attrs']
+        numerical_attr_groups = numerical_attr_groups or []
 
         # Check if train attributes exist
         if train_attrs is not None:
