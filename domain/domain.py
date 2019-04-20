@@ -47,6 +47,7 @@ class DomainEngine:
         'cell_domain', 'pos_values').
         """
         tic = time.time()
+
         self.compute_correlations()
         self.setup_attributes()
         self.domain_df = self.generate_domain()

@@ -13,12 +13,36 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from dataset import AuxTables
-from evaluate import EvalEngine
 from ..estimator import Estimator
 from utils import NULL_REPR
 
 def nonnumerics(env):
     return "[^0-9+-" + env['numerical_sep'] + "]"
+
+def verify_numerical_attr_groups(dataset, numerical_attr_groups):
+    """
+    Verify numerical attribute groups are disjoint and exist
+
+    Returns a list of the individual attributes.
+    """
+    numerical_attrs = None
+    # Check if numerical attributes exist and are disjoint
+    if numerical_attr_groups is not None:
+        numerical_attrs = [attr for group in numerical_attr_groups for attr in group]
+
+        if not all(attr in dataset.get_attributes() for attr in numerical_attrs):
+            logging.error('all numerical attributes specified %s must exist in dataset: %s',
+                    numerical_attr_groups,
+                    dataset.get_attributes())
+            sys.exit(1)
+
+        if len(set(numerical_attrs)) < len(numerical_attrs):
+            logging.error('all attribute groups specified %s must be disjoint in dataset',
+                    numerical_attr_groups)
+            sys.exit(1)
+
+    return numerical_attrs
+
 
 class LookupDataset(Dataset):
     # Memoizes vectors (e.g. init vector, domain vector, negative indexes)
@@ -51,14 +75,15 @@ class LookupDataset(Dataset):
                 self._isset[idx] = 1
 
     def __init__(self, env, dataset, domain_df,
-            numerical_attrs, neg_sample, memoize):
+            numerical_attr_groups, neg_sample, memoize):
         """
         :param dataset: (Dataset) original dataset
         :param domain_df: (DataFrame) dataframe containing VIDs and their
             domain values we want to train on. VIDs not included in this
             dataframe will not be trained on e.g. if you only want to
             sub-select VIDs of certain attributes.
-        :param numerical_attrs: (list[str]) attributes to treat as numerical.
+        :param numerical_attr_groups: (list[list[str]]) groups of attributes
+            to be treated as d-dimensional numerical values.
         :param neg_sample: (bool) add negative examples for clean cells during training
         :param memoize: (bool) memoize re-lookups on subsequent epochs.
         """
@@ -76,13 +101,9 @@ class LookupDataset(Dataset):
         # _cat_ refers to categorical attributes and _num_ refers to numerical
         # attributes.
         self._all_attrs = sorted(self.ds.get_attributes())
-        self._numerical_attrs = numerical_attrs or []
-        if not all(attr in self._all_attrs for attr in self._numerical_attrs):
-            logging.error('%s: numerical attributes %s must exist as a column in the data: %s',
-                    type(self).__name__,
-                    self._numerical_attrs,
-                    self._all_attrs)
-            sys.exit(1)
+        self._numerical_attrs = verify_numerical_attr_groups(self.ds,
+                numerical_attr_groups) or []
+
         # Attributes to derive context from
         self._init_cat_attrs, self._init_num_attrs = self._split_cat_num_attrs(self._all_attrs)
         self._n_init_cat_attrs, self._n_init_num_attrs = len(self._init_cat_attrs), len(self._init_num_attrs)
@@ -92,10 +113,10 @@ class LookupDataset(Dataset):
         logging.debug('%s: init numerical attributes: %s',
                 type(self).__name__,
                 self._init_num_attrs)
+
         # Attributes to train on (i.e. target columns).
         self._train_attrs = sorted(domain_df['attribute'].unique())
         assert all(attr in self._all_attrs for attr in self._train_attrs)
-
         self._train_cat_attrs, self._train_num_attrs = self._split_cat_num_attrs(self._train_attrs)
         self._n_train_cat_attrs, self._n_train_num_attrs = len(self._train_cat_attrs), len(self._train_num_attrs)
         logging.debug('%s: train categorical attributes: %s',
@@ -105,15 +126,21 @@ class LookupDataset(Dataset):
                 type(self).__name__,
                 self._train_num_attrs)
 
+        # Make copy of raw data
         self._raw_data = self.ds.get_raw_data().copy()
-
-        # Mean-0 variance 1 normalize all numerical attributes in the context
+        # Keep track of mean + std to un-normalize during prediction
+        self._num_attrs_mean = {}
+        self._num_attrs_std = {}
+        # Mean-0 variance 1 normalize all numerical attributes in the raw data
         for num_attr in self._init_num_attrs:
-            temp = np.array([np.array(v, dtype=np.float32)
-                for v in self._raw_data[num_attr].str.split(self.env['numerical_sep']).values])
-            temp = (temp - temp.mean(axis=0)) / temp.std(axis=0)
-            self._raw_data[num_attr] = [self.env['numerical_sep'].join(map(str, vals))
-                    for vals in temp]
+            temp = self._raw_data[num_attr].copy()
+            fil_notnull = temp != NULL_REPR
+            self._num_attrs_mean[num_attr] = temp[fil_notnull].astype(np.float).mean(axis=0)
+            self._num_attrs_std[num_attr] = temp[fil_notnull].astype(np.float).std(axis=0)
+            temp[fil_notnull] = ((temp[fil_notnull].astype(np.float) \
+                    - self._num_attrs_mean[num_attr]) \
+                    / self._num_attrs_std[num_attr]).astype(str)
+            self._raw_data[num_attr] = temp
 
         # Indexes assigned to attributes: first categorical then numerical.
         self._init_attr_idxs = {attr: idx for idx, attr in enumerate(self._init_cat_attrs + self._init_num_attrs)}
@@ -143,52 +170,14 @@ class LookupDataset(Dataset):
                 self._init_val_idxs[attr][row[attr]] = cur_init_idx
                 cur_init_idx += 1
 
-        # Number of dimensions for each numerical attribute
-        self._num_attr_dim = {}
-        for attr in self._init_num_attrs:
-            attr_col = self._raw_data[attr]
-            fil_notnull = attr_col != NULL_REPR
-            fil_notnumeric = attr_col.str.contains(nonnumerics(self.env))
-
-            notnull_attr_col = attr_col[fil_notnull]
-            attr_dims = notnull_attr_col.str.split(self.env['numerical_sep']).apply(len)
-
-            attr_dim = attr_dims.values[0]
-            if not (attr_dims == attr_dim).all():
-                logging.error('%s: values in attribute "%s" must be comma seprated with the same # of values (dimension) %d',
-                        type(self).__name__,
-                        attr,
-                        attr_dim)
-                sys.exit(1)
-
-            bad_numerics = fil_notnull & fil_notnumeric
-            if bad_numerics.sum():
-                # Replace any values with non-numerical values with NULL
-                self._raw_data.loc[fil_notnull & fil_notnumeric, attr] = NULL_REPR
-                logging.warning('%s: replaced %d non-numerical values in attribute "%s" in RAW DATA as "%s" (NULL)',
-                        type(self).__name__,
-                        bad_numerics.sum(),
-                        attr,
-                        NULL_REPR)
-
-            self._num_attr_dim[attr] = attr_dim
-
+        # Do the same for the train/target categorical values.
         cur_train_idx = 1
         for row in domain_df.to_records():
             val = row['init_value']
             attr = row['attribute']
 
-            # Handle numerical attributes differently
+            # We handle numerical attrs differently
             if attr in self._train_num_attrs:
-                # Check init value in domain dataframe has the right
-                # dimensions as the one detected in raw data
-                if len(val.split(self.env['numerical_sep'])) != self._num_attr_dim[attr]:
-                    logging.error('%s: value "%s" in domain for vid %d for attribute "%s" must have %d ,-separate values',
-                            type(self).__name__,
-                            val,
-                            row['_vid_'],
-                            attr,
-                            self._num_attr_dim[attr])
                 continue
 
             # Assign index for train/possible values
@@ -208,6 +197,18 @@ class LookupDataset(Dataset):
         self._train_val_idxs_by_attr = {attr: torch.LongTensor([v for v in self._train_val_idxs[attr].values() if v != 0])
                 for attr in self._train_cat_attrs}
 
+
+        # Maps each numerical attribute to a copy of its group (of other
+        # numerical attributes).
+        self._init_num_attrs_group = {attr: group.copy() for group in
+                numerical_attr_groups if attr in self._init_num_attrs}
+
+        # Map each numerical attribute (their index) to their respective index
+        # in the group.
+        self._train_num_attr_to_group_idx = {attr: group.index(attr)
+                for group in numerical_attr_groups
+                if attr in self._train_num_attrs}
+
         # Number of unique INIT attr-values
         self.n_init_vals = cur_init_idx
         self.n_train_vals = cur_train_idx
@@ -221,11 +222,7 @@ class LookupDataset(Dataset):
         # Maximum domain size
         self._max_domain = int(domain_df['domain_size'].max())
         # Maximum dimension across all numerical attributes.
-        self._max_num_dim = 0
-        self._total_num_dim = 0
-        if len(self._num_attr_dim):
-            self._max_num_dim = max(self._num_attr_dim.values())
-            self._total_num_dim = sum(self._num_attr_dim.values())
+        self._max_num_dim = max(list(map(len, numerical_attr_groups)) or [0])
 
         self._init_dummies()
         self._init_memoize_vecs()
@@ -248,9 +245,9 @@ class LookupDataset(Dataset):
         self._init_cat_idxs = self.MemoizeVec(len(self), torch.int64, self._n_init_cat_attrs)
         self._neg_idxs = self.MemoizeVec(len(self), None, None)
 
-        if self._total_num_dim > 0:
+        if self._max_num_dim > 0:
             self._target_numvals = self.MemoizeVec(len(self), torch.float32, self._max_num_dim)
-            self._init_numvals = self.MemoizeVec(len(self), torch.float32, self._n_init_num_attrs, self._max_num_dim)
+            self._init_numvals = self.MemoizeVec(len(self), torch.float32, self._n_init_num_attrs)
             self._init_nummask = self.MemoizeVec(len(self), torch.float32, self._n_init_num_attrs)
 
     def _split_cat_num_attrs(self, attrs):
@@ -302,11 +299,15 @@ class LookupDataset(Dataset):
 
             target_numvals = torch.zeros(self._max_num_dim, dtype=torch.float32)
 
-            # We can skip this if we are in inference mode and the current
-            # value is a nan value.
-            if not (self.inference_mode and cur['init_value'] == NULL_REPR):
-                target_numvals[:self._num_attr_dim[cur['attribute']]] = torch.FloatTensor(
-                        np.array(cur['init_value'].split(self.env['numerical_sep']), dtype=np.float32))
+            # Get the target values for this numerical group.
+            attr_group = self._init_num_attrs_group[cur['attribute']]
+            target_val_strs = [self._raw_data_dict[cur['_tid_']][attr]
+                    for attr in attr_group]
+
+            # We can skip this if we are in inference mode and any of the
+            # target/current values in the numerical group are NULL.
+            if not (self.inference_mode and any(val == NULL_REPR for val in target_val_strs)):
+                target_numvals[:len(attr_group)] = torch.FloatTensor(np.array(target_val_strs, dtype=np.float32))
 
             if not self.memoize:
                 return target_numvals
@@ -347,7 +348,7 @@ class LookupDataset(Dataset):
         attribute (i.e.  target) OR if the value is _nan_.
 
         Returns (
-            init_numvals: (n_init_num_attrs, max_num_dim),
+            init_numvals: (n_init_num_attrs),
             init_nummmask: (n_init_num_attrs),
             ).
         """
@@ -357,8 +358,7 @@ class LookupDataset(Dataset):
         if not self.memoize or idx not in self._init_numvals:
             cur = self._train_records[idx]
 
-            init_numvals = torch.zeros(self._n_init_num_attrs, self._max_num_dim,
-                    dtype=torch.float32)
+            init_numvals = torch.zeros(self._n_init_num_attrs, dtype=torch.float32)
             init_nummask = torch.ones(self._n_init_num_attrs)
             for attr_idx, attr in enumerate(self._init_num_attrs):
                 val_str = self._raw_data_dict[cur['_tid_']][attr]
@@ -366,8 +366,7 @@ class LookupDataset(Dataset):
                     init_nummask[attr_idx] = 0.
                     continue
 
-                attr_dim = self._num_attr_dim[attr]
-                init_numvals[attr_idx,:attr_dim] = torch.FloatTensor(np.float32(val_str.split(self.env['numerical_sep'])))
+                init_numvals[attr_idx] = float(val_str)
 
             if not self.memoize:
                 return init_numvals, init_nummask
@@ -425,7 +424,7 @@ class LookupDataset(Dataset):
             is_categorical: (1),
             attr_idx: (1),
             init_cat_idxs: (n_init_cat_attrs),
-            init_numvals: (n_init_num_attrs, max num dim),
+            init_numvals: (n_init_num_attrs),
             init_nummask: (n_init_num_attrs),
             domain_idxs (if categorical): (max domain),
             domain_mask (if categorical): (max domain),
@@ -503,7 +502,10 @@ class LookupDataset(Dataset):
                 '_init_num_attrs',
                 '_train_cat_attrs',
                 '_train_num_attrs',
-                '_num_attr_dim',
+                '_init_num_attrs_group',
+                '_train_num_attr_to_group_idx',
+                '_num_attrs_mean',
+                '_num_attrs_std',
                 '_n_init_cat_attrs',
                 '_n_init_num_attrs',
                 '_train_val_idxs_by_attr',
@@ -519,9 +521,23 @@ class LookupDataset(Dataset):
         self._init_memoize_vecs()
 
 class VidSampler(Sampler):
-    def __init__(self, domain_df, shuffle=True, train_only_clean=True):
+    def __init__(self, domain_df, raw_df, numerical_attr_groups,
+            shuffle=True, train_only_clean=True):
         # No NULL targets
         domain_df = domain_df[domain_df['init_value'] != NULL_REPR]
+
+        # No NULL numerical groups (all must be non-null)
+        if numerical_attr_groups:
+            raw_data_dict = raw_df.set_index('_tid_').to_dict('index')
+            def all_notnull(tid, attrs):
+                return all(raw_data_dict[tid][attr] != NULL_REPR for attr in attrs)
+            for attrs in numerical_attr_groups:
+                fil_notnull = domain_df['_tid_'].apply(all_notnull, args=(attrs,))
+                if sum(fil_notnull) < domain_df.shape[0]:
+                    logging.warning('dropping %d targets since values numerical group %s contain NULLs',
+                            domain_df.shape[0] - sum(fil_notnull),
+                            attrs)
+                domain_df = domain_df[fil_notnull]
 
         # Train on only clean cells
         if train_only_clean:
@@ -545,7 +561,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
     # TODO: replace numerical_attrs references with self.ds.numerical_attrs
     def __init__(self, env, dataset, domain_df,
-            numerical_attrs=None,
+            numerical_attr_groups=None,
             memoize=False,
             neg_sample=True,
             validate_fpath=None, validate_tid_col=None, validate_attr_col=None,
@@ -553,10 +569,13 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         """
         :param dataset: (Dataset) original dataset
         :param domain_df: (DataFrame) dataframe containing domain values
-        :param numerical_attrs: (list[list[str]]) attributes/columns to treat as numerical.
-            A list of column names. Each column must consist of d-separated
-            values (for d-dimensional columns). For example the column
-            2D column 'lat,long' must consist of all "123,456" values.
+        :param numerical_attr_groups: (list[list[str]]) attributes/columns to treat as numerical.
+            A list of groups of column names. Each group consists of d attributes
+            to be treated as d-dimensional numerical attribute.
+            For example one can pass in [['lat', 'lon'],...] to treat both columns as
+            a 2-d numerical attribute.
+
+            The groups must be disjoint.
 
             Everything else will be treated as categorical.
 
@@ -570,25 +589,15 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         torch.nn.Module.__init__(self)
         Estimator.__init__(self, env, dataset, domain_df)
 
-
         self._embed_size = self.env['estimator_embedding_size']
         train_attrs = self.env['train_attrs']
 
-        # Check is train attributes exist
+        # Check if train attributes exist
         if train_attrs is not None:
             if not all(attr in self.ds.get_attributes() for attr in train_attrs):
                 logging.error('%s: all attributes specified to use for training %s must exist in dataset: %s',
                         type(self).__name__,
                         train_attrs,
-                        self.ds.get_attributes())
-                sys.exit(1)
-
-        # Check is numerical attributes exist
-        if numerical_attrs is not None:
-            if not all(attr in self.ds.get_attributes() for attr in numerical_attrs):
-                logging.error('%s: all numerical attributes specified %s must exist in dataset: %s',
-                        type(self).__name__,
-                        numerical_attrs,
                         self.ds.get_attributes())
                 sys.exit(1)
 
@@ -601,6 +610,18 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                 filter_empty_domain.sum())
             self.domain_df = self.domain_df[~filter_empty_domain]
 
+
+        ### Numerical attribute groups validation checks
+
+        self._numerical_attr_groups = numerical_attr_groups.copy()
+        numerical_attrs = verify_numerical_attr_groups(self.ds, self._numerical_attr_groups)
+        # Verify numerical dimensions are not bigger than the embedding size
+        if  max(list(map(len, numerical_attr_groups)) or [0]) > self._embed_size:
+            logging.error("%s: maximum numeric value dimension %d must be <= embedding size %d",
+                    type(self).__name__,
+                    max(list(map(len, numerical_attr_groups)) or [0]),
+                    self._embed_size)
+            sys.exit(1)
         # Convert non numerical init values in numerical attributes with _nan_.
         if numerical_attrs is not None:
             fil_attr = self.domain_df['attribute'].isin(numerical_attrs)
@@ -628,14 +649,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         # Dataset
         self._dataset = LookupDataset(env, dataset, self.domain_df,
-                numerical_attrs, neg_sample, memoize)
-
-        if len(self._dataset._num_attr_dim) and max(self._dataset._num_attr_dim.values()) > self._embed_size:
-            logging.error("%s: maximum numeric value dimension %d must be <= embedding size %d",
-                    type(self).__name__,
-                    max(self._dataset._num_attr_dim.values()),
-                    self._embed_size)
-            sys.exit(1)
+                numerical_attr_groups, neg_sample, memoize)
 
         self._train_cat_attrs = self._dataset._train_cat_attrs
         self._train_num_attrs = self._dataset._train_num_attrs
@@ -660,30 +674,37 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         self.out_W = torch.nn.Parameter(torch.zeros(self._n_train_vals, self._embed_size))
         self.out_B = torch.nn.Parameter(torch.zeros(self._n_train_vals, 1))
 
-        # Bases vectors for numerical attributes and their spans.
+        ### Bases vectors for numerical attributes and their spans.
 
-        # We have a learnable 0 zero vector for every numerical attribute.
-        # We then have for each attribute of d dimension, d basis vectors where
-        # d <= embed_size.
-        #
-        # Note X_num_bases is a (# of attrs, max dimension, embed size) tensor:
-        #   if an attr has dimension < max dimension then the padded vectors
-        #   will not be trained nor used.
-        self.in_num_zero_vecs = torch.nn.Parameter(torch.zeros(self._n_init_num_attrs, self._embed_size))
-        self.in_num_bases = torch.nn.Parameter(torch.zeros(self._n_init_num_attrs, self._embed_size, self._max_num_dim))
+        # Mask to combine numerical bases to form a numerical group
+        self._n_num_attr_groups = len(self._numerical_attr_groups)
+        self.num_attr_groups_mask = torch.zeros(self._n_num_attr_groups,
+                self._n_init_num_attrs, dtype=torch.float32)
+        for group_idx, group in enumerate(self._numerical_attr_groups):
+            for attr in group:
+                attr_idx = self._dataset._init_attr_idxs[attr] - self._n_init_cat_attrs
+                self.num_attr_groups_mask[group_idx,attr_idx] = 1.
+        # For each numerical attribute we have a basis vector.
+        # For each numerical group we find the linear combination from the
+        # individual vectors.
+        # We also have a learnable zero vector for every numerical group.
+        self.in_num_bases = torch.nn.Parameter(torch.zeros(self._n_init_num_attrs, self._embed_size))
+        self.in_num_zero_vecs = torch.nn.Parameter(torch.zeros(self._n_num_attr_groups,
+            self._embed_size))
 
         # Non-linearity for numerical init attrs
-        self.in_num_w1 = torch.nn.Parameter(torch.zeros(self._n_init_num_attrs, self._embed_size, self._embed_size))
-        self.in_num_bias1 = torch.nn.Parameter(torch.zeros(self._n_init_num_attrs, self._embed_size))
+        self.in_num_w1 = torch.nn.Parameter(torch.zeros(self._n_num_attr_groups, self._embed_size, self._embed_size))
+        self.in_num_bias1 = torch.nn.Parameter(torch.zeros(self._n_num_attr_groups, self._embed_size))
 
         self.out_num_zero_vecs = torch.nn.Parameter(torch.zeros(self._n_train_num_attrs, self._embed_size))
         self.out_num_bases = torch.nn.Parameter(torch.zeros(self._n_train_num_attrs, self._embed_size, self._max_num_dim))
 
         # Mask for _num_forward to restrict which dimensions are active for each attribute.
         # Hadamard/elementwise multiply this mask.
-        self.out_num_masks = torch.zeros(self._n_train_num_attrs, self._max_num_dim, dtype=torch.float32)
+        self.out_num_masks = torch.zeros(self._n_train_num_attrs,
+                self._max_num_dim, dtype=torch.float32)
         for idx, attr in enumerate(self._dataset._train_num_attrs):
-            dim = self._dataset._num_attr_dim[attr]
+            dim = len(self._dataset._init_num_attrs_group[attr])
             self.out_num_masks[idx,:dim] = 1.
 
         # logits fed into softmax used in weighted sum to combine
@@ -693,7 +714,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # to predict for and there are init_attr weights since we have
         # init attrs to combine.
         self.attr_W = torch.nn.Parameter(torch.zeros(self._n_train_attrs,
-            self._n_init_attrs))
+            self._n_init_cat_attrs + self._n_num_attr_groups))
 
         # Initialize all but the first 0th vector embedding (reserved).
         torch.nn.init.xavier_uniform_(self.in_W[1:])
@@ -724,11 +745,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             and validate_tid_col is not None \
             and validate_attr_col is not None \
             and validate_val_col is not None:
-            # eengine = EvalEngine(self.env, self.ds)
-            # eengine.load_data(self.ds.raw_data.name + '_tuple_embedding_validate', validate_fpath,
-            #     tid_col=validate_tid_col,
-            #     attr_col=validate_attr_col,
-            #     val_col=validate_val_col)
             self._validate_df = pd.read_csv(validate_fpath, dtype=str)
             self._validate_df.rename({validate_tid_col: '_tid_',
                 validate_attr_col: '_attribute_',
@@ -760,9 +776,11 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         Constructs the "context vector" by combining the init embedding vectors.
 
         init_cat_idxs: (batch, n_init_cat_attrs)
-        init_numvals: (batch, n_init_num_attrs, max_num_dim)
+        init_numvals: (batch, n_init_num_attrs)
         init_nummasks: (batch, n_init_num_attrs)
         attr_idxs: (batch, 1)
+
+        out: (batch, embed_size, 1)
         """
         init_cat_vecs = torch.zeros(init_cat_idxs.shape[0], 0, self._embed_size)
         if self._n_init_cat_attrs:
@@ -771,36 +789,54 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         init_num_vecs = torch.zeros(init_numvals.shape[0], 0, self._embed_size)
         if self._n_init_num_attrs:
-            # (batch, n_init_num_attrs, max_num_dim, 1)
+            # (batch, n_init_num_attrs, 1)
             init_numvals = init_numvals.unsqueeze(-1)
-            # in_num_bases is shape (n_init_num_attrs, embed_size, max_num_dim)
-            # (batch, n_init_num_attrs, embed_size, max_num_dim)
-            in_num_bases = self.in_num_bases.expand(init_numvals.shape[0], -1, -1, -1)
-
-            # in_num_zero_vecs is shape (n_init_num_attrs, embed_size)
+            # self.in_num_bases is shape (n_init_num_attrs, embed_size)
             # (batch, n_init_num_attrs, embed_size)
-            init_num_vecs = in_num_bases.matmul(init_numvals).squeeze(-1) + self.in_num_zero_vecs.unsqueeze(0)
+            in_num_bases = self.in_num_bases.expand(init_numvals.shape[0], -1, -1)
+            # (batch, n_init_num_attrs, embed_size)
+            init_num_vecs = in_num_bases.mul(init_numvals)
+
+
+            # self.num_attr_groups_mask is shape (n_num_attr_groups, n_init_num_attrs)
+            # (batch, n_num_attr_groups, n_init_num_attrs)
+            groups_mask = self.num_attr_groups_mask.expand(init_numvals.shape[0],
+                    -1, -1)
+
+            # (batch, n_num_attr_groups, n_init_num_attrs, embed_size)
+            init_num_vecs = groups_mask.unsqueeze(-1) \
+                    * init_num_vecs.unsqueeze(1).expand(-1, self._n_num_attr_groups, -1, -1)
+            # (batch, n_num_attr_groups, embed_size)
+            init_num_vecs = init_num_vecs.sum(dim=2) + self.in_num_zero_vecs.unsqueeze(0)
+
 
             #### Add non-linearity to numerical attributes
-            # (batch, n_init_num_attrs, embed_size)
+            # (batch, n_num_attr_groups, embed_size)
             ReLU(inplace=True)(init_num_vecs)
-            # (batch, n_init_num_attrs, embed_size, embed_size)
+            # (batch, n_num_attr_groups, embed_size, embed_size)
             in_num_w1 = self.in_num_w1.expand(init_numvals.shape[0], -1, -1, -1)
-            # (batch, n_init_num_attrs, embed_size)
-            init_num_vecs = init_num_vecs.unsqueeze(-2).matmul(in_num_w1).squeeze(-2) + self.in_num_bias1.unsqueeze(0)
+            # (batch, n_num_attr_groups, embed_size)
+            init_num_vecs = init_num_vecs.unsqueeze(-2).matmul(in_num_w1).squeeze(-2) \
+                    + self.in_num_bias1.unsqueeze(0)
 
-            # (batch, n_init_num_attrs, embed_size)
-            init_num_vecs.mul_(init_nummasks.unsqueeze(-1))
 
-        # (batch, n_init_attrs, embed size)
+            # (batch, n_num_attr_groups, 1)
+            # If any of the init values are NULL in a group, zero it out
+            # (hence prod vs sum)
+            init_group_nummasks = (groups_mask * init_nummasks.unsqueeze(1)).prod(dim=-1, keepdim=True)
+
+            # (batch, n_num_attr_groups, embed_size)
+            init_num_vecs.mul_(init_group_nummasks)
+
+        # (batch, n_init_cat_attrs + n_num_attr_groups, embed size)
         init_vecs = torch.cat([init_cat_vecs, init_num_vecs], dim=1)
         # Scale vectors to unit norm ALONG the embedding dimension.
-        # (batch, n_init_attrs, embed size)
+        # (batch, n_init_cat_attrs + n_num_attr_groups, embed size)
         init_vecs = F.normalize(init_vecs, p=2, dim=2)
 
-        # (batch, 1, n_init_attrs)
+        # (batch, 1, n_init_cat_attrs + n_num_attr_groups)
         attr_logits = self.attr_W.index_select(0, attr_idxs.view(-1)).unsqueeze(1)
-        # (batch, 1, n_init_attrs)
+        # (batch, 1, n_init_cat_attrs + n_num_attr_groups)
         attr_weights = Softmax(dim=2)(attr_logits)
 
         # (batch, 1, embed size)
@@ -884,7 +920,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # (unique attrs, max_num_dim, embed size)
         pinverse_num_bases = torch.stack([self.out_num_bases[idx].pinverse() for idx in unique_num_attr_idxs])
         # We need to find which index each attr_idx corresponds to in
-        # dim = 0 of inverse_num_bases.
+        # dim = 0 of pinverse_num_bases.
         # e.g. given
         #     unique_num_attr_idxs = [2,5,1]
         #     num_attr_idxs = [[1,5,2,5,1]]
@@ -1007,7 +1043,9 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         """
 
         # Returns VIDs to train on.
-        sampler = VidSampler(self.domain_df, shuffle=shuffle, train_only_clean=train_only_clean)
+        sampler = VidSampler(self.domain_df, self.ds.get_raw_data(),
+                self._numerical_attr_groups,
+                shuffle=shuffle, train_only_clean=train_only_clean)
 
         logging.debug("%s: training (lambda = %f) on %d cells (%d cells in total) in:\n1) %d categorical columns: %s\n2) %d numerical columns: %s",
                       type(self).__name__,
@@ -1046,6 +1084,10 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                 if cat_targets.shape[0] > 0:
                     batch_loss += self._cat_loss(cat_preds, cat_targets)
                 if target_numvals.shape[0] > 0:
+                    # Note both numval_preds and target_numvals have 0-ed out
+                    # values if the sample's dimension is < max dim.
+                    # TODO: downweight samples that are part of a group of n attributes
+                    # by 1/n.
                     batch_loss += self._num_loss(numval_preds, target_numvals)
 
                 # Add the negative entropy of the attr_W to the cost: that is
@@ -1245,13 +1287,14 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         logging.debug('%s: running validation set...', type(self).__name__)
 
         # Construct DataFrame with inferred values
-        validation_preds = self.predict_pp_batch(self._validate_df)
+        validation_preds = list(self.predict_pp_batch(self._validate_df))
         df_pred = []
-        for vid, is_cat, preds in tqdm(list(validation_preds)):
+        for vid, is_cat, preds in tqdm(validation_preds):
             if is_cat:
                 inf_val, inf_prob = max(preds, key=lambda t: t[1])
             else:
-                inf_val, inf_prob = self.env['numerical_sep'].join(map(str, preds)), -1
+                # preds is just a float
+                inf_val, inf_prob = preds, -1
 
             df_pred.append({'_vid_': vid,
                 'is_cat': is_cat,
@@ -1307,12 +1350,12 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # Numerical filters and metrics
         rmse = 0
         if n_num:
-            X_cor = np.array(list(map(lambda v: v.split(self.env['numerical_sep']), df_res.loc[~fil_cat, '_value_'].values)),
-                             dtype=np.float32)
-            X_inferred = np.array(list(map(lambda v: v.split(self.env['numerical_sep']), df_res.loc[~fil_cat, 'inferred_val'].values)),
-                             dtype=np.float32)
+            X_cor = df_res.loc[~fil_cat, '_value_'].values.astype(np.float)
+            X_inferred = df_res.loc[~fil_cat, 'inferred_val'].values.astype(np.float)
 
-            rmse = np.sqrt(np.mean(np.sum((X_cor - X_inferred) ** 2, axis=1)))
+            assert X_cor.shape == X_inferred.shape
+
+            rmse = np.sqrt(np.mean((X_cor - X_inferred) ** 2))
 
 
         # Compile results
@@ -1352,7 +1395,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                 type(self).__name__, val_res['precision_dk'], val_res['repair_recall'])
 
         if val_res['n_num']:
-            logging.debug("RMSE: %3.f", type(self).__name__, val_res['rmse'])
+            logging.debug("%s: RMSE: %f", type(self).__name__, val_res['rmse'])
 
         return val_res
 
@@ -1386,6 +1429,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         pred_cat_idx = 0
         pred_num_idx = 0
+        train_idx_to_attr = {idx: attr for attr, idx in self._dataset._train_attr_idxs.items()}
 
         for idx, is_cat in enumerate(is_categorical.view(-1)):
             vid = int(vids[idx, 0])
@@ -1396,7 +1440,13 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                 continue
 
             # Real valued prediction
-            dim = self.out_num_masks[attr_idxs[idx,0] - self._n_train_cat_attrs].nonzero().max()
-            pred_num = pred_nums[pred_num_idx][:dim+1]
+            # dim = self.out_num_masks[attr_idxs[idx,0] - self._n_train_cat_attrs].nonzero().max()
+
+            # Find the z-score and map it back to its actual value
+            attr = train_idx_to_attr[int(attr_idxs[idx,0])]
+            group_idx = self._dataset._train_num_attr_to_group_idx[attr]
+            mean = self._dataset._num_attrs_mean[attr]
+            std = self._dataset._num_attrs_std[attr]
+            pred_num = float(pred_nums[pred_num_idx,group_idx]) * std + mean
             pred_num_idx += 1
-            yield vid, False, pred_num.detach().numpy()
+            yield vid, False, pred_num
