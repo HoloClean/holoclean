@@ -136,13 +136,7 @@ class Dataset:
             for attr in self.categorical_attrs:
                 df_correct_type.loc[df_correct_type[attr].isnull(), attr] = NULL_REPR
             for attr in self.numerical_attrs:
-                # Store n-dimensional values as arrays. Otherwise as floats.
-                vals = np.array(list(map(lambda v: v.split(self.env['numerical_sep']),
-                    df_correct_type[attr].values)), dtype=np.float32)
-                if vals.shape[1] == 1:
-                    df_correct_type[attr] = vals[:,0].tolist()
-                else:
-                    df_correct_type[attr] = vals.tolist()
+                df_correct_type[attr] =  df_correct_type[attr].astype(float)
 
             df_correct_type.to_sql(self.raw_data.name, self.engine.engine, if_exists='replace', index=False,
                                    index_label=None)

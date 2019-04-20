@@ -109,7 +109,7 @@ class EvalEngine:
         # attr is not None and is numerical
         # or attr is None(query on all attrs) and no categorical
         if attr is None or attr in self.ds.numerical_attrs:
-            eval_report_dict['rms'] = self.compute_rms(attr)
+            eval_report_dict['rms'] = self.compute_rms(attr) or 0.
 
         if attr is None or attr in self.ds.categorical_attrs:
             # if attr in self.ds.categorical_attrs or attr is None

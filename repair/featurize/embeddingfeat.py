@@ -32,6 +32,7 @@ class EmbeddingFeaturizer(Featurizer):
 
             epochs = self.addn_kwargs.get('epochs', self.DEFAULT_EPOCHS)
             batch_size = self.addn_kwargs.get('epochs', self.DEFAULT_BATCH_SIZE)
+            numerical_attr_groups = self.addn_kwargs.get('numerical_attr_groups', None)
 
             logging.debug('%s: training with %d epochs and %d batch size',
                           self.name,
@@ -39,7 +40,8 @@ class EmbeddingFeaturizer(Featurizer):
                           batch_size)
 
             domain_df = self.ds.aux_table[AuxTables.cell_domain].df.sort_values('_vid_')
-            self.embedding_model = TupleEmbedding(self.env, self.ds, domain_df)
+            self.embedding_model = TupleEmbedding(self.env, self.ds, domain_df,
+                    numerical_attr_groups=numerical_attr_groups)
 
             dump_prefix = self.addn_kwargs.get('dump_prefix', None)
             if dump_prefix is None \
