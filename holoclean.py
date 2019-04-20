@@ -345,28 +345,27 @@ class Session:
         logging.info(status)
         logging.debug('Time to detect errors: %.2f secs', detect_time)
 
-    def setup_quantization_dict(self, bin_number_dict):
+    def quantize_numericals(self, num_attr_groups_bins):
+        """
+        :param num_attr_groups_bins: list[tuple] where each tuple consists of
+        (# of bins, list[str]) where the list[str] is a group of attribues to be
+        treated as numerical.
+        """
         self.do_quantization = True
         self.ds.do_quantization = True
         self.domain_engine.do_quantization = True
 
         status, quantize_time, quantized_data = \
-            quantize_km(self.env, self.ds.get_raw_data(), bin_number_dict)
+            quantize_km(self.env, self.ds.get_raw_data(), num_attr_groups_bins)
 
         name = self.ds.raw_data.name + '_quantized'
         self.ds.quantized_data = Table(name, Source.DF, df=quantized_data)
 
-        # Do similar thing to store the correct type into db
+        # Re-store to DB, ensuring numerical values are stored as floats.
         df_correct_type = quantized_data.copy()
         for attr in self.ds.numerical_attrs:
             df_correct_type.loc[df_correct_type[attr] == NULL_REPR, attr] = np.nan
-            # Store n-dimensional values as arrays. Otherwise as floats.
-            vals = np.array(list(map(lambda v: v.split(self.env['numerical_sep']),
-                df_correct_type[attr].values)), dtype=np.float32)
-            if vals.shape[1] == 1:
-                df_correct_type[attr] = vals[:,0].tolist()
-            else:
-                df_correct_type[attr] = vals.tolist()
+            df_correct_type[attr] = df_correct_type[attr].astype(float)
         df_correct_type.to_sql(name, self.ds.engine.engine, if_exists='replace', index=False,
                                index_label=None)
 
