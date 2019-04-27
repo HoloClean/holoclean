@@ -1,0 +1,27 @@
+language: python
+python:
+  - "2.7"
+  - "3.6"
+
+addons:
+  postgresql: "9.4"
+
+git:
+  quiet: true
+  depth: false
+
+install:
+  - travis_wait pip --no-cache-dir install -r requirements.txt
+  # The following command is required only when running on travis.
+  - pip install google-compute-engine
+
+before_script:
+  - psql -U postgres -c 'create database holo;'
+  - psql -U postgres -c 'CREATE USER holocleanuser;'
+  - psql -U postgres -c "ALTER USER holocleanuser WITH PASSWORD 'abcd1234';"
+  - psql -U postgres -c 'ALTER USER holocleanuser WITH SUPERUSER;'
+  - psql -U postgres -c 'GRANT ALL PRIVILEGES ON DATABASE holo TO holocleanuser;'
+  - psql -U postgres -d holo -c 'ALTER SCHEMA public OWNER TO holocleanuser;'
+
+script:
+  - cd tests && ./start_test.sh

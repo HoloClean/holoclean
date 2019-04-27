@@ -1,10 +1,12 @@
 import logging
 import math
+
 import torch
-from torch.nn import Parameter
-from torch.autograd import Variable
 from torch import optim
+from torch.autograd import Variable
+from torch.nn import Parameter, ParameterList
 from torch.nn.functional import softmax
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 import numpy as np
 
@@ -15,37 +17,57 @@ class TiedLinear(torch.nn.Module):
     (output) classes that takes as input a tensor X with dimensions
         (batch size) X (output_dim) X (in_features)
         where:
-            output_dim is the disired output dimension/# of classes
+            output_dim is the desired output dimension/# of classes
             in_features are the features with shared weights across the classes
     """
 
-    def __init__(self, in_features, output_dim, bias=False):
+    def __init__(self, env, feat_info, output_dim, bias=False):
         super(TiedLinear, self).__init__()
-        self.in_features = in_features
-        self.output_dim = output_dim
-        self.weight = Parameter(torch.Tensor(1,in_features))
+        self.env = env
+        # Init parameters
+        self.in_features = 0.0
+        self.weight_list = ParameterList()
         if bias:
-            self.bias = Parameter(torch.Tensor(1,in_features))
+             self.bias_list = ParameterList()
         else:
-            self.register_parameter('bias', None)
-        self.reset_parameters()
-        # Broadcast parameters to the correct matrix dimensions for matrix
-        # multiplication: this does NOT create new parameters: i.e. each
-        # row of in_features of parameters are connected and will adjust
-        # to the same values.
-        self.W = self.weight.expand(output_dim, -1)
-        if self.bias is not None:
-            self.B = self.bias.expand(output_dim, -1)
+             self.register_parameter('bias', None)
+        self.output_dim = output_dim
+        self.bias_flag = bias
+        # Iterate over featurizer info list
+        for feat_entry in feat_info:
+            learnable = feat_entry.learnable
+            feat_size = feat_entry.size
+            init_weight = feat_entry.init_weight
+            self.in_features += feat_size
+            feat_weight = Parameter(init_weight*torch.ones(1, feat_size), requires_grad=learnable)
+            if learnable:
+                self.reset_parameters(feat_weight)
+            self.weight_list.append(feat_weight)
+            if bias:
+                feat_bias = Parameter(torch.zeros(1, feat_size), requires_grad=learnable)
+                if learnable:
+                    self.reset_parameters(feat_bias)
+                self.bias_list.append(feat_bias)
 
-    def reset_parameters(self):
-        stdv = 1. / math.sqrt(self.weight.size(0))
-        self.weight.data.uniform_(-stdv, stdv)
-        if self.bias is not None:
-            self.bias.data.uniform_(-stdv, stdv)
+    def reset_parameters(self, tensor):
+        stdv = 1. / math.sqrt(tensor.size(0))
+        tensor.data.uniform_(-stdv, stdv)
+
+    def concat_weights(self):
+        self.W = torch.cat([t for t in self.weight_list],-1)
+        # Normalize weights.
+        if self.env['weight_norm']:
+            self.W = self.W.div(self.W.norm(p=2))
+        # expand so we can do matrix multiplication with each cell and their max # of domain values
+        self.W = self.W.expand(self.output_dim, -1)
+        if self.bias_flag:
+            self.B = torch.cat([t.expand(self.output_dim, -1) for t in self.bias_list],-1)
 
     def forward(self, X, index, mask):
+        # Concatenates different featurizer weights - need to call during every pass.
+        self.concat_weights()
         output = X.mul(self.W)
-        if self.bias is not None:
+        if self.bias_flag:
             output += self.B
         output = output.sum(2)
         # Add our mask so that invalid domain classes for a given variable/VID
@@ -57,21 +79,27 @@ class TiedLinear(torch.nn.Module):
 
 class RepairModel:
 
-    def __init__(self, env, in_features, output_dim, bias=False):
+    def __init__(self, env, feat_info, output_dim, bias=False):
         self.env = env
-        torch.manual_seed(self.env['seed'])
-        self.in_features = in_features
+        # A list of tuples (name, is_featurizer_learnable, featurizer_output_size, init_weight, feature_names (list))
+        self.feat_info = feat_info
         self.output_dim = output_dim
-        self.model = TiedLinear(in_features, output_dim, bias)
+        self.model = TiedLinear(self.env, feat_info, output_dim, bias)
+        self.featurizer_weights = {}
 
     def fit_model(self, X_train, Y_train, mask_train):
         n_examples, n_classes, n_features = X_train.shape
+
         loss = torch.nn.CrossEntropyLoss()
+        trainable_parameters = filter(lambda p: p.requires_grad, self.model.parameters())
         if self.env['optimizer'] == 'sgd':
-            optimizer = optim.SGD(self.model.parameters(), lr=self.env['learning_rate'], momentum=self.env['momentum'],
+            optimizer = optim.SGD(trainable_parameters, lr=self.env['learning_rate'], momentum=self.env['momentum'],
                                   weight_decay=self.env['weight_decay'])
         else:
-            optimizer = optim.Adam(self.model.parameters(), weight_decay=self.env['weight_decay'])
+            optimizer = optim.Adam(trainable_parameters, lr=self.env['learning_rate'], weight_decay=self.env['weight_decay'])
+
+        # lr_sched = ReduceLROnPlateau(optimizer, 'min', verbose=True, eps=1e-5, patience=5)
+
         batch_size = self.env['batch_size']
         epochs = self.env['epochs']
         for i in tqdm(range(epochs)):
@@ -79,8 +107,13 @@ class RepairModel:
             num_batches = n_examples // batch_size
             for k in range(num_batches):
                 start, end = k * batch_size, (k + 1) * batch_size
-                cost += self.__train__(loss, optimizer, X_train[start:end], Y_train[start:end],
-                                   mask_train[start:end])
+                cost += self.__train__(loss, optimizer, X_train[start:end], Y_train[start:end], mask_train[start:end])
+
+            # Y_pred = self.__predict__(X_train, mask_train)
+            # train_loss = loss.forward(Y_pred, Variable(Y_train, requires_grad=False).squeeze(1))
+            # logging.debug('overall training loss: %f', train_loss)
+            # lr_sched.step(train_loss)
+
             if self.env['verbose']:
                 # Compute and print accuracy at the end of epoch
                 grdt = Y_train.numpy().flatten()
@@ -90,7 +123,9 @@ class RepairModel:
                         i + 1, cost / num_batches,
                         100. * np.mean(Y_assign == grdt))
 
+
     def infer_values(self, X_pred, mask_pred):
+        logging.info('inferring on %d examples (cells)', X_pred.shape[0])
         output = self.__predict__(X_pred, mask_pred)
         return output
 
@@ -127,3 +162,30 @@ class RepairModel:
         output = softmax(fx, 1)
         return output
 
+    def get_featurizer_weights(self, feat_info):
+        report = ""
+        for i, f in enumerate(feat_info):
+            this_weight = self.model.weight_list[i].data.numpy()[0]
+            weight_str = "\n".join("{name} {weight}".format(name=name, weight=weight)
+                                   for name, weight in
+                                   zip(f.feature_names, map(str, np.around(this_weight, 3))))
+            feat_name = f.name
+            feat_size = f.size
+            max_w = max(this_weight)
+            min_w = min(this_weight)
+            mean_w = float(np.mean(this_weight))
+            abs_mean_w = float(np.mean(np.absolute(this_weight)))
+            # Create report
+            report += "featurizer %s,size %d,max %.4f,min %.4f,avg %.4f,abs_avg %.4f,weights:\n%s\n" % (
+                feat_name, feat_size, max_w, min_w, mean_w, abs_mean_w, weight_str
+            )
+            # Wrap in a dictionary.
+            self.featurizer_weights[feat_name] = {
+                'max': max_w,
+                'min': min_w,
+                'avg': mean_w,
+                'abs_avg': abs_mean_w,
+                'weights': this_weight,
+                'size': feat_size
+            }
+        return report

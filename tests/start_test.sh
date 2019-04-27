@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Set & move to home directory
+
+# Set required environment variables.
 source ../set_env.sh
 
-# Launch test.
-echo "Launching test..."
-python test_holoclean.py
+# Launch tests.
+echo "Launching tests..."
+pytest -n 1
