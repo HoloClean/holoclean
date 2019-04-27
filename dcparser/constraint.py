@@ -10,6 +10,19 @@ def is_symmetric(operation):
     return False
 
 
+def get_flip_operation(operation):
+    if operation == '<=':
+        return '>='
+    elif operation == '>=':
+        return '<='
+    elif operation == '<':
+        return '>'
+    elif operation == '>':
+        return '<'
+    else:
+        return operation
+
+
 def contains_operation(string):
     """
     Method to check if a given string contains one of the operation signs.
