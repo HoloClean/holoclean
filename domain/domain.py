@@ -254,7 +254,11 @@ class DomainEngine:
                     # Initial  value is NULL and we cannot come up with
                     # a domain; a random domain probably won't help us so
                     # completely ignore this cell and continue.
-                    if init_value == NULL_REPR:
+                    # Note if len(dom) == 1, then we generated a single correct
+                    # value (since NULL is not included in the domain).
+                    # This would be a "SINGLE_VALUE" example and we'd still
+                    # like to generate a random domain for it.
+                    if init_value == NULL_REPR and len(dom) == 0:
                         continue
 
                     # Not enough domain values, we need to get some random
