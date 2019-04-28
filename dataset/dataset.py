@@ -77,7 +77,7 @@ class Dataset:
 
     # TODO(richardwu): load more than just CSV files
     def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None,
-                  exclude_attr_cols=None, numerical_attrs=None):
+                  exclude_attr_cols=None, numerical_attrs=None, store_to_db=True):
         """
         load_data takes a CSV file of the initial data, adds tuple IDs (_tid_)
         to each row to uniquely identify an 'entity', and generates unique
@@ -128,32 +128,35 @@ class Dataset:
             all_attrs = self.raw_data.get_attributes()
             self.categorical_attrs = [attr for attr in all_attrs if attr not in self.numerical_attrs]
 
-            # Now df is all in str type, make a copy of df and then
-            # 1. replace the null values in categorical data
-            # 2. make the numerical attrs as float
-            # 3. store the correct type into db (categorical->str, numerical->float)
-            df_correct_type = df.copy()
-            for attr in self.categorical_attrs:
-                df_correct_type.loc[df_correct_type[attr].isnull(), attr] = NULL_REPR
-            for attr in self.numerical_attrs:
-                df_correct_type[attr] =  df_correct_type[attr].astype(float)
+            if store_to_db:
+                # Now df is all in str type, make a copy of df and then
+                # 1. replace the null values in categorical data
+                # 2. make the numerical attrs as float
+                # 3. store the correct type into db (categorical->str, numerical->float)
+                df_correct_type = df.copy()
+                for attr in self.categorical_attrs:
+                    df_correct_type.loc[df_correct_type[attr].isnull(), attr] = NULL_REPR
+                for attr in self.numerical_attrs:
+                    df_correct_type[attr] =  df_correct_type[attr].astype(float)
 
-            df_correct_type.to_sql(self.raw_data.name, self.engine.engine, if_exists='replace', index=False,
-                                   index_label=None)
+                df_correct_type.to_sql(self.raw_data.name, self.engine.engine, if_exists='replace', index=False,
+                                       index_label=None)
 
             # for df, which is all str
             # Use NULL_REPR to represent NULL values
             df.fillna(NULL_REPR, inplace=True)
+
             logging.info("Loaded %d rows with %d cells", self.raw_data.df.shape[0],
                          self.raw_data.df.shape[0] * self.raw_data.df.shape[1])
 
             # Call to store to database
             status = 'DONE Loading {fname}'.format(fname=os.path.basename(fpath))
 
-            # Generate indexes on attribute columns for faster queries
-            for attr in self.raw_data.get_attributes():
-                # Generate index on attribute
-                self.raw_data.create_db_index(self.engine,[attr])
+            if store_to_db:
+                # Generate indexes on attribute columns for faster queries
+                for attr in self.raw_data.get_attributes():
+                    # Generate index on attribute
+                    self.raw_data.create_db_index(self.engine,[attr])
 
             # Create attr_to_idx dictionary (assign unique index for each attribute)
             # and attr_count (total # of attributes)

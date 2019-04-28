@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import torch
 from torch.optim import Adam
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import Dataset, DataLoader, Sampler
 from torch.nn import CrossEntropyLoss, Softmax, MSELoss, ReLU
 import torch.nn.functional as F
@@ -103,6 +104,7 @@ class LookupDataset(Dataset):
         self._all_attrs = sorted(self.ds.get_attributes())
         self._numerical_attrs = verify_numerical_attr_groups(self.ds,
                 numerical_attr_groups) or []
+        self._numerical_attr_groups = numerical_attr_groups
 
         # Attributes to derive context from
         self._init_cat_attrs, self._init_num_attrs = self._split_cat_num_attrs(self._all_attrs)
@@ -200,13 +202,8 @@ class LookupDataset(Dataset):
 
         # Maps each numerical attribute to a copy of its group (of other
         # numerical attributes).
-        self._init_num_attrs_group = {attr: group.copy() for group in
-                numerical_attr_groups if attr in self._init_num_attrs}
-
-        # Map each numerical attribute (their index) to their respective index
-        # in the group.
-        self._train_num_attr_to_group_idx = {attr: group.index(attr)
-                for group in numerical_attr_groups
+        self._train_num_attrs_group = {attr: group.copy() for group in
+                self._numerical_attr_groups for attr in group
                 if attr in self._train_num_attrs}
 
         # Number of unique INIT attr-values
@@ -222,7 +219,7 @@ class LookupDataset(Dataset):
         # Maximum domain size
         self._max_domain = int(domain_df['domain_size'].max())
         # Maximum dimension across all numerical attributes.
-        self._max_num_dim = max(list(map(len, numerical_attr_groups)) or [0])
+        self._max_num_dim = max(list(map(len, self._numerical_attr_groups)) or [0])
 
         self._init_dummies()
         self._init_memoize_vecs()
@@ -300,7 +297,7 @@ class LookupDataset(Dataset):
             target_numvals = torch.zeros(self._max_num_dim, dtype=torch.float32)
 
             # Get the target values for this numerical group.
-            attr_group = self._init_num_attrs_group[cur['attribute']]
+            attr_group = self._train_num_attrs_group[cur['attribute']]
             target_val_strs = [self._raw_data_dict[cur['_tid_']][attr]
                     for attr in attr_group]
 
@@ -502,8 +499,8 @@ class LookupDataset(Dataset):
                 '_init_num_attrs',
                 '_train_cat_attrs',
                 '_train_num_attrs',
-                '_init_num_attrs_group',
-                '_train_num_attr_to_group_idx',
+                '_train_num_attrs_group',
+                '_numerical_attr_groups',
                 '_num_attrs_mean',
                 '_num_attrs_std',
                 '_n_init_cat_attrs',
@@ -564,8 +561,9 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             numerical_attr_groups=None,
             memoize=False,
             neg_sample=True,
+            learning_rate=0.05,
             validate_fpath=None, validate_tid_col=None, validate_attr_col=None,
-            validate_val_col=None):
+            validate_val_col=None, validate_epoch=None):
         """
         :param dataset: (Dataset) original dataset
         :param domain_df: (DataFrame) dataframe containing domain values
@@ -689,7 +687,8 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # For each numerical group we find the linear combination from the
         # individual vectors.
         # We also have a learnable zero vector for every numerical group.
-        self.in_num_bases = torch.nn.Parameter(torch.zeros(self._n_init_num_attrs, self._embed_size))
+        self.in_num_bases = torch.nn.Parameter(torch.zeros(self._n_init_num_attrs,
+            self._embed_size))
         self.in_num_zero_vecs = torch.nn.Parameter(torch.zeros(self._n_num_attr_groups,
             self._embed_size))
 
@@ -705,7 +704,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         self.out_num_masks = torch.zeros(self._n_train_num_attrs,
                 self._max_num_dim, dtype=torch.float32)
         for idx, attr in enumerate(self._dataset._train_num_attrs):
-            dim = len(self._dataset._init_num_attrs_group[attr])
+            dim = len(self._dataset._train_num_attrs_group[attr])
             self.out_num_masks[idx,:dim] = 1.
 
         # logits fed into softmax used in weighted sum to combine
@@ -737,8 +736,8 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # TODO: we use MSE loss for all numerical attributes for now.
         # Allow user to pass in their desired loss.
         self._num_loss = MSELoss(reduction='mean')
-        self._optimizer = Adam(self.parameters(), lr=self.env['learning_rate'], weight_decay=self.WEIGHT_DECAY)
-
+        self._optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=self.WEIGHT_DECAY)
+        self._scheduler = ReduceLROnPlateau(self._optimizer, 'max', patience=2, verbose=True)
 
         # Validation stuff
         self._do_validation = False
@@ -753,8 +752,11 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                 }, axis=1, inplace=True)
             self._validate_df['_tid_'] = self._validate_df['_tid_'].astype(int)
             self._validate_df['_value_'] = self._validate_df['_value_'].str.strip().str.lower()
+            # Merge left so we can still get # of repairs for cells without
+            # ground truth.
             self._validate_df = self.domain_df.merge(self._validate_df, how='left',
                     left_on=['_tid_', 'attribute'], right_on=['_tid_', '_attribute_'])
+            self._validate_df['_value_'].fillna(NULL_REPR, inplace=True)
 
             # Raise error if validation set has non-numerical values for numerical attrs
             if numerical_attrs is not None:
@@ -769,7 +771,17 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                         numerical_attrs)
                     sys.exit(1)
 
+            # Log how many cells are actually repairable based on domain generated.
+            # Cells without ground truth are "not repairable".
+            fil_repairable = self._validate_df.apply(lambda row: not row['_value_'] == NULL_REPR and \
+                    any(v in row['domain'].split('|||') for v in row['_value_'].split('|')), axis=1)
+            logging.debug("%s: max repairs possible (# cells ground truth in domain): (DK) %d, (all): %d",
+                        type(self).__name__,
+                        (fil_repairable & ~self._validate_df['is_clean']).sum(),
+                        fil_repairable.sum())
+
             self._validate_df = self._validate_df[['_vid_', 'init_value', '_value_', 'is_clean']]
+            self._validate_epoch = validate_epoch or 1
             self._do_validation = True
 
     def _get_combined_init_vec(self, init_cat_idxs, init_numvals, init_nummasks, attr_idxs):
@@ -822,9 +834,12 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
 
             # (batch, n_num_attr_groups, 1)
-            # If any of the init values are NULL in a group, zero it out
-            # (hence prod vs sum)
-            init_group_nummasks = (groups_mask * init_nummasks.unsqueeze(1)).prod(dim=-1, keepdim=True)
+            # If any of the init values are NULL in a group, zero it out.
+            # We do this by multiplying through the groups mask with each
+            # individual numeric attribute's mask and comparing
+            # how many numerical attributes got dropped per group.
+            init_group_nummasks = (groups_mask.sum(dim=-1, keepdim=True) \
+                    == (groups_mask * init_nummasks.unsqueeze(1)).sum(dim=-1, keepdim=True)).type(torch.FloatTensor)
 
             # (batch, n_num_attr_groups, embed_size)
             init_num_vecs.mul_(init_group_nummasks)
@@ -1118,6 +1133,10 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                     type(self).__name__,
                     sum(batch_losses[-1 * batch_cnt:]) / batch_cnt)
 
+            if self._do_validation and epoch_idx % self._validate_epoch == 0:
+                res = self.validate()
+                self._scheduler.step(res['precision_dk'])
+
         return batch_losses
 
     def _get_dataset_vecs(self, vids):
@@ -1252,9 +1271,13 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             self._dataset.load_state(pickle.load(f))
         return True
 
-    def dump_predictions(self, prefix):
+    def dump_predictions(self, prefix, include_probas=False):
         """
-        Dump inference results to ":param:`prefix`_predictions.pkl".
+        Dump inference results to ":param:`prefix`_predictions.pkl" (if not None).
+        Returns the dataframe of results.
+
+        include_probas = True will include all domain values and their prediction
+        probabilities for categorical attributes.
         """
         preds = self.predict_pp_batch()
 
@@ -1262,27 +1285,38 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                       type(self).__name__)
         results = []
         for ((vid, is_cat, pred), row) in zip(preds, self.domain_recs):
-           assert vid == row['_vid_']
-           if is_cat:
-               max_val, max_proba = max(pred, key=lambda t: t[1])
-               results.append({'tid': row['_tid_'],
-                   'vid': vid,
-                   'attribute': row['attribute'],
-                   'inferred_val': max_val,
-                   'proba': max_proba})
-           else:
-               num_pred = self.env['numerical_sep'].join(map(str, pred))
-               results.append({'tid': row['_tid_'],
-                   'vid': vid,
-                   'attribute': row['attribute'],
-                   'inferred_val': num_pred,
-                   'proba': -1})
+            assert vid == row['_vid_']
+            if is_cat:
+                # Include every domain value and their predicted probabilities
+                if include_probas:
+                    for val, proba in pred:
+                        results.append({'tid': row['_tid_'],
+                            'vid': vid,
+                            'attribute': row['attribute'],
+                            'inferred_val': val,
+                            'proba': proba})
+                else:
+                    max_val, max_proba = max(pred, key=lambda t: t[1])
+                    results.append({'tid': row['_tid_'],
+                        'vid': vid,
+                        'attribute': row['attribute'],
+                        'inferred_val': max_val,
+                        'proba': max_proba})
+            else:
+                num_pred = self.env['numerical_sep'].join(map(str, pred))
+                results.append({'tid': row['_tid_'],
+                    'vid': vid,
+                    'attribute': row['attribute'],
+                    'inferred_val': num_pred,
+                    'proba': -1})
 
         results = pd.DataFrame(results)
 
-        fpath = '{}_predictions.pkl'.format(prefix)
-        logging.debug('%s: dumping predictions to %s', type(self).__name__, fpath)
-        results.to_pickle(fpath)
+        if prefix is not None:
+            fpath = '{}_predictions.pkl'.format(prefix)
+            logging.debug('%s: dumping predictions to %s', type(self).__name__, fpath)
+            results.to_pickle(fpath)
+        return results
 
     def validate(self):
         logging.debug('%s: running validation set...', type(self).__name__)
@@ -1308,7 +1342,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # General filters and metrics
         fil_dk = ~df_res['is_clean']
         fil_cat = df_res['is_cat']
-        fil_grdth = df_res['_value_'].notnull()
+        fil_grdth = df_res['_value_'] != NULL_REPR
 
         if (~fil_grdth).sum():
             logging.debug('%s: there are %d cells with no validation ground truth',
@@ -1321,9 +1355,12 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         n_cat_dk = (fil_dk & fil_cat).sum()
         n_num_dk = (fil_dk & ~fil_cat).sum()
 
+        ### Handle multiple correct values by splitting on '|'
         # Categorical filters and metrics
-        fil_err = (df_res['init_value'] != df_res['_value_']) & fil_cat & fil_grdth
-        fil_cor = (df_res['inferred_val'] == df_res['_value_']) & fil_cat & fil_grdth
+        fil_err = df_res.apply(lambda row: row['_value_'] != NULL_REPR and \
+                row['init_value'] not in row['_value_'].split('|'), axis=1) & fil_cat & fil_grdth
+        fil_cor = df_res.apply(lambda row: row['_value_'] != NULL_REPR and \
+                row['inferred_val'] in row['_value_'].split('|'), axis=1) & fil_cat & fil_grdth
         fil_repair = (df_res['init_value'] != df_res['inferred_val']) & fil_cat
 
         total_err = fil_err.sum()
@@ -1445,7 +1482,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
             # Find the z-score and map it back to its actual value
             attr = train_idx_to_attr[int(attr_idxs[idx,0])]
-            group_idx = self._dataset._train_num_attr_to_group_idx[attr]
+            group_idx = self._dataset._train_num_attrs_group[attr].index(attr)
             mean = self._dataset._num_attrs_mean[attr]
             std = self._dataset._num_attrs_std[attr]
             pred_num = float(pred_nums[pred_num_idx,group_idx]) * std + mean

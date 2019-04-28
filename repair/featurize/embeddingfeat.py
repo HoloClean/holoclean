@@ -4,6 +4,7 @@ import pandas as pd
 import sys
 
 import torch
+from torch.nn import Softmax
 
 from .featurizer import Featurizer
 from dataset import AuxTables
@@ -22,6 +23,7 @@ class EmbeddingFeaturizer(Featurizer):
     """
     DEFAULT_EPOCHS = 10
     DEFAULT_BATCH_SIZE = 32
+    DEFAULT_LR = 0.05
 
     def specific_setup(self):
         self.name = 'EmbeddingFeaturizer'
@@ -32,7 +34,13 @@ class EmbeddingFeaturizer(Featurizer):
 
             epochs = self.addn_kwargs.get('epochs', self.DEFAULT_EPOCHS)
             batch_size = self.addn_kwargs.get('epochs', self.DEFAULT_BATCH_SIZE)
+            learning_rate = self.addn_kwargs.get('learning_rate', self.DEFAULT_LR)
             numerical_attr_groups = self.addn_kwargs.get('numerical_attr_groups', None)
+            validate_fpath = self.addn_kwargs.get('validate_fpath', None)
+            validate_tid_col = self.addn_kwargs.get('validate_tid_col', 'tid')
+            validate_attr_col = self.addn_kwargs.get('validate_attr_col', 'attribute')
+            validate_val_col = self.addn_kwargs.get('validate_val_col', 'correct_val')
+            validate_epoch = self.addn_kwargs.get('validate_epoch', 1)
 
             logging.debug('%s: training with %d epochs and %d batch size',
                           self.name,
@@ -41,7 +49,13 @@ class EmbeddingFeaturizer(Featurizer):
 
             domain_df = self.ds.aux_table[AuxTables.cell_domain].df.sort_values('_vid_')
             self.embedding_model = TupleEmbedding(self.env, self.ds, domain_df,
-                    numerical_attr_groups=numerical_attr_groups)
+                    numerical_attr_groups=numerical_attr_groups,
+                    learning_rate=learning_rate,
+                    validate_fpath=validate_fpath,
+                    validate_tid_col=validate_tid_col,
+                    validate_attr_col=validate_attr_col,
+                    validate_val_col=validate_val_col,
+                    validate_epoch=validate_epoch)
 
             dump_prefix = self.addn_kwargs.get('dump_prefix', None)
             if dump_prefix is None \
@@ -59,14 +73,10 @@ class EmbeddingFeaturizer(Featurizer):
 
     def create_tensor(self):
         """
-        For a batch of vids, returns a batch of learned embeddings for each of its
-        domain values.
+        For a batch of vids, returns a batch of softmax probabilities for each
+        domain value learned by an embedding model.
 
-        That is returns a (batch, max domain, 2 * embed_size + 1) tensor where
-        the first embed_size features are the context vectors (same for a given
-        batch) and the next embed_size features are the "target" vectors (unique
-        for each domain value), and the last feature is the bias for
-        the target vector.
+        That is returns a (batch, max domain, 1) tensor.
         """
         vids = self.ds.aux_table[AuxTables.cell_domain].df['_vid_'].sort_values()
 
@@ -82,12 +92,16 @@ class EmbeddingFeaturizer(Featurizer):
         assert ((target_vecs != 0).all(dim=2).sum(dim=1).detach().numpy()
                 == self.ds.aux_table[AuxTables.cell_domain].df.sort_values('_vid_')['domain_size'].values).all()
 
-        # (# of vids, max domain, 2 * embed_size + 1)
-        combined_vecs = torch.cat([context_vecs, target_vecs], dim=2)
+        # (# of vids, max domain, 1)
+        logits = (target_vecs[:,:,:-1] * context_vecs).sum(dim=-1, keepdim=True) + target_vecs[:,:,-1:]
+        # Logits without an actual domain value needs to be negative large number
+        logits[(target_vecs[:,:,:-1] == 0.).all(dim=-1, keepdim=True)] = -1e9
 
-        return combined_vecs
+        # (# of vids, max domain, 1)
+        probs = Softmax(dim=1)(logits)
+        return probs
+
+
 
     def feature_names(self):
-        return ["Context_%d" % idx for idx in range(self.env['estimator_embedding_size'])] \
-            + ["Target_%d" % idx for idx in range(self.env['estimator_embedding_size'])] \
-            + ["Target_bias"]
+        return ["Embedding_Proba"]

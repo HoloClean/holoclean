@@ -345,6 +345,11 @@ class Session:
         logging.info(status)
         logging.debug('Time to detect errors: %.2f secs', detect_time)
 
+    def disable_quantize(self):
+        self.do_quantization = False
+        self.ds.do_quantization = False
+        self.domain_engine.do_quantization = False
+
     def quantize_numericals(self, num_attr_groups_bins):
         """
         :param num_attr_groups_bins: list[tuple] where each tuple consists of
