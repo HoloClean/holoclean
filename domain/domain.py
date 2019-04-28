@@ -202,7 +202,8 @@ class DomainEngine:
 
                 if len(dom) <= 1:
                     # Initial  value is NULL and we cannot come up with
-                    # a domain; a random domain probably won't help us so
+                    # a domain (note that NULL is not included in the domain);
+                    # a random domain probably won't help us so
                     # completely ignore this cell and continue.
                     if init_value == NULL_REPR:
                         continue
