@@ -281,7 +281,7 @@ class LookupDataset(Dataset):
             domain_idxs = torch.zeros(self._max_domain, dtype=torch.long)
 
             domain_idxs[:cur['domain_size']] = torch.LongTensor([self._train_val_idxs[cur['attribute']][val]
-                    for val in cur['domain'].split('|||')])
+                    for val in cur['domain']])
 
             if not self.memoize:
                 return domain_idxs
@@ -479,7 +479,7 @@ class LookupDataset(Dataset):
         idx = self._vid_to_idx[vid]
         cur = self._train_records[idx]
         assert cur['attribute'] in self._train_cat_attrs
-        return cur['domain'].split('|||')
+        return cur['domain']
 
     def _state_attrs(self):
         """
@@ -586,6 +586,8 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         """
         torch.nn.Module.__init__(self)
         Estimator.__init__(self, env, dataset, domain_df)
+        # Pre-split domain.
+        self.domain_df['domain'] = self.domain_df['domain'].str.split('\|\|\|')
 
         self._embed_size = self.env['estimator_embedding_size']
         train_attrs = self.env['train_attrs']
@@ -757,6 +759,8 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             self._validate_df = self.domain_df.merge(self._validate_df, how='left',
                     left_on=['_tid_', 'attribute'], right_on=['_tid_', '_attribute_'])
             self._validate_df['_value_'].fillna(NULL_REPR, inplace=True)
+            # | separated correct values
+            self._validate_df['_value_'] = self._validate_df['_value_'].str.split('\|')
 
             # Raise error if validation set has non-numerical values for numerical attrs
             if numerical_attrs is not None:
@@ -774,7 +778,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             # Log how many cells are actually repairable based on domain generated.
             # Cells without ground truth are "not repairable".
             fil_repairable = self._validate_df.apply(lambda row: not row['_value_'] == NULL_REPR and \
-                    any(v in row['domain'].split('|||') for v in row['_value_'].split('|')), axis=1)
+                    any(v in row['domain'] for v in row['_value_']), axis=1)
             logging.debug("%s: max repairs possible (# cells ground truth in domain): (DK) %d, (all): %d",
                         type(self).__name__,
                         (fil_repairable & ~self._validate_df['is_clean']).sum(),
@@ -1355,12 +1359,11 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         n_cat_dk = (fil_dk & fil_cat).sum()
         n_num_dk = (fil_dk & ~fil_cat).sum()
 
-        ### Handle multiple correct values by splitting on '|'
         # Categorical filters and metrics
         fil_err = df_res.apply(lambda row: row['_value_'] != NULL_REPR and \
-                row['init_value'] not in row['_value_'].split('|'), axis=1) & fil_cat & fil_grdth
+                row['init_value'] not in row['_value_'], axis=1) & fil_cat & fil_grdth
         fil_cor = df_res.apply(lambda row: row['_value_'] != NULL_REPR and \
-                row['inferred_val'] in row['_value_'].split('|'), axis=1) & fil_cat & fil_grdth
+                row['inferred_val'] in row['_value_'], axis=1) & fil_cat & fil_grdth
         fil_repair = (df_res['init_value'] != df_res['inferred_val']) & fil_cat
 
         total_err = fil_err.sum()
