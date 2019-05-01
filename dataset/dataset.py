@@ -110,8 +110,7 @@ class Dataset:
 
             # Load raw CSV file/data into a Postgres table 'name' (param).
             self.raw_data = Table(name, Source.FILE, na_values=na_values,
-                                  exclude_attr_cols=exclude_attr_cols, fpath=fpath,
-                                  numerical_attrs=numerical_attrs)
+                                  exclude_attr_cols=exclude_attr_cols, fpath=fpath)
 
             df = self.raw_data.df
             # Add _tid_ column to dataset that uniquely identifies an entity.
