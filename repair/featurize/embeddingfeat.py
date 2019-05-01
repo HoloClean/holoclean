@@ -33,7 +33,7 @@ class EmbeddingFeaturizer(Featurizer):
                     self.name)
 
             epochs = self.addn_kwargs.get('epochs', self.DEFAULT_EPOCHS)
-            batch_size = self.addn_kwargs.get('epochs', self.DEFAULT_BATCH_SIZE)
+            batch_size = self.addn_kwargs.get('batch_size', self.DEFAULT_BATCH_SIZE)
             learning_rate = self.addn_kwargs.get('learning_rate', self.DEFAULT_LR)
             numerical_attr_groups = self.addn_kwargs.get('numerical_attr_groups', None)
             validate_fpath = self.addn_kwargs.get('validate_fpath', None)
