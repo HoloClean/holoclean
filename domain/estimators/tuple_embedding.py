@@ -762,10 +762,10 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             # | separated correct values
             self._validate_df['_value_'] = self._validate_df['_value_'].str.split('\|')
 
+            fil_notnull = self._validate_df['_value_'] != NULL_REPR
             # Raise error if validation set has non-numerical values for numerical attrs
             if numerical_attrs is not None:
                 fil_attr = self._validate_df['attribute'].isin(numerical_attrs)
-                fil_notnull = self._validate_df['_value_'] != NULL_REPR
                 fil_notnumeric = self._validate_df['_value_'].str.contains(nonnumerics(self.env))
                 bad_numerics = fil_attr & fil_notnull & fil_notnumeric
                 if bad_numerics.sum():
@@ -777,8 +777,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
             # Log how many cells are actually repairable based on domain generated.
             # Cells without ground truth are "not repairable".
-            fil_repairable = self._validate_df.apply(lambda row: not row['_value_'] == NULL_REPR and \
-                    any(v in row['domain'] for v in row['_value_']), axis=1)
+            fil_repairable = self._validate_df[fil_notnull].apply(lambda row: any(v in row['domain'] for v in row['_value_']), axis=1)
             logging.debug("%s: max repairs possible (# cells ground truth in domain): (DK) %d, (all): %d",
                         type(self).__name__,
                         (fil_repairable & ~self._validate_df['is_clean']).sum(),
