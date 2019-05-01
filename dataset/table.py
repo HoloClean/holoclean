@@ -16,8 +16,7 @@ class Table:
     A wrapper class for Dataset Tables.
     """
     def __init__(self, name, src, na_values=None, exclude_attr_cols=['_tid_'],
-                 fpath=None, df=None, schema_name=None, table_query=None, db_engine=None,
-                 numerical_attrs=None):
+                 fpath=None, df=None, schema_name=None, table_query=None, db_engine=None):
         """
         :param name: (str) name to assign to dataset.
         :param na_values: (str or list[str]) values to interpret as NULL.
@@ -49,8 +48,6 @@ class Table:
             # TODO(richardwu): use COPY FROM instead of loading this into memory
             self.df = pd.read_csv(fpath, dtype=str, na_values=na_values, encoding='utf-8')
 
-            # handle numerical values
-            numerical_attrs = numerical_attrs or []
             # Normalize the dataframe: drop null columns, convert to lowercase strings, and strip whitespaces.
             for attr in self.df.columns.values:
                 if self.df[attr].isnull().all():
