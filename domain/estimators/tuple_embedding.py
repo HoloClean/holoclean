@@ -17,8 +17,7 @@ from dataset import AuxTables
 from ..estimator import Estimator
 from utils import NULL_REPR
 
-def nonnumerics(env):
-    return "[^0-9+-" + env['numerical_sep'] + "]"
+NONNUMERICS = "[^0-9+-.]"
 
 def verify_numerical_attr_groups(dataset, numerical_attr_groups):
     """
@@ -35,12 +34,12 @@ def verify_numerical_attr_groups(dataset, numerical_attr_groups):
             logging.error('all numerical attributes specified %s must exist in dataset: %s',
                     numerical_attr_groups,
                     dataset.get_attributes())
-            sys.exit(1)
+            raise Exception()
 
         if len(set(numerical_attrs)) < len(numerical_attrs):
             logging.error('all attribute groups specified %s must be disjoint in dataset',
                     numerical_attr_groups)
-            sys.exit(1)
+            raise Exception()
 
     return numerical_attrs
 
@@ -519,21 +518,28 @@ class LookupDataset(Dataset):
 
 class VidSampler(Sampler):
     def __init__(self, domain_df, raw_df, numerical_attr_groups,
-            shuffle=True, train_only_clean=True):
+            shuffle=True, train_only_clean=False):
         # No NULL targets
         domain_df = domain_df[domain_df['init_value'] != NULL_REPR]
 
-        # No NULL numerical groups (all must be non-null)
+        # No NULL values in each cell's numerical group (all must be non-null
+        # since target_numvals requires all numerical values.
         if numerical_attr_groups:
             raw_data_dict = raw_df.set_index('_tid_').to_dict('index')
-            def all_notnull(tid, attrs):
-                return all(raw_data_dict[tid][attr] != NULL_REPR for attr in attrs)
-            for attrs in numerical_attr_groups:
-                fil_notnull = domain_df['_tid_'].apply(all_notnull, args=(attrs,))
-                if sum(fil_notnull) < domain_df.shape[0]:
-                    logging.warning('dropping %d targets since values numerical group %s contain NULLs',
-                            domain_df.shape[0] - sum(fil_notnull),
-                            attrs)
+            attr_to_group = {attr: group for group in numerical_attr_groups
+                    for attr in group}
+            def group_notnull(row):
+                tid = row['_tid_']
+                cur_attr = row['attribute']
+                # Non-numerical cell: return true
+                if cur_attr not in attr_to_group:
+                    return True
+                return all(raw_data_dict[tid][attr] != NULL_REPR
+                        for attr in attr_to_group[cur_attr])
+            fil_notnull = domain_df.apply(group_notnull, axis=1)
+            if sum(fil_notnull) < domain_df.shape[0]:
+                logging.warning('dropping %d targets where target\'s numerical group contain NULLs',
+                        domain_df.shape[0] - sum(fil_notnull))
                 domain_df = domain_df[fil_notnull]
 
         # Train on only clean cells
@@ -600,7 +606,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                         type(self).__name__,
                         train_attrs,
                         self.ds.get_attributes())
-                sys.exit(1)
+                raise Exception()
 
         # Remove domain/training cells without a domain
         # TODO: relax for numerical
@@ -615,19 +621,19 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         ### Numerical attribute groups validation checks
 
         self._numerical_attr_groups = numerical_attr_groups.copy()
-        numerical_attrs = verify_numerical_attr_groups(self.ds, self._numerical_attr_groups)
+        self._numerical_attrs = verify_numerical_attr_groups(self.ds, self._numerical_attr_groups)
         # Verify numerical dimensions are not bigger than the embedding size
         if  max(list(map(len, numerical_attr_groups)) or [0]) > self._embed_size:
             logging.error("%s: maximum numeric value dimension %d must be <= embedding size %d",
                     type(self).__name__,
                     max(list(map(len, numerical_attr_groups)) or [0]),
                     self._embed_size)
-            sys.exit(1)
+            raise Exception()
         # Convert non numerical init values in numerical attributes with _nan_.
-        if numerical_attrs is not None:
-            fil_attr = self.domain_df['attribute'].isin(numerical_attrs)
+        if self._numerical_attrs is not None:
+            fil_attr = self.domain_df['attribute'].isin(self._numerical_attrs)
             fil_notnull = self.domain_df['init_value'] != NULL_REPR
-            fil_notnumeric = self.domain_df['init_value'].str.contains(nonnumerics(self.env))
+            fil_notnumeric = self.domain_df['init_value'].str.contains(NONNUMERICS)
             bad_numerics = fil_attr & fil_notnull & fil_notnumeric
             if bad_numerics.sum():
                 self.domain_df.loc[bad_numerics, 'init_value'] = NULL_REPR
@@ -698,8 +704,14 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         self.in_num_w1 = torch.nn.Parameter(torch.zeros(self._n_num_attr_groups, self._embed_size, self._embed_size))
         self.in_num_bias1 = torch.nn.Parameter(torch.zeros(self._n_num_attr_groups, self._embed_size))
 
+        # out_num_zeros_vecs may not be necessary
         self.out_num_zero_vecs = torch.nn.Parameter(torch.zeros(self._n_train_num_attrs, self._embed_size))
+
         self.out_num_bases = torch.nn.Parameter(torch.zeros(self._n_train_num_attrs, self._embed_size, self._max_num_dim))
+        # Non-linearity for combined_init for each numerical attr
+        self.out_num_w1 = torch.nn.Parameter(torch.zeros(self._n_train_num_attrs, self._embed_size, self._embed_size))
+        self.out_num_bias1 = torch.nn.Parameter(torch.zeros(self._n_train_num_attrs, self._embed_size))
+
 
         # Mask for _num_forward to restrict which dimensions are active for each attribute.
         # Hadamard/elementwise multiply this mask.
@@ -728,9 +740,12 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             torch.nn.init.xavier_uniform_(self.in_num_bases)
             torch.nn.init.xavier_uniform_(self.in_num_w1)
             torch.nn.init.xavier_uniform_(self.in_num_bias1)
+
         if self._n_train_num_attrs > 0:
             torch.nn.init.xavier_uniform_(self.out_num_zero_vecs)
             torch.nn.init.xavier_uniform_(self.out_num_bases)
+            torch.nn.init.xavier_uniform_(self.out_num_w1)
+            torch.nn.init.xavier_uniform_(self.out_num_bias1)
 
         torch.nn.init.xavier_uniform_(self.attr_W)
 
@@ -762,18 +777,19 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             # | separated correct values
             self._validate_df['_value_'] = self._validate_df['_value_'].str.split('\|')
 
-            fil_notnull = self._validate_df['_value_'] != NULL_REPR
+            fil_notnull = self._validate_df['_value_'].apply(lambda arr: arr != [NULL_REPR])
+
             # Raise error if validation set has non-numerical values for numerical attrs
-            if numerical_attrs is not None:
-                fil_attr = self._validate_df['attribute'].isin(numerical_attrs)
-                fil_notnumeric = self._validate_df['_value_'].str.contains(nonnumerics(self.env))
+            if self._numerical_attrs is not None:
+                fil_attr = self._validate_df['attribute'].isin(self._numerical_attrs)
+                fil_notnumeric = self._validate_df['_value_'].apply(lambda arr: arr[0]).str.contains(NONNUMERICS)
                 bad_numerics = fil_attr & fil_notnull & fil_notnumeric
                 if bad_numerics.sum():
                     logging.error('%s: validation dataframe contains %d non-numerical values in numerical attrs %s',
                         type(self).__name__,
                         bad_numerics.sum(),
-                        numerical_attrs)
-                    sys.exit(1)
+                        self._numerical_attrs)
+                    raise Exception()
 
             # Log how many cells are actually repairable based on domain generated.
             # Cells without ground truth are "not repairable".
@@ -783,7 +799,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                         (fil_repairable & ~self._validate_df['is_clean']).sum(),
                         fil_repairable.sum())
 
-            self._validate_df = self._validate_df[['_vid_', 'init_value', '_value_', 'is_clean']]
+            self._validate_df = self._validate_df[['_vid_', 'attribute', 'init_value', '_value_', 'is_clean']]
             self._validate_epoch = validate_epoch or 1
             self._do_validation = True
 
@@ -903,6 +919,8 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
     def _num_forward(self, combined_init, num_attr_idxs):
         """
+        batch is actually "# of num cells".
+
         combined_init: (batch, embed size, 1)
         num_attr_idxs: (batch, 1)
 
@@ -923,14 +941,39 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # (batch, embed size, max num dim)
         normed_out_num_bases.mul_(out_num_masks.unsqueeze(1))
 
+
+
+        ### Temporary: just project and take the value
+
+        # Apply non-linearity
+        # (batch, embed size, embed size)
+        out_num_w1 = self.out_num_w1.index_select(0, num_attr_idxs.view(-1))
+        # (batch, 1, embed size)
+        out_num_bias1 = self.out_num_bias1.index_select(0, num_attr_idxs.view(-1)).unsqueeze(1)
+        # (batch, 1, embed size)
+        combined_init2 = combined_init.view(-1, 1, self._embed_size).matmul(out_num_w1) + out_num_bias1
+        # (batch, embed size, 1)
+        combined_init2 = combined_init2.view(-1, self._embed_size, 1)
+
+        # (batch, max num dim)
+        pred_numvals = (combined_init2 * normed_out_num_bases).sum(dim=1)
+        pred_numvals.mul_(out_num_masks)
+
+        return pred_numvals
+
+
+
+
+
+
         # Project combined_init onto basis vectors:
         #   That is given normalized basis vectors v_1,...v_n the projection
         #   of vector c is
         #       c'  = \sum_{i=1}^n (c \cdot v_i) v_i
-        # (batch, embed size, max num dim)
         # We perform the dot product by multiplying element-wise then
         # summing ALONG THE EMBEDDING DIMENSION.
         # We then project it back onto the normed basis vectors
+        # (batch, embed size, max num dim)
         projected_inits = (combined_init * normed_out_num_bases).sum(dim=1, keepdim=True) * normed_out_num_bases
         # (batch, embed size, 1)
         projected_inits = projected_inits.sum(dim=2, keepdim=True)
@@ -1047,7 +1090,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         return num_attr_idxs
 
     def train(self, num_epochs=10, batch_size=32, weight_entropy_lambda=0.,
-            shuffle=True, train_only_clean=True):
+            shuffle=True, train_only_clean=False):
         """
         :param num_epochs: (int) number of epochs to train for
         :param batch_size: (int) size of batches
@@ -1058,7 +1101,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             attributes. Recommended values between 0 to 0.5.
         :param shuffle: (bool) shuffle the dataset while training
         :param train_only_clean: (bool) train only on clean cells not marked by
-            error detection
+            error detection. Recommend False if error detector is very liberal.
         """
 
         # Returns VIDs to train on.
@@ -1180,9 +1223,16 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
     def get_target_vecs(self, vids):
         """
-        Returns a (# of vids, max domain values, embed_size + 1) the target
-        DETACHED pytorch tensors for each domain value for each VID (+1 for
-        bias).
+        Returns ((1), (2), (3)) DETACHED pytorch vectors.
+
+
+        (1): (# of vids, max domain values, embed_size) the target
+            tensors for each domain value for each VID (CATEGORICAL cells).
+
+        (2): (# of vids, max domain values, 1) the bias for the target vector
+            (CATEGORICAL cells).
+
+        (3): (# of cats) indices of categorical cells.
 
         Note for each VID the domain target vectors are padded up to the maximum
         domain size.
@@ -1193,43 +1243,57 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # (# of cats), (# of num)
         cat_masks, num_masks = self._cat_num_masks(is_categorical)
 
-        # TODO: should we also return the biases?
-        # (batch, max_domain, embed_size)
+        # (# of cats, max_domain, embed_size)
         target_vecs = self.out_W.index_select(0, domain_idxs.view(-1))\
                 .view(*domain_idxs.shape, self._embed_size)
-
-        # Replace the target vectors with our numerical spanned vector if
-        # we have numerical values.
-        if len(num_masks):
-            # (# of num, 1)
-            num_attr_idxs = self._num_attr_idxs(is_categorical, attr_idxs)
-
-            # (batch, embed_size, max num dim)
-            out_num_bases = self.out_num_bases.index_select(0, num_attr_idxs.view(-1))
-            # (batch, max num dim)
-            out_num_masks = self.out_num_masks.index_select(0, num_attr_idxs.view(-1))
-            # (batch, embed_size, max num dim)
-            out_num_bases.mul_(out_num_masks.unsqueeze(1))
-
-            # (batch, embed_size, 1)
-            num_vecs = out_num_bases.matmul(target_numvals.unsqueeze(-1))
-            # (batch, 1, embed_size)
-            num_vecs = num_vecs.view(-1, 1, self._embed_size)
-            # (batch, self._max_domain, embed_size)
-            num_vecs = num_vecs.expand(-1, self._max_domain, -1)
-
-            target_vecs[num_masks] = num_vecs[num_masks]
-
-        # TODO: mask/handle numeric bias. Note this should still select
-        # the 0th bias which is 0
-        # (batch, max_domain, 1)
+        # (# of cats, max_domain, 1)
         target_bias = self.out_B.index_select(0, domain_idxs.view(-1))\
             .view(*domain_idxs.shape, 1)
 
-        # (batch, max_domain, embed_size + 1)
-        target_vecs = torch.cat([target_vecs, target_bias], dim=-1)
-        # (batch, max_domain, embed_size + 1)
-        return target_vecs.detach()
+        # Zero out target vectors for numerical values for now since
+        # there is no concept of target vectors for numerical cells.
+        target_vecs[num_masks] = 0.
+        target_bias[num_masks] = 0.
+
+        return target_vecs.detach(), target_bias.detach(), cat_masks.detach()
+
+        # # Select target vector and bias for CATEGORICAL cells
+        # cat_vecs = torch.FloatTensor(0, self._max_domain, self._embed_size)
+        # cat_bias = torch.FloatTensor(0, self._max_domain, 1)
+        # if len(cat_masks):
+        #     # (# of cats, max_domain)
+        #     domain_idxs = domain_idxs.index_select(0, cat_masks)
+        #     # (# of cats, max_domain, embed_size)
+        #     cat_vecs = self.out_W.index_select(0, domain_idxs.view(-1))\
+        #             .view(*domain_idxs.shape, self._embed_size)
+        #     # (# of cats, max_domain, 1)
+        #     cat_bias = self.out_B.index_select(0, domain_idxs.view(-1))\
+        #         .view(*domain_idxs.shape, 1)
+        # There is no "target vector" for NUMERICAL cells since we do
+        # pseudo-regression with the context vector. Ignore for now.
+        # # Select target vector and bias for NUMERICAL cells
+        # num_vecs = torch.FloatTensor(0, 1, self._embed_size)
+        # if len(num_masks):
+        #     # (# of num, max num dim)
+        #     target_numvals = target_numvals.index_select(0, num_masks)
+
+        #     # (# of num, 1)
+        #     num_attr_idxs = self._num_attr_idxs(is_categorical, attr_idxs)
+
+        #     # (# of num, embed_size, max num dim)
+        #     out_num_bases = self.out_num_bases.index_select(0, num_attr_idxs.view(-1))
+        #     # (# of num, max num dim)
+        #     out_num_masks = self.out_num_masks.index_select(0, num_attr_idxs.view(-1))
+        #     # (# of num, embed_size, max num dim)
+        #     out_num_bases.mul_(out_num_masks.unsqueeze(1))
+
+        #     # (# of num, embed_size, 1)
+        #     num_vecs = out_num_bases.matmul(target_numvals.unsqueeze(-1))
+        #     # (# of num, 1, embed_size)
+        #     num_vecs = num_vecs.view(-1, 1, self._embed_size)
+        # return cat_vecs.detach(), \
+        #         cat_bias.detach(), \
+        #         num_vecs.detach()
 
     def _model_fpaths(self, prefix):
         return '%s_sdict.pkl' % prefix, '%s_ds_state.pkl' % prefix
@@ -1269,17 +1333,18 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         logging.debug('%s: loading saved model from %s and %s',
                       type(self).__name__, sdict_fpath, ds_fpath)
 
-        self.load_state_dict(torch.load(sdict_fpath))
+        # strict=False to allows backwards compat
+        self.load_state_dict(torch.load(sdict_fpath), strict=False)
         with open(ds_fpath, 'rb') as f:
             self._dataset.load_state(pickle.load(f))
         return True
 
-    def dump_predictions(self, prefix, include_probas=False):
+    def dump_predictions(self, prefix, include_all=False):
         """
         Dump inference results to ":param:`prefix`_predictions.pkl" (if not None).
         Returns the dataframe of results.
 
-        include_probas = True will include all domain values and their prediction
+        include_all = True will include all domain values and their prediction
         probabilities for categorical attributes.
         """
         preds = self.predict_pp_batch()
@@ -1291,7 +1356,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             assert vid == row['_vid_']
             if is_cat:
                 # Include every domain value and their predicted probabilities
-                if include_probas:
+                if include_all:
                     for val, proba in pred:
                         results.append({'tid': row['_tid_'],
                             'vid': vid,
@@ -1306,11 +1371,10 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                         'inferred_val': max_val,
                         'proba': max_proba})
             else:
-                num_pred = self.env['numerical_sep'].join(map(str, pred))
                 results.append({'tid': row['_tid_'],
                     'vid': vid,
                     'attribute': row['attribute'],
-                    'inferred_val': num_pred,
+                    'inferred_val': pred,
                     'proba': -1})
 
         results = pd.DataFrame(results)
@@ -1345,7 +1409,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # General filters and metrics
         fil_dk = ~df_res['is_clean']
         fil_cat = df_res['is_cat']
-        fil_grdth = df_res['_value_'] != NULL_REPR
+        fil_grdth = df_res['_value_'].apply(lambda arr: arr != [NULL_REPR])
 
         if (~fil_grdth).sum():
             logging.debug('%s: there are %d cells with no validation ground truth',
@@ -1359,10 +1423,10 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         n_num_dk = (fil_dk & ~fil_cat).sum()
 
         # Categorical filters and metrics
-        fil_err = df_res.apply(lambda row: row['_value_'] != NULL_REPR and \
-                row['init_value'] not in row['_value_'], axis=1) & fil_cat & fil_grdth
-        fil_cor = df_res.apply(lambda row: row['_value_'] != NULL_REPR and \
-                row['inferred_val'] in row['_value_'], axis=1) & fil_cat & fil_grdth
+        fil_err = df_res.apply(lambda row: row['init_value'] not in row['_value_'],
+                axis=1) & fil_cat & fil_grdth
+        fil_cor = df_res.apply(lambda row: row['inferred_val'] in row['_value_'],
+                axis=1) & fil_cat & fil_grdth
         fil_repair = (df_res['init_value'] != df_res['inferred_val']) & fil_cat
 
         total_err = fil_err.sum()
@@ -1387,16 +1451,27 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         precision_dk = n_cor_repair_dk / max(n_repair_dk, 1)
         repair_recall = n_cor_repair_dk / max(detected_err, 1)
 
-        # Numerical filters and metrics
-        rmse = 0
-        if n_num:
-            X_cor = df_res.loc[~fil_cat, '_value_'].values.astype(np.float)
-            X_inferred = df_res.loc[~fil_cat, 'inferred_val'].values.astype(np.float)
 
+        def calc_rmse(df_filter):
+            if df_filter.sum() == 0:
+                return 0
+            X_cor = df_res.loc[df_filter, '_value_'].apply(lambda arr: arr[0]).values.astype(np.float)
+            X_inferred = df_res.loc[df_filter, 'inferred_val'].values.astype(np.float)
             assert X_cor.shape == X_inferred.shape
+            return np.sqrt(np.mean((X_cor - X_inferred) ** 2))
 
-            rmse = np.sqrt(np.mean((X_cor - X_inferred) ** 2))
-
+        # Numerical metrics (RMSE)
+        rmse = 0
+        rmse_dk = 0
+        rmse_by_attr = {}
+        rmse_dk_by_attr = {}
+        if n_num:
+            rmse = calc_rmse(~fil_cat)
+            rmse_dk = calc_rmse(~fil_cat & fil_dk)
+            for attr in self._numerical_attrs:
+                fil_attr = df_res['attribute'] == attr
+                rmse_by_attr[attr] = calc_rmse(fil_attr)
+                rmse_dk_by_attr[attr] = calc_rmse(fil_attr & fil_dk)
 
         # Compile results
         val_res = {'n_cat': n_cat,
@@ -1413,6 +1488,9 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             'precision_dk': precision_dk,
             'repair_recall': repair_recall,
             'rmse': rmse,
+            'rmse_dk': rmse_dk,
+            'rmse_by_attr': rmse_by_attr,
+            'rmse_dk_by_attr': rmse_dk_by_attr,
             }
 
         logging.debug("%s: # categoricals: (all) %d, (DK) %d",
@@ -1435,7 +1513,13 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                 type(self).__name__, val_res['precision_dk'], val_res['repair_recall'])
 
         if val_res['n_num']:
-            logging.debug("%s: RMSE: %f", type(self).__name__, val_res['rmse'])
+            logging.debug("%s: RMSE: (all) %f, (DK) %f", type(self).__name__,
+                    val_res['rmse'], val_res['rmse_dk'])
+            logging.debug("%s: RMSE per attr:", type(self).__name__)
+            for attr in self._numerical_attrs:
+                logging.debug("\t'%s': (all) %f, (DK) %f", attr,
+                        val_res['rmse_by_attr'].get(attr, np.nan),
+                        val_res['rmse_dk_by_attr'].get(attr, np.nan))
 
         return val_res
 

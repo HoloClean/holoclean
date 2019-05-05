@@ -13,7 +13,7 @@ from utils import NULL_REPR
 report_name_list = ['precision', 'recall', 'repair_recall',
                     'f1', 'repair_f1', 'detected_errors', 'total_errors', 'correct_repairs', 'total_repairs',
                     'total_repairs_grdt', 'total_repairs_grdt_correct', 'total_repairs_grdt_incorrect',
-                    'rms']
+                    'rmse']
 
 EvalReport = namedtuple('EvalReport', report_name_list)
 EvalReport.__new__.__defaults__ = (0,) * len(report_name_list)
@@ -46,9 +46,9 @@ correct_repairs_template = Template('SELECT COUNT(*) FROM '
 
 
 """
-Calculates RMS error for the given attribute.
+Calculates RMSE error for the given attribute.
 """
-rms_template = Template('SELECT SQRT(AVG(POWER(grdt._value_::NUMERIC -repairs.rv_value::NUMERIC, 2))) FROM '
+rmse_template = Template('SELECT SQRT(AVG(POWER(grdt._value_::NUMERIC -repairs.rv_value::NUMERIC, 2))) FROM '
                         '"$grdt_table" as grdt, "$inf_dom" as repairs '
                         'WHERE grdt._tid_ = repairs._tid_ '
                         '  AND grdt._attribute_ = repairs.attribute'
@@ -100,7 +100,7 @@ class EvalEngine:
         """
         Returns an EvalReport named tuple containing the experiment results.
         :param attr: if attr is not None, compute results for attr:
-                        if attr is numerical, then only report rms
+                        if attr is numerical, then only report rmse
                         if attr is categorical, then report precision, recall etc.
                      if attr is None, compute results for all attrs
         """
@@ -109,7 +109,7 @@ class EvalEngine:
         # attr is not None and is numerical
         # or attr is None(query on all attrs) and no categorical
         if attr is None or attr in self.ds.numerical_attrs:
-            eval_report_dict['rms'] = self.compute_rms(attr) or 0.
+            eval_report_dict['rmse'] = self.compute_rmse(attr) or 0.
 
         if attr is None or attr in self.ds.categorical_attrs:
             # if attr in self.ds.categorical_attrs or attr is None
@@ -143,11 +143,11 @@ class EvalEngine:
                      "Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, " \
                      "Total Repairs on correct cells (Grdth present) = %d, " \
                      "Total Repairs on incorrect cells (Grdth present) = %d, " \
-                     "RMS = %.2f" % (report.precision, report.recall, report.repair_recall, report.f1, report.repair_f1,
+                     "RMSE = %.2f" % (report.precision, report.recall, report.repair_recall, report.f1, report.repair_f1,
                                      report.detected_errors, report.total_errors, report.correct_repairs,
                                      report.total_repairs,
                                      report.total_repairs_grdt_correct, report.total_repairs_grdt_incorrect,
-                                     report.rms)
+                                     report.rmse)
 
         if attr:
             report_str = "# Attribute:{};{}".format(attr, report_str)
@@ -342,7 +342,7 @@ class EvalEngine:
 
         return correct_repairs
 
-    def compute_rms(self, attr=None):
+    def compute_rmse(self, attr=None):
         """
         Should check all the dk_cells in numerical attributes
         compute RMS error for all dk_cells in numerical attributes
@@ -355,7 +355,7 @@ class EvalEngine:
         query_attrs = [attr] if attr else self.ds.numerical_attrs
         query_attrs_str = ["\'{}\'".format(attr) for attr in query_attrs]
         query_attrs_sql = '(%s)' % ','.join(query_attrs_str)
-        query = rms_template.substitute(grdt_table=self.clean_data.name, inf_dom=AuxTables.inf_values_dom.name,
+        query = rmse_template.substitute(grdt_table=self.clean_data.name, inf_dom=AuxTables.inf_values_dom.name,
                                         attrs_list=query_attrs_sql)
         res = self.ds.engine.execute_query(query)
 

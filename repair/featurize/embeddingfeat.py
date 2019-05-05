@@ -24,6 +24,7 @@ class EmbeddingFeaturizer(Featurizer):
     DEFAULT_EPOCHS = 10
     DEFAULT_BATCH_SIZE = 32
     DEFAULT_LR = 0.05
+    DEFAULT_WEIGHT_LAMBDA = 0.
 
     def specific_setup(self):
         self.name = 'EmbeddingFeaturizer'
@@ -34,6 +35,7 @@ class EmbeddingFeaturizer(Featurizer):
 
             epochs = self.addn_kwargs.get('epochs', self.DEFAULT_EPOCHS)
             batch_size = self.addn_kwargs.get('batch_size', self.DEFAULT_BATCH_SIZE)
+            weight_lambda = self.addn_kwargs.get('weight_lambda', self.DEFAULT_WEIGHT_LAMBDA)
             learning_rate = self.addn_kwargs.get('learning_rate', self.DEFAULT_LR)
             numerical_attr_groups = self.addn_kwargs.get('numerical_attr_groups', None)
             validate_fpath = self.addn_kwargs.get('validate_fpath', None)
@@ -60,7 +62,7 @@ class EmbeddingFeaturizer(Featurizer):
             dump_prefix = self.addn_kwargs.get('dump_prefix', None)
             if dump_prefix is None \
                     or not self.embedding_model.load_model(dump_prefix):
-                self.embedding_model.train(epochs, batch_size)
+                self.embedding_model.train(epochs, batch_size, weight_entropy_lambda=weight_lambda)
 
                 if dump_prefix is not None:
                     self.embedding_model.dump_model(dump_prefix)
@@ -78,24 +80,27 @@ class EmbeddingFeaturizer(Featurizer):
 
         That is returns a (batch, max domain, 1) tensor.
         """
-        vids = self.ds.aux_table[AuxTables.cell_domain].df['_vid_'].sort_values()
+        domain_df = self.ds.aux_table[AuxTables.cell_domain].df.sort_values('_vid_').reset_index(drop=True)
+
+        vids = domain_df['_vid_']
 
         # (# of vids, embed_size)
         context_vecs = self.embedding_model.get_context_vecs(vids)
-        # (# of vids, max domain, embed_size + 1)
-        target_vecs = self.embedding_model.get_target_vecs(vids)
+        # (# of vids, max domain, embed_size), (# of vids, max domain, 1), (# of cats)
+        target_vecs, target_bias, cat_masks = self.embedding_model.get_target_vecs(vids)
         # (# of vids, max domain, embed_size)
         context_vecs = context_vecs.unsqueeze(1).expand(-1, target_vecs.shape[1], -1)
 
         # Verify the non-zero target_vectors correspond to the # of domain
         # values actually in each VID.
-        assert ((target_vecs != 0).all(dim=2).sum(dim=1).detach().numpy()
-                == self.ds.aux_table[AuxTables.cell_domain].df.sort_values('_vid_')['domain_size'].values).all()
+        # Note we omit the bias since the bias is 0 for numerical values.
+        assert ((target_vecs.index_select(0, cat_masks) != 0).all(dim=2).sum(dim=1).detach().numpy()
+                == domain_df.iloc[cat_masks.numpy()]['domain_size'].values).all()
 
         # (# of vids, max domain, 1)
-        logits = (target_vecs[:,:,:-1] * context_vecs).sum(dim=-1, keepdim=True) + target_vecs[:,:,-1:]
+        logits = (target_vecs * context_vecs).sum(dim=-1, keepdim=True) + target_bias
         # Logits without an actual domain value needs to be negative large number
-        logits[(target_vecs[:,:,:-1] == 0.).all(dim=-1, keepdim=True)] = -1e9
+        logits[(target_vecs == 0.).all(dim=-1, keepdim=True)] = -1e9
 
         # (# of vids, max domain, 1)
         probs = Softmax(dim=1)(logits)
