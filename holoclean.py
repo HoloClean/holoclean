@@ -4,8 +4,9 @@ import random
 
 import torch
 import numpy as np
+import pandas as pd
 
-from dataset import Dataset, Table, Source
+from dataset import Dataset, Table, Source, AuxTables
 from dcparser import Parser
 from domain import DomainEngine
 from detect import DetectEngine
@@ -13,6 +14,7 @@ from repair import RepairEngine
 from evaluate import EvalEngine
 from dataset.quantization import quantize_km
 from utils import NULL_REPR
+
 
 logging.basicConfig(format="%(asctime)s - [%(levelname)5s] - %(message)s", datefmt='%H:%M:%S')
 root_logger = logging.getLogger()
@@ -185,12 +187,6 @@ arguments = [
       'default': None,
       'type': list,
       'help': 'List of attributes to train and infer on. If None, train and infer on all columns. For example passing a list of one column allows one to train HoloClean on one column.'}),
-    (('-ns', '--numerical_sep'),
-     {'metavar': 'NUMERICAL_SEP',
-      'dest': 'numerical_sep',
-      'default': '|',
-      'type': str,
-      'help': 'Delimiter for numerical attributes.'}),
 ]
 
 # Flags for Holoclean mode
@@ -435,3 +431,22 @@ class Session:
         logging.info(status)
         logging.debug('Time to generate report: %.2f secs', report_time)
         return eval_report
+
+    def get_predictions(self):
+        """
+        Returns a dataframe with 3 columns:
+            - tid, attribute, inferred_val, proba
+        """
+
+        query = """
+        SELECT
+            _tid_, attribute, inferred_val, prob
+        FROM {dom}
+        INNER JOIN {inf_vals} USING(_vid_)
+        """.format(inf_vals=AuxTables.inf_values_idx.name,
+                dom=AuxTables.cell_domain.name)
+        res = self.ds.engine.execute_query(query)
+        df_preds = pd.DataFrame(res,
+                columns=['tid', 'attribute', 'inferred_val', 'proba'],
+                dtype=str)
+        return df_preds
