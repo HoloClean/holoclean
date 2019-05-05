@@ -69,6 +69,13 @@ class DomainEngine:
         self.correlations = compute_norm_cond_entropy_corr(data_df,
                                                            self.ds.get_attributes(),
                                                            self.ds.get_attributes())
+        df_corrs = pd.DataFrame.from_dict(self.correlations, orient='columns')
+        df_corrs.index.name = 'cond_attr'
+        df_corrs.columns.name = 'attr'
+        pd.set_option('display.max_columns', len(df_corrs.columns))
+        pd.set_option('display.max_rows', len(df_corrs.columns))
+        logging.debug("correlations:\n%s", df_corrs)
+        logging.debug("summary of correlations:\n%s", df_corrs.describe())
 
     def store_domains(self, domain):
         """
