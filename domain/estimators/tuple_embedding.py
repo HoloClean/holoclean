@@ -215,8 +215,12 @@ class LookupDataset(Dataset):
         self._train_records = domain_df[['_vid_', '_tid_', 'attribute', 'init_value',
                                          'init_index', 'domain', 'domain_size', 'is_clean']].to_records()
 
-        # Maximum domain size
-        self._max_domain = int(domain_df['domain_size'].max())
+        # Maximum domain size: we don't use the domain of numerical attributes
+        # so we can discard them.
+        self._max_domain = int(domain_df.loc[domain_df['attribute'].isin(self._train_cat_attrs), 'domain_size'].max())
+        logging.debug('%s: max domain size (categorical): %d',
+                type(self).__name__,
+                self._max_domain)
         # Maximum dimension across all numerical attributes.
         self._max_num_dim = max(list(map(len, self._numerical_attr_groups)) or [0])
 
@@ -272,6 +276,9 @@ class LookupDataset(Dataset):
         return self._neg_idxs[idx]
 
     def _get_domain_idxs(self, idx):
+        """
+        Get domain indexes for categorical cells.
+        """
         if not self.memoize or idx not in self._domain_idxs:
             cur = self._train_records[idx]
             assert cur['attribute'] in self._train_cat_attrs
@@ -754,7 +761,8 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # Allow user to pass in their desired loss.
         self._num_loss = MSELoss(reduction='mean')
         self._optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=self.WEIGHT_DECAY)
-        self._scheduler = ReduceLROnPlateau(self._optimizer, 'max', patience=2, verbose=True)
+        self._scheduler = ReduceLROnPlateau(self._optimizer, 'max',
+                factor=0.2, patience=2, verbose=True)
 
         # Validation stuff
         self._do_validation = False
