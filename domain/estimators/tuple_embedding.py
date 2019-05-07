@@ -599,8 +599,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         """
         torch.nn.Module.__init__(self)
         Estimator.__init__(self, env, dataset, domain_df)
-        # Pre-split domain.
-        self.domain_df['domain'] = self.domain_df['domain'].str.split('\|\|\|')
 
         self._embed_size = self.env['estimator_embedding_size']
         train_attrs = self.env['train_attrs']
@@ -614,16 +612,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                         train_attrs,
                         self.ds.get_attributes())
                 raise Exception()
-
-        # Remove domain/training cells without a domain
-        # TODO: relax for numerical
-        filter_empty_domain = self.domain_df['domain_size'] == 0
-        if filter_empty_domain.sum():
-            logging.warning('%s: removing %d cells with empty domains',
-                type(self).__name__,
-                filter_empty_domain.sum())
-            self.domain_df = self.domain_df[~filter_empty_domain]
-
 
         ### Numerical attribute groups validation checks
 
@@ -648,6 +636,19 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                         type(self).__name__,
                         bad_numerics.sum(),
                         NULL_REPR)
+        # Remove domain for numerical attributes.
+        fil_numattr = self.domain_df['attribute'].isin(self._numerical_attrs)
+        self.domain_df.loc[fil_numattr, 'domain'] = ''
+        self.domain_df.loc[fil_numattr, 'domain_size'] = 0
+        # Remove categorical domain/training cells without a domain
+        filter_empty_domain = (self.domain_df['domain_size'] == 0) & ~fil_numattr
+        if filter_empty_domain.sum():
+            logging.warning('%s: removing %d categorical cells with empty domains',
+                type(self).__name__,
+                filter_empty_domain.sum())
+            self.domain_df = self.domain_df[~filter_empty_domain]
+        # Pre-split domain.
+        self.domain_df['domain'] = self.domain_df['domain'].str.split('\|\|\|')
 
         # Add DK information to domain dataframe
         if self.ds.aux_table[AuxTables.dk_cells] is not None:
