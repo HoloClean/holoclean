@@ -39,7 +39,6 @@ class DomainEngine:
         self.max_sample = max_sample
         self.single_stats = {}
         self.pair_stats = {}
-        self.all_attrs = {}
 
     def setup(self):
         """
@@ -48,7 +47,8 @@ class DomainEngine:
         """
         tic = time.time()
 
-        self.compute_correlations()
+        if self.correlations is None:
+            self.compute_correlations()
         self.setup_attributes()
         self.domain_df = self.generate_domain()
         self.store_domains(self.domain_df)
@@ -69,13 +69,13 @@ class DomainEngine:
         self.correlations = compute_norm_cond_entropy_corr(data_df,
                                                            self.ds.get_attributes(),
                                                            self.ds.get_attributes())
-        df_corrs = pd.DataFrame.from_dict(self.correlations, orient='columns')
-        df_corrs.index.name = 'cond_attr'
-        df_corrs.columns.name = 'attr'
-        pd.set_option('display.max_columns', len(df_corrs.columns))
-        pd.set_option('display.max_rows', len(df_corrs.columns))
-        logging.debug("correlations:\n%s", df_corrs)
-        logging.debug("summary of correlations:\n%s", df_corrs.describe())
+        corrs_df = pd.DataFrame.from_dict(self.correlations, orient='columns')
+        corrs_df.index.name = 'cond_attr'
+        corrs_df.columns.name = 'attr'
+        pd.set_option('display.max_columns', len(corrs_df.columns))
+        pd.set_option('display.max_rows', len(corrs_df.columns))
+        logging.debug("correlations:\n%s", corrs_df)
+        logging.debug("summary of correlations:\n%s", corrs_df.describe())
 
     def store_domains(self, domain):
         """
@@ -188,7 +188,6 @@ class DomainEngine:
         vid = 0
         raw_df = self.ds.get_quantized_data() if self.do_quantization else self.ds.get_raw_data()
         records = raw_df.to_records()
-        self.all_attrs = list(records.dtype.names)
 
         # TODO(stoke): generate the label indicating whether it is clean
         # dk_dict = self.ds.aux_table[AuxTables.dk_cells].df[['_tid_', 'attribute']].to_dict()
@@ -259,6 +258,7 @@ class DomainEngine:
                 vid += 1
         domain_df = pd.DataFrame(data=cells).sort_values('_vid_')
         logging.debug('domain size stats: %s', domain_df['domain_size'].describe())
+        logging.debug('domain count by attr: %s', domain_df['attribute'].value_counts())
         logging.debug('DONE generating initial set of domain values in %.2fs', time.clock() - tic)
 
         return domain_df
@@ -376,7 +376,6 @@ class DomainEngine:
 
         logging.debug('generating initial set of un-pruned domain values...')
         records = self.ds.get_raw_data().to_records()
-        self.all_attrs = list(records.dtype.names)
         vid = 0
         domain_df = None
 

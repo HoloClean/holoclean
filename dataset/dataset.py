@@ -242,16 +242,25 @@ class Dataset:
     def get_active_attributes(self):
         """
         get_active_attributes returns the attributes to be modeled.
-        These attributes correspond only to attributes that contain at least
-        one potentially erroneous cell, and if applicable, in the provided :param:`train_attrs` variable.
-        """
-        if self._active_attributes is None:
-            raise Exception('ERROR no active attributes loaded. Run error detection first.')
 
+        If infer_mode = 'dk', these attributes correspond only to attributes that contain at least
+        one potentially erroneous cell. Otherwise all attributes are returned.
+
+        If applicable, in the provided :param:`train_attrs` variable.
+        """
         if self.train_attrs is None:
             self.train_attrs = self.get_attributes()
 
-        return sorted([attr for attr in self._active_attributes if attr in self.train_attrs])
+        if self.env['infer_mode'] == 'dk':
+            if self._active_attributes is None:
+                raise Exception('ERROR no active attributes loaded. Run error detection first.')
+            attrs = self._active_attributes
+        elif self.env['infer_mode'] == 'all':
+            attrs = self.get_attributes()
+        else:
+            raise Exception('infer mode must be one of {dk, all}')
+
+        return sorted([attr for attr in attrs if attr in self.train_attrs])
 
     def get_cell_id(self, tuple_id, attr_name):
         """
