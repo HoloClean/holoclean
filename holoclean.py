@@ -187,6 +187,12 @@ arguments = [
       'default': None,
       'type': list,
       'help': 'List of attributes to train and infer on. If None, train and infer on all columns. For example passing a list of one column allows one to train HoloClean on one column.'}),
+    (('-im', '--infer_mode'),
+     {'metavar': 'INFER_MODE',
+      'dest': 'infer_mode',
+      'default': 'dk',
+      'type': str,
+      'help': 'Infer on only possibly erroneous (DK) cells or all cells. One of {dk, all}.'}),
 ]
 
 # Flags for Holoclean mode

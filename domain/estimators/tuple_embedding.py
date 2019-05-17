@@ -217,10 +217,7 @@ class LookupDataset(Dataset):
 
         # Maximum domain size: we don't use the domain of numerical attributes
         # so we can discard them.
-        self._max_domain = int(domain_df.loc[domain_df['attribute'].isin(self._train_cat_attrs), 'domain_size'].max())
-        logging.debug('%s: max domain size (categorical): %d',
-                type(self).__name__,
-                self._max_domain)
+        self.max_cat_domain = domain_df.loc[domain_df['attribute'].isin(self._train_cat_attrs), 'domain_size'].max()
         # Maximum dimension across all numerical attributes.
         self._max_num_dim = max(list(map(len, self._numerical_attr_groups)) or [0])
 
@@ -229,9 +226,9 @@ class LookupDataset(Dataset):
 
     def _init_dummies(self):
         # Dummy vectors
-        self._dummy_domain_mask = torch.zeros(self._max_domain,
+        self._dummy_domain_mask = torch.zeros(self.max_cat_domain,
                                               dtype=torch.float)
-        self._dummy_domain_idxs = torch.zeros(self._max_domain,
+        self._dummy_domain_idxs = torch.zeros(self.max_cat_domain,
                                               dtype=torch.long)
         self._dummy_target_numvals = torch.zeros(self._max_num_dim,
                                                  dtype=torch.float)
@@ -241,7 +238,7 @@ class LookupDataset(Dataset):
         # Memoize certain lookups.
         if not self.memoize:
             return
-        self._domain_idxs = self.MemoizeVec(len(self), torch.int64, self._max_domain)
+        self._domain_idxs = self.MemoizeVec(len(self), torch.int64, self.max_cat_domain)
         self._init_cat_idxs = self.MemoizeVec(len(self), torch.int64, self._n_init_cat_attrs)
         self._neg_idxs = self.MemoizeVec(len(self), None, None)
 
@@ -284,7 +281,7 @@ class LookupDataset(Dataset):
             assert cur['attribute'] in self._train_cat_attrs
 
             # Domain values and their indexes (softmax indexes)
-            domain_idxs = torch.zeros(self._max_domain, dtype=torch.long)
+            domain_idxs = torch.zeros(self.max_cat_domain, dtype=torch.long)
 
             domain_idxs[:cur['domain_size']] = torch.LongTensor([self._train_val_idxs[cur['attribute']][val]
                     for val in cur['domain']])
@@ -397,11 +394,11 @@ class LookupDataset(Dataset):
         dom_size = cur['domain_size']
         # During training, add negative samples to a most likely correct (clean) cell
         if not self.inference_mode and self._neg_sample \
-                and dom_size < self._max_domain and cur['is_clean']:
+                and dom_size < self.max_cat_domain and cur['is_clean']:
             # It is faster not to memoize these.
             neg_idxs = self._get_neg_dom_idxs(idx)
             neg_sample = torch.LongTensor(np.random.choice(neg_idxs,
-                    size=min(len(neg_idxs), self._max_domain - dom_size),
+                    size=min(len(neg_idxs), self.max_cat_domain - dom_size),
                     replace=False))
 
             domain_idxs[dom_size:dom_size+len(neg_sample)] = neg_sample
@@ -411,7 +408,7 @@ class LookupDataset(Dataset):
         target = cur['init_index']
 
         # Mask out non-relevant values from padding (see below)
-        domain_mask = torch.zeros(self._max_domain, dtype=torch.float)
+        domain_mask = torch.zeros(self.max_cat_domain, dtype=torch.float)
         domain_mask[dom_size:] = -1 * 1e9
 
         return domain_idxs, domain_mask, torch.LongTensor([target])
@@ -495,7 +492,7 @@ class LookupDataset(Dataset):
         return ['_vid_to_idx',
                 '_train_records',
                 '_raw_data_dict',
-                '_max_domain',
+                'max_cat_domain',
                 '_max_num_dim',
                 '_init_val_idxs',
                 '_train_val_idxs',
@@ -638,6 +635,9 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                         NULL_REPR)
         # Remove domain for numerical attributes.
         fil_numattr = self.domain_df['attribute'].isin(self._numerical_attrs)
+
+        # Memoize max domain size for numerical attribue for padding later.
+        self.max_domain = self.domain_df['domain_size'].max()
         self.domain_df.loc[fil_numattr, 'domain'] = ''
         self.domain_df.loc[fil_numattr, 'domain_size'] = 0
         # Remove categorical domain/training cells without a domain
@@ -666,6 +666,12 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         self._dataset = LookupDataset(env, dataset, self.domain_df,
                 numerical_attr_groups, neg_sample, memoize)
 
+        self.max_cat_domain = self._dataset.max_cat_domain
+        logging.debug('%s: max domain size: (categorical) %d, (numerical) %d',
+                type(self).__name__,
+                self.max_cat_domain,
+                self.max_domain)
+
         self._train_cat_attrs = self._dataset._train_cat_attrs
         self._train_num_attrs = self._dataset._train_num_attrs
 
@@ -682,7 +688,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         self._n_train_num_attrs = self._dataset._n_train_num_attrs
         self._n_train_attrs = self._n_train_cat_attrs + self._n_train_num_attrs
 
-        self._max_domain = self._dataset._max_domain
+        self.max_cat_domain = self._dataset.max_cat_domain
         self._max_num_dim = self._dataset._max_num_dim
 
         self.in_W = torch.nn.Parameter(torch.zeros(self._n_init_vals, self._embed_size))
@@ -1053,14 +1059,14 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # (# of cat VIDs), (# of num VIDs)
         cat_mask, num_mask = self._cat_num_masks(is_categorical)
 
-        cat_logits = torch.empty(0, self._max_domain)
+        cat_logits = torch.empty(0, self.max_cat_domain)
         if len(cat_mask):
             cat_combined_init, domain_idxs, domain_masks, cat_targets = \
                     combined_init[cat_mask], \
                     domain_idxs[cat_mask], \
                     domain_masks[cat_mask], \
                     cat_targets[cat_mask]
-            # (# of cat VIDs, max_domain)
+            # (# of cat VIDs, max_cat_domain)
             cat_logits = self._cat_forward(cat_combined_init, domain_idxs, domain_masks, cat_targets)
 
         pred_numvals = torch.empty(0, self._max_num_dim)
@@ -1252,10 +1258,10 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # (# of cats), (# of num)
         cat_masks, num_masks = self._cat_num_masks(is_categorical)
 
-        # (# of cats, max_domain, embed_size)
+        # (# of cats, max_cat_domain, embed_size)
         target_vecs = self.out_W.index_select(0, domain_idxs.view(-1))\
                 .view(*domain_idxs.shape, self._embed_size)
-        # (# of cats, max_domain, 1)
+        # (# of cats, max_cat_domain, 1)
         target_bias = self.out_B.index_select(0, domain_idxs.view(-1))\
             .view(*domain_idxs.shape, 1)
 
@@ -1267,15 +1273,15 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         return target_vecs.detach(), target_bias.detach(), cat_masks.detach()
 
         # # Select target vector and bias for CATEGORICAL cells
-        # cat_vecs = torch.FloatTensor(0, self._max_domain, self._embed_size)
-        # cat_bias = torch.FloatTensor(0, self._max_domain, 1)
+        # cat_vecs = torch.FloatTensor(0, self.max_cat_domain, self._embed_size)
+        # cat_bias = torch.FloatTensor(0, self.max_cat_domain, 1)
         # if len(cat_masks):
-        #     # (# of cats, max_domain)
+        #     # (# of cats, max_cat_domain)
         #     domain_idxs = domain_idxs.index_select(0, cat_masks)
-        #     # (# of cats, max_domain, embed_size)
+        #     # (# of cats, max_cat_domain, embed_size)
         #     cat_vecs = self.out_W.index_select(0, domain_idxs.view(-1))\
         #             .view(*domain_idxs.shape, self._embed_size)
-        #     # (# of cats, max_domain, 1)
+        #     # (# of cats, max_cat_domain, 1)
         #     cat_bias = self.out_B.index_select(0, domain_idxs.view(-1))\
         #         .view(*domain_idxs.shape, 1)
         # There is no "target vector" for NUMERICAL cells since we do
