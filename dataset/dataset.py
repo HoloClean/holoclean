@@ -143,6 +143,7 @@ class Dataset:
 
             # for df, which is all str
             # Use NULL_REPR to represent NULL values
+            df.replace('', NULL_REPR, inplace=True)
             df.fillna(NULL_REPR, inplace=True)
 
             logging.info("Loaded %d rows with %d cells", self.raw_data.df.shape[0],

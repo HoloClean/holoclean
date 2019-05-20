@@ -218,6 +218,8 @@ class LookupDataset(Dataset):
         # Maximum domain size: we don't use the domain of numerical attributes
         # so we can discard them.
         self.max_cat_domain = domain_df.loc[domain_df['attribute'].isin(self._train_cat_attrs), 'domain_size'].max()
+        if pd.isna(self.max_cat_domain):
+            self.max_cat_domain = 0
         # Maximum dimension across all numerical attributes.
         self._max_num_dim = max(list(map(len, self._numerical_attr_groups)) or [0])
 
@@ -1440,6 +1442,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # Categorical filters and metrics
         fil_err = df_res.apply(lambda row: row['init_value'] not in row['_value_'],
                 axis=1) & fil_cat & fil_grdth
+        fil_noterr = ~fil_err & fil_cat & fil_grdth
         fil_cor = df_res.apply(lambda row: row['inferred_val'] in row['_value_'],
                 axis=1) & fil_cat & fil_grdth
         fil_repair = (df_res['init_value'] != df_res['inferred_val']) & fil_cat
@@ -1458,7 +1461,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             logging.warning('%s: total detected errors in validation set is 0', type(self).__name__)
 
         # In-sample accuracy (predict init value that is already correcT)
-        sample_acc = (~fil_err & fil_cor).sum() / (~fil_err).sum()
+        sample_acc = (fil_noterr & fil_cor).sum() / (fil_noterr).sum()
 
         precision = n_cor_repair / max(n_repair, 1)
         recall = n_cor_repair / max(total_err, 1)
