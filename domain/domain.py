@@ -189,8 +189,7 @@ class DomainEngine:
         raw_df = self.ds.get_quantized_data() if self.do_quantization else self.ds.get_raw_data()
         records = raw_df.to_records()
 
-        # TODO(stoke): generate the label indicating whether it is clean
-        # dk_dict = self.ds.aux_table[AuxTables.dk_cells].df[['_tid_', 'attribute']].to_dict()
+        dk_lookup = {(val[0], val[1]) for val in self.ds.aux_table[AuxTables.dk_cells].df[['_tid_', 'attribute']].values}
 
         for row in tqdm(list(records)):
             tid = row['_tid_']
@@ -253,7 +252,7 @@ class DomainEngine:
                               "weak_label": init_value,
                               "weak_label_idx": init_value_idx,
                               "fixed": cell_status,
-                              # TODO: "is_dk": (tid, attr) in dk_dict,
+                              "is_dk": (tid, attr) in dk_lookup,
                               })
                 vid += 1
         domain_df = pd.DataFrame(data=cells).sort_values('_vid_')
@@ -457,12 +456,10 @@ class DomainEngine:
 
         # TODO(richardwu): we currently do not do anything with is_cat.
         for (vid, is_cat, preds), row in tqdm(list(zip(preds_by_cell, domain_df.to_records()))):
-            # Do not re-label single valued cells.
-            if row['fixed'] == CellStatus.SINGLE_VALUE.value:
+            # Do not re-label single valued cells OR clean cells.
+            if row['fixed'] == CellStatus.SINGLE_VALUE.value or not row['is_dk']:
                 updated_domain_df.append(row)
                 continue
-            # TODO(stoke): for clean cells, weak labels should always be their init values.
-            #   Do not re-label clean cells.
 
             # prune domain if any of the values are above our domain_thresh_2
             preds = [[val, proba] for val, proba in preds if proba >= self.domain_thresh_2] or preds
