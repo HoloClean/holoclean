@@ -566,7 +566,6 @@ class VidSampler(Sampler):
 
 class TupleEmbedding(Estimator, torch.nn.Module):
     WEIGHT_DECAY = 0.
-    INIT_BIAS = 0.
 
     # TODO: replace numerical_attrs references with self.ds.numerical_attrs
     def __init__(self, env, dataset, domain_df,
@@ -733,9 +732,15 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # Hadamard/elementwise multiply this mask.
         self.out_num_masks = torch.zeros(self._n_train_num_attrs,
                 self._max_num_dim, dtype=torch.float32)
+        # Mask to select out the relevant 1-d value for an attribute from
+        # its attr group.
+        self._num_attr_group_mask = torch.zeros(self._n_train_num_attrs,
+                self._max_num_dim, dtype=torch.float32)
         for idx, attr in enumerate(self._dataset._train_num_attrs):
             dim = len(self._dataset._train_num_attrs_group[attr])
+            attr_idx = self._dataset._train_num_attrs_group[attr].index(attr)
             self.out_num_masks[idx,:dim] = 1.
+            self._num_attr_group_mask[idx, attr_idx] = 1.
 
         # logits fed into softmax used in weighted sum to combine
         # dot products of in_W and out_W per attribute.
@@ -899,12 +904,11 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # (batch, embed size, 1)
         return combined_init
 
-    def _cat_forward(self, combined_init, domain_idxs, domain_masks, cat_targets):
+    def _cat_forward(self, combined_init, domain_idxs, domain_masks):
         """
         combined_init: (batch, embed size, 1)
         domain_idxs: (batch, max domain)
         domain_masks: (batch, max domain)
-        cat_targets: (batch, 1)
 
         Returns logits: (batch, max domain)
         """
@@ -921,12 +925,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         logits.add_(domain_biases)
         # (batch, max domain)
         logits = logits.squeeze(-1)
-
-
-        # Init bias
-        if self.INIT_BIAS != 0.:
-            logits.scatter_add_(1, cat_targets,
-                    self.INIT_BIAS * torch.ones_like(cat_targets, dtype=torch.float32))
 
         # Add mask to void out-of-domain indexes
         # (batch, max domain)
@@ -962,11 +960,14 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         ### Temporary: just project and take the value
 
-        # Apply non-linearity
         # (batch, embed size, embed size)
         out_num_w1 = self.out_num_w1.index_select(0, num_attr_idxs.view(-1))
         # (batch, 1, embed size)
         out_num_bias1 = self.out_num_bias1.index_select(0, num_attr_idxs.view(-1)).unsqueeze(1)
+
+
+        # Apply non-linearity
+        ReLU(inplace=True)(combined_init)
         # (batch, 1, embed size)
         combined_init2 = combined_init.view(-1, 1, self._embed_size).matmul(out_num_w1) + out_num_bias1
         # (batch, embed size, 1)
@@ -1046,13 +1047,12 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
     def forward(self, is_categorical, attr_idxs,
                 init_cat_idxs, init_numvals, init_nummasks,
-                domain_idxs, domain_masks, cat_targets):
+                domain_idxs, domain_masks):
         """
         Performs one forward pass.
 
         is_categorical: (batch, 1)
         attr_idxs: (batch, 1)
-        cat_targets: (batch, 1)
         """
         # (batch, embed size, 1)
         combined_init = self._get_combined_init_vec(init_cat_idxs, init_numvals,
@@ -1063,13 +1063,12 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         cat_logits = torch.empty(0, self.max_cat_domain)
         if len(cat_mask):
-            cat_combined_init, domain_idxs, domain_masks, cat_targets = \
+            cat_combined_init, domain_idxs, domain_masks = \
                     combined_init[cat_mask], \
                     domain_idxs[cat_mask], \
-                    domain_masks[cat_mask], \
-                    cat_targets[cat_mask]
+                    domain_masks[cat_mask]
             # (# of cat VIDs, max_cat_domain)
-            cat_logits = self._cat_forward(cat_combined_init, domain_idxs, domain_masks, cat_targets)
+            cat_logits = self._cat_forward(cat_combined_init, domain_idxs, domain_masks)
 
         pred_numvals = torch.empty(0, self._max_num_dim)
         if len(num_mask):
@@ -1149,7 +1148,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
                 cat_preds, numval_preds = self.forward(is_categorical, attr_idxs,
                         init_cat_idxs, init_numvals, init_nummasks,
-                        domain_idxs, domain_masks, cat_targets)
+                        domain_idxs, domain_masks)
 
                 # Select out the appropriate targets
                 cat_mask, num_mask = self._cat_num_masks(is_categorical)
@@ -1311,6 +1310,42 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # return cat_vecs.detach(), \
         #         cat_bias.detach(), \
         #         num_vecs.detach()
+
+    def get_features(self, vids):
+        """
+        Returns three tensors:
+            cat_probas: (# of vids, max domain)
+            num_predvals: (# of vids, 1)
+            is_categorical: (# of vids, 1)
+        """
+        _, is_categorical, attr_idxs, init_cat_idxs, init_numvals, init_nummasks, \
+                domain_idxs, domain_masks, target_numvals, _ = self._get_dataset_vecs(vids)
+
+        # (# of cats), (# of num)
+        cat_masks, num_masks = self._cat_num_masks(is_categorical)
+        # (# of num VIDs, 1)
+        num_attr_idxs = self._num_attr_idxs(is_categorical, attr_idxs)
+
+
+        # (# of cats, max cat domain), (# of num, max_num_dim)
+        cat_logits, num_predvals = self.forward(is_categorical, attr_idxs,
+                init_cat_idxs, init_numvals, init_nummasks,
+                domain_idxs, domain_masks)
+
+        cat_probas = Softmax(dim=1)(cat_logits)
+
+        # (# of num VIDS, max_num_dim)
+        num_attr_group_mask = self._num_attr_group_mask.index_select(0, num_attr_idxs.view(-1))
+        # (# of num VIDS, 1)
+        num_predvals_masked = (num_attr_group_mask * num_predvals).sum(dim=1, keepdim=True)
+
+        ret_cat_probas = torch.zeros(len(vids), self.max_cat_domain)
+        ret_cat_probas[cat_masks] = cat_probas
+        ret_num_predvals = torch.zeros(len(vids), 1)
+        ret_num_predvals[num_masks] = num_predvals_masked
+
+        return ret_cat_probas.detach(), ret_num_predvals.detach(), is_categorical.detach()
+
 
     def _model_fpaths(self, prefix):
         return '%s_sdict.pkl' % prefix, '%s_ds_state.pkl' % prefix
@@ -1565,7 +1600,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         logging.debug('%s: starting batch prediction...', type(self).__name__)
         pred_cats, pred_nums = self.forward(is_categorical, attr_idxs,
                 init_cat_idxs, init_numvals, init_nummasks,
-                domain_idxs, domain_masks, cat_targets)
+                domain_idxs, domain_masks)
         logging.debug('%s: done batch prediction on %d categorical and %d numerical VIDs.',
                 type(self).__name__, pred_cats.shape[0], pred_nums.shape[0])
 
