@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import torch
 from torch.optim import Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import Dataset, DataLoader, Sampler
 from torch.nn import CrossEntropyLoss, Softmax, MSELoss, ReLU
 import torch.nn.functional as F
@@ -213,7 +213,10 @@ class LookupDataset(Dataset):
 
         self._vid_to_idx = {vid: idx for idx, vid in enumerate(domain_df['_vid_'].values)}
         self._train_records = domain_df[['_vid_', '_tid_', 'attribute', 'init_value',
-                                         'init_index', 'domain', 'domain_size', 'is_clean']].to_records()
+                                         'init_index',
+                                         'weak_label',
+                                         'weak_label_idx', 'fixed',
+                                         'domain', 'domain_size', 'is_clean']].to_records()
 
         # Maximum domain size: we don't use the domain of numerical attributes
         # so we can discard them.
@@ -407,7 +410,7 @@ class LookupDataset(Dataset):
             dom_size += len(neg_sample)
 
         # Position of init in domain values (target)
-        target = cur['init_index']
+        target = cur['weak_label_idx']
 
         # Mask out non-relevant values from padding (see below)
         domain_mask = torch.zeros(self.max_cat_domain, dtype=torch.float)
@@ -526,7 +529,7 @@ class VidSampler(Sampler):
     def __init__(self, domain_df, raw_df, numerical_attr_groups,
             shuffle=True, train_only_clean=False):
         # No NULL targets
-        domain_df = domain_df[domain_df['init_value'] != NULL_REPR]
+        domain_df = domain_df[domain_df['weak_label'] != NULL_REPR]
 
         # No NULL values in each cell's numerical group (all must be non-null
         # since target_numvals requires all numerical values.
@@ -550,7 +553,7 @@ class VidSampler(Sampler):
 
         # Train on only clean cells
         if train_only_clean:
-            self._vids = domain_df.loc[domain_df['is_clean'], '_vid_']
+            self._vids = domain_df.loc[(domain_df['is_clean'] | domain_df['fixed'] >= 1), '_vid_']
         else:
             self._vids = domain_df['_vid_'].values
 
@@ -625,11 +628,11 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # Convert non numerical init values in numerical attributes with _nan_.
         if self._numerical_attrs is not None:
             fil_attr = self.domain_df['attribute'].isin(self._numerical_attrs)
-            fil_notnull = self.domain_df['init_value'] != NULL_REPR
-            fil_notnumeric = self.domain_df['init_value'].str.contains(NONNUMERICS)
+            fil_notnull = self.domain_df['weak_label'] != NULL_REPR
+            fil_notnumeric = self.domain_df['weak_label'].str.contains(NONNUMERICS)
             bad_numerics = fil_attr & fil_notnull & fil_notnumeric
             if bad_numerics.sum():
-                self.domain_df.loc[bad_numerics, 'init_value'] = NULL_REPR
+                self.domain_df.loc[bad_numerics, 'weak_label'] = NULL_REPR
                 logging.warning('%s: replaced %d non-numerical values in DOMAIN as "%s" (NULL)',
                         type(self).__name__,
                         bad_numerics.sum(),
@@ -775,8 +778,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # Allow user to pass in their desired loss.
         self._num_loss = MSELoss(reduction='mean')
         self._optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=self.WEIGHT_DECAY)
-        self._scheduler = ReduceLROnPlateau(self._optimizer, 'max',
-                factor=0.2, patience=2, verbose=True)
 
         # Validation stuff
         self._do_validation = False
@@ -1135,11 +1136,17 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                       self._n_train_num_attrs,
                       self._train_num_attrs)
 
+        num_batches = len(DataLoader(self._dataset, batch_size=batch_size, sampler=sampler))
+        num_steps = num_epochs * num_batches
+
         batch_losses = []
         # Main training loop.
         for epoch_idx in range(1, num_epochs+1):
             logging.debug('%s: epoch %d of %d', type(self).__name__, epoch_idx, num_epochs)
             batch_cnt = 0
+            scheduler = CosineAnnealingLR(self._optimizer, num_batches)
+            logging.debug('%s: using cosine LR scheduler with %d steps', type(self).__name__, num_batches)
+
             for vids, is_categorical, attr_idxs, \
                 init_cat_idxs, init_numvals, init_nummasks, \
                 domain_idxs, domain_masks, \
@@ -1189,6 +1196,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                     self.out_B._grad[0].zero_()
 
                 self._optimizer.step()
+                scheduler.step()
                 batch_cnt += 1
 
             logging.debug('%s: average batch loss: %f',
@@ -1197,7 +1205,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
             if self._do_validation and epoch_idx % self._validate_epoch == 0:
                 res = self.validate()
-                self._scheduler.step(res['precision_dk'])
 
         return batch_losses
 
