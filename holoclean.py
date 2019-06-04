@@ -1,3 +1,4 @@
+import time
 import logging
 import os
 import random
@@ -365,19 +366,32 @@ class Session:
         status, quantize_time, quantized_data = \
             quantize_km(self.env, self.ds.get_raw_data(), num_attr_groups_bins)
 
+        logging.info(status)
+        logging.debug('Time to quantize the dataset: %.2f secs' % quantize_time)
+
+        self.load_quantized_data(quantized_data)
+
+
+        return quantized_data
+
+    def load_quantized_data(self, df):
+        tic = time.time()
         name = self.ds.raw_data.name + '_quantized'
-        self.ds.quantized_data = Table(name, Source.DF, df=quantized_data)
+        self.ds.quantized_data = Table(name, Source.DF, df=df)
 
         # Re-store to DB, ensuring numerical values are stored as floats.
-        df_correct_type = quantized_data.copy()
+        df_correct_type = df.copy()
         for attr in self.ds.numerical_attrs:
             df_correct_type.loc[df_correct_type[attr] == NULL_REPR, attr] = np.nan
             df_correct_type[attr] = df_correct_type[attr].astype(float)
         df_correct_type.to_sql(name, self.ds.engine.engine, if_exists='replace', index=False,
                                index_label=None)
 
-        logging.info(status)
-        logging.debug('Time to quantize the dataset: %.2f secs' % quantize_time)
+        for attr in self.ds.quantized_data.get_attributes():
+            self.ds.quantized_data.create_db_index(self.ds.engine, [attr])
+        logging.debug('Time to load quantized dataset: %.2f secs' % (time.time() - tic))
+
+
 
     def generate_domain(self):
         status, domain_time = self.domain_engine.setup()
