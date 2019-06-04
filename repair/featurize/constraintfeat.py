@@ -61,6 +61,8 @@ class ConstraintFeaturizer(Featurizer):
     def specific_setup(self):
         self.name = 'ConstraintFeaturizer'
         self.constraints = self.ds.constraints
+        # TODO(richardwu): should we be querying DCs based on original values
+        # vs quantized centroids?
         self.table_name = self.ds.quantized_data.name if self.ds.do_quantization else self.ds.raw_data.name
 
     def create_tensor(self):
