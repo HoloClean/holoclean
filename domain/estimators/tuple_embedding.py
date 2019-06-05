@@ -1347,16 +1347,13 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         logging.debug('%s: getting features in batches (# batches = %d, size = %d) ...',
                 type(self).__name__, num_batches, batch_sz)
 
+        mask_offset = 0
 
         self._dataset.set_mode(inference_mode=True)
         for vids, is_categorical, attr_idxs, \
             init_cat_idxs, init_numvals, init_nummasks, \
             domain_idxs, domain_masks, \
             target_numvals, cat_targets in tqdm(DataLoader(self._dataset, batch_size=batch_sz, sampler=IterSampler(vids))):
-            # (# of cats), (# of num)
-            cat_masks, num_masks = self._cat_num_masks(is_categorical)
-            # (# of num VIDs, 1)
-            num_attr_idxs = self._num_attr_idxs(is_categorical, attr_idxs)
 
             # (# of cats, max cat domain), (# of num, max_num_dim)
             cat_logits, num_predvals = self.forward(is_categorical,
@@ -1369,20 +1366,27 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
             cat_probas = Softmax(dim=1)(cat_logits)
 
+            # (# of cats), (# of num)
+            cat_masks, num_masks = self._cat_num_masks(is_categorical)
+            cat_masks.add_(mask_offset)
+            num_masks.add_(mask_offset)
+            mask_offset += is_categorical.shape[0]
+            # (# of num VIDs, 1)
+            num_attr_idxs = self._num_attr_idxs(is_categorical, attr_idxs)
             num_attr_group_mask = self._num_attr_group_mask.index_select(0, num_attr_idxs.view(-1))
             # (# of num VIDS, 1)
             num_predvals_masked = (num_attr_group_mask * num_predvals).sum(dim=1, keepdim=True)
 
             # write values to return tensor
-            ret_cat_probas.scatter_(0, cat_masks.unsqueeze(-1).expand(-1, self.max_cat_domain), cat_probas)
-            ret_num_predvals.scatter_(0, num_masks.unsqueeze(-1), num_predvals_masked)
+            ret_cat_probas.scatter_(0, cat_masks.unsqueeze(-1).expand(-1, self.max_cat_domain), cat_probas.data)
+            ret_num_predvals.scatter_(0, num_masks.unsqueeze(-1), num_predvals_masked.data)
             ret_is_categorical[cat_masks] = 1
 
             del cat_probas, num_predvals_masked
 
         self._dataset.set_mode(inference_mode=False)
 
-        return ret_cat_probas, ret_num_predvals, ret_is_categorical
+        return ret_cat_probas.detach(), ret_num_predvals.detach(), ret_is_categorical.detach()
 
 
     def _model_fpaths(self, prefix):
