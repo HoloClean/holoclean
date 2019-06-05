@@ -123,6 +123,7 @@ class EmbeddingFeaturizer(Featurizer):
             # Pad last dimension on the right side with pad_len
             cat_probas = F.pad(cat_probas, pad=(0,pad_len), mode='constant', value=0.)
 
+        # Create tensor for z-scored domain values
         num_attrs_idx = {attr: idx for idx, attr in enumerate(self.embedding_model._train_num_attrs)}
         domain_numvals = torch.zeros(len(vids), self.embedding_model.max_domain, len(num_attrs_idx))
         # Mask to mask out RMSE computed on padding outside of cell's domain.
