@@ -1338,55 +1338,57 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             num_predvals: (# of vids, 1)
             is_categorical: (# of vids, 1)
         """
-        ret_cat_probas = torch.zeros(len(vids), self.max_cat_domain)
-        ret_num_predvals = torch.zeros(len(vids), 1)
-        ret_is_categorical = torch.zeros(len(vids), 1, dtype=torch.uint8)
+        # No gradients required.
+        with torch.no_grad():
+            ret_cat_probas = torch.zeros(len(vids), self.max_cat_domain)
+            ret_num_predvals = torch.zeros(len(vids), 1)
+            ret_is_categorical = torch.zeros(len(vids), 1, dtype=torch.uint8)
 
-        batch_sz = int(1e6 / self._embed_size)
-        num_batches = math.ceil(len(vids) / batch_sz)
-        logging.debug('%s: getting features in batches (# batches = %d, size = %d) ...',
-                type(self).__name__, num_batches, batch_sz)
+            batch_sz = int(1e5 / self._embed_size)
+            num_batches = math.ceil(len(vids) / batch_sz)
+            logging.debug('%s: getting features in batches (# batches = %d, size = %d) ...',
+                    type(self).__name__, num_batches, batch_sz)
 
-        mask_offset = 0
+            mask_offset = 0
 
-        self._dataset.set_mode(inference_mode=True)
-        for vids, is_categorical, attr_idxs, \
-            init_cat_idxs, init_numvals, init_nummasks, \
-            domain_idxs, domain_masks, \
-            target_numvals, cat_targets in tqdm(DataLoader(self._dataset, batch_size=batch_sz, sampler=IterSampler(vids))):
+            self._dataset.set_mode(inference_mode=True)
+            for vids, is_categorical, attr_idxs, \
+                init_cat_idxs, init_numvals, init_nummasks, \
+                domain_idxs, domain_masks, \
+                target_numvals, cat_targets in tqdm(DataLoader(self._dataset, batch_size=batch_sz, sampler=IterSampler(vids))):
 
-            # (# of cats, max cat domain), (# of num, max_num_dim)
-            cat_logits, num_predvals = self.forward(is_categorical,
-                    attr_idxs,
-                    init_cat_idxs,
-                    init_numvals,
-                    init_nummasks,
-                    domain_idxs,
-                    domain_masks)
+                # (# of cats, max cat domain), (# of num, max_num_dim)
+                cat_logits, num_predvals = self.forward(is_categorical,
+                        attr_idxs,
+                        init_cat_idxs,
+                        init_numvals,
+                        init_nummasks,
+                        domain_idxs,
+                        domain_masks)
 
-            cat_probas = Softmax(dim=1)(cat_logits)
+                cat_probas = Softmax(dim=1)(cat_logits)
 
-            # (# of cats), (# of num)
-            cat_masks, num_masks = self._cat_num_masks(is_categorical)
-            cat_masks.add_(mask_offset)
-            num_masks.add_(mask_offset)
-            mask_offset += is_categorical.shape[0]
-            # (# of num VIDs, 1)
-            num_attr_idxs = self._num_attr_idxs(is_categorical, attr_idxs)
-            num_attr_group_mask = self._num_attr_group_mask.index_select(0, num_attr_idxs.view(-1))
-            # (# of num VIDS, 1)
-            num_predvals_masked = (num_attr_group_mask * num_predvals).sum(dim=1, keepdim=True)
+                # (# of cats), (# of num)
+                cat_masks, num_masks = self._cat_num_masks(is_categorical)
+                cat_masks.add_(mask_offset)
+                num_masks.add_(mask_offset)
+                mask_offset += is_categorical.shape[0]
+                # (# of num VIDs, 1)
+                num_attr_idxs = self._num_attr_idxs(is_categorical, attr_idxs)
+                num_attr_group_mask = self._num_attr_group_mask.index_select(0, num_attr_idxs.view(-1))
+                # (# of num VIDS, 1)
+                num_predvals_masked = (num_attr_group_mask * num_predvals).sum(dim=1, keepdim=True)
 
-            # write values to return tensor
-            ret_cat_probas.scatter_(0, cat_masks.unsqueeze(-1).expand(-1, self.max_cat_domain), cat_probas.data)
-            ret_num_predvals.scatter_(0, num_masks.unsqueeze(-1), num_predvals_masked.data)
-            ret_is_categorical[cat_masks] = 1
+                # write values to return tensor
+                ret_cat_probas.scatter_(0, cat_masks.unsqueeze(-1).expand(-1, self.max_cat_domain), cat_probas.data)
+                ret_num_predvals.scatter_(0, num_masks.unsqueeze(-1), num_predvals_masked.data)
+                ret_is_categorical[cat_masks] = 1
 
-            del cat_probas, num_predvals_masked
+                del cat_probas, num_predvals_masked
 
-        self._dataset.set_mode(inference_mode=False)
+            self._dataset.set_mode(inference_mode=False)
 
-        return ret_cat_probas.detach(), ret_num_predvals.detach(), ret_is_categorical.detach()
+            return ret_cat_probas.detach(), ret_num_predvals.detach(), ret_is_categorical.detach()
 
 
     def _model_fpaths(self, prefix):
@@ -1636,46 +1638,49 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         n_cats, n_nums = 0, 0
 
         # Limit max batch size to prevent memory explosion.
-        batch_sz = int(1e6 / self._embed_size)
+        batch_sz = int(1e5 / self._embed_size)
         num_batches = math.ceil(df.shape[0] / batch_sz)
         logging.debug('%s: starting batched (# batches = %d, size = %d) prediction...',
                 type(self).__name__, num_batches, batch_sz)
         self._dataset.set_mode(inference_mode=True)
-        for vids, is_categorical, attr_idxs, \
-            init_cat_idxs, init_numvals, init_nummasks, \
-            domain_idxs, domain_masks, \
-            target_numvals, cat_targets in tqdm(DataLoader(self._dataset, batch_size=batch_sz, sampler=IterSampler(df['_vid_'].values))):
-            pred_cats, pred_nums = self.forward(is_categorical,
-                    attr_idxs,
-                    init_cat_idxs,
-                    init_numvals,
-                    init_nummasks,
-                    domain_idxs,
-                    domain_masks)
 
-            pred_cat_idx = 0
-            pred_num_idx = 0
+        # No gradients required.
+        with torch.no_grad():
+            for vids, is_categorical, attr_idxs, \
+                init_cat_idxs, init_numvals, init_nummasks, \
+                domain_idxs, domain_masks, \
+                target_numvals, cat_targets in tqdm(DataLoader(self._dataset, batch_size=batch_sz, sampler=IterSampler(df['_vid_'].values))):
+                pred_cats, pred_nums = self.forward(is_categorical,
+                        attr_idxs,
+                        init_cat_idxs,
+                        init_numvals,
+                        init_nummasks,
+                        domain_idxs,
+                        domain_masks)
 
-            for idx, is_cat in enumerate(is_categorical.view(-1)):
-                vid = int(vids[idx, 0])
-                if is_cat:
-                    logits = pred_cats[pred_cat_idx]
-                    pred_cat_idx += 1
-                    n_cats += 1
-                    yield vid, bool(is_cat), zip(self._dataset.domain_values(vid), map(float, Softmax(dim=0)(logits)))
-                    continue
+                pred_cat_idx = 0
+                pred_num_idx = 0
 
-                # Real valued prediction
+                for idx, is_cat in enumerate(is_categorical.view(-1)):
+                    vid = int(vids[idx, 0])
+                    if is_cat:
+                        logits = pred_cats[pred_cat_idx]
+                        pred_cat_idx += 1
+                        n_cats += 1
+                        yield vid, bool(is_cat), zip(self._dataset.domain_values(vid), map(float, Softmax(dim=0)(logits)))
+                        continue
 
-                # Find the z-score and map it back to its actual value
-                attr = train_idx_to_attr[int(attr_idxs[idx,0])]
-                group_idx = self._dataset._train_num_attrs_group[attr].index(attr)
-                mean = self._dataset._num_attrs_mean[attr]
-                std = self._dataset._num_attrs_std[attr]
-                pred_num = float(pred_nums[pred_num_idx,group_idx]) * std + mean
-                pred_num_idx += 1
-                n_nums += 1
-                yield vid, False, pred_num
+                    # Real valued prediction
+
+                    # Find the z-score and map it back to its actual value
+                    attr = train_idx_to_attr[int(attr_idxs[idx,0])]
+                    group_idx = self._dataset._train_num_attrs_group[attr].index(attr)
+                    mean = self._dataset._num_attrs_mean[attr]
+                    std = self._dataset._num_attrs_std[attr]
+                    pred_num = float(pred_nums[pred_num_idx,group_idx]) * std + mean
+                    pred_num_idx += 1
+                    n_nums += 1
+                    yield vid, False, pred_num
 
         self._dataset.set_mode(inference_mode=False)
         logging.debug('%s: done batch prediction on %d categorical and %d numerical VIDs.',
