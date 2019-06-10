@@ -27,8 +27,9 @@ class FeaturizedDataset:
                                          featurizer.learnable,
                                          featurizer.init_weight,
                                          featurizer.feature_names())
-                                for tensor, featurizer in zip(tensors, featurizers)]
-        tensor = torch.cat(tensors, 2)
+                                for tensor, featurizer in zip(tensors, featurizers)
+                                if tensor is not None]
+        tensor = torch.cat([tens for tens in tensors if tens is not None], 2)
         self.tensor = tensor
 
         logging.debug('DONE featurization. Feature tensor size: %s', self.tensor.shape)

@@ -67,6 +67,8 @@ class ConstraintFeaturizer(Featurizer):
         queries = self.generate_relaxed_sql()
         results = self.ds.engine.execute_queries_w_backup(queries)
         tensors = self._apply_func(partial(gen_feat_tensor, total_vars=self.total_vars, classes=self.classes), results)
+        if not len(tensors):
+            return None
         combined = torch.cat(tensors, 2)
         combined = F.normalize(combined, p=2, dim=1)
         return combined
