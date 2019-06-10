@@ -224,8 +224,8 @@ class DomainEngine:
                     # point to run inference on it since we cannot even generate
                     # a random domain. Therefore, we just ignore it from the
                     # final tensor.
-                    if len(rand_dom_values) == 0:
-                        continue
+                    # if len(rand_dom_values) == 0:
+                    #     continue
 
                     # Otherwise, just add the random domain values to the domain
                     # and set the cell status accordingly.
