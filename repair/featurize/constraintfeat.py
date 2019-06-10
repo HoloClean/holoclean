@@ -145,6 +145,12 @@ class ConstraintFeaturizer(Featurizer):
             if len(orig_cnf) == 0:
                 orig_cnf = 'TRUE'
             rv_attr, op, rv_val = self.relax_unary_predicate(predicates[k])
+
+            # No need to generate queries for non-active attributes (attributes
+            # we are not training for)
+            if rv_attr not in self.ds.get_active_attributes():
+                continue
+
             cast_type = 'NUMERIC'
             if rv_attr in self.ds.categorical_attrs:
                 cast_type = 'TEXT'
@@ -168,6 +174,12 @@ class ConstraintFeaturizer(Featurizer):
             is_binary, join_rel, other_rel = self.get_binary_predicate_join_rel(predicates[k])
             if not is_binary:
                 rv_attr, op, rv_val = self.relax_unary_predicate(predicates[k])
+
+                # No need to generate queries for non-active attributes (attributes
+                # we are not training for)
+                if rv_attr not in self.ds.get_active_attributes():
+                    continue
+
                 cast_type = 'NUMERIC'
                 if rv_attr in self.ds.categorical_attrs:
                     cast_type = 'TEXT'
@@ -179,6 +191,11 @@ class ConstraintFeaturizer(Featurizer):
             else:
                 for idx, rel in enumerate(join_rel):
                     rv_attr, op, rv_val = self.relax_binary_predicate(predicates[k], idx)
+
+                    # No need to generate queries for non-active attributes (attributes
+                    # we are not training for)
+                    if rv_attr not in self.ds.get_active_attributes():
+                        continue
 
                     cast_type = 'NUMERIC'
                     if rv_attr in self.ds.categorical_attrs:
