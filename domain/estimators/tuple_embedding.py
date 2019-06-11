@@ -586,6 +586,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             numerical_attr_groups=None,
             memoize=False,
             neg_sample=True,
+            dropout_pct=0.,
             learning_rate=0.05,
             validate_fpath=None, validate_tid_col=None, validate_attr_col=None,
             validate_val_col=None, validate_epoch=None):
@@ -611,6 +612,11 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         """
         torch.nn.Module.__init__(self)
         Estimator.__init__(self, env, dataset, domain_df)
+
+        self.inference_mode = False
+
+        assert dropout_pct < 1 and dropout_pct >= 0
+        self.dropout_pct = dropout_pct
 
         self._embed_size = self.env['estimator_embedding_size']
         train_attrs = self.env['train_attrs']
@@ -908,6 +914,11 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # (batch, 1, n_init_cat_attrs + n_num_attr_groups)
         attr_weights = Softmax(dim=2)(attr_logits)
 
+        # Apply dropout to individual attributes of context
+        if self.dropout_pct > 0 and not self.inference_mode:
+            dropout_mask = (torch.rand_like(attr_weights) > self.dropout_pct).type(torch.FloatTensor)
+            attr_weights = attr_weights.mul(dropout_mask / (1. - self.dropout_pct))
+
         # (batch, 1, embed size)
         combined_init = attr_weights.matmul(init_vecs)
         # (batch, embed size, 1)
@@ -968,10 +979,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # (batch, embed size, max num dim)
         normed_out_num_bases.mul_(out_num_masks.unsqueeze(1))
 
-
-
-        ### Temporary: just project and take the value
-
         # (batch, embed size, embed size)
         out_num_w1 = self.out_num_w1.index_select(0, num_attr_idxs.view(-1))
         # (batch, 1, embed size)
@@ -985,77 +992,16 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # (batch, embed size, 1)
         combined_init2 = combined_init2.view(-1, self._embed_size, 1)
 
+        ### Project non-linear context onto basis vectors.
         # (batch, max num dim)
         pred_numvals = (combined_init2 * normed_out_num_bases).sum(dim=1)
         pred_numvals.mul_(out_num_masks)
 
         return pred_numvals
 
-
-
-
-
-
-        # Project combined_init onto basis vectors:
-        #   That is given normalized basis vectors v_1,...v_n the projection
-        #   of vector c is
-        #       c'  = \sum_{i=1}^n (c \cdot v_i) v_i
-        # We perform the dot product by multiplying element-wise then
-        # summing ALONG THE EMBEDDING DIMENSION.
-        # We then project it back onto the normed basis vectors
-        # (batch, embed size, max num dim)
-        projected_inits = (combined_init * normed_out_num_bases).sum(dim=1, keepdim=True) * normed_out_num_bases
-        # (batch, embed size, 1)
-        projected_inits = projected_inits.sum(dim=2, keepdim=True)
-        # Calculate pseudo-inverse of bases for all attributes in the current batch
-        unique_num_attr_idxs = num_attr_idxs.unique(sorted=True)
-        # (unique attrs, max_num_dim, embed size)
-        pinverse_num_bases = torch.stack([self.out_num_bases[idx].pinverse() for idx in unique_num_attr_idxs])
-        # We need to find which index each attr_idx corresponds to in
-        # dim = 0 of pinverse_num_bases.
-        # e.g. given
-        #     unique_num_attr_idxs = [2,5,1]
-        #     num_attr_idxs = [[1,5,2,5,1]]
-        # then temp = [[ 1, -3,  0, -3,  1],
-        #         [ 4,  0,  3,  0,  4],
-        #         [ 0, -4, -1, -4,  0]]
-        temp = unique_num_attr_idxs.unsqueeze(1) - num_attr_idxs.t()
-        # e.g. temp = [[0, 0, 1],
-        #         [0, 1, 0],
-        #         [1, 0, 0],
-        #         [0, 1, 0],
-        #         [0, 0, 1]]
-        temp = (temp == 0).t()
-        assert temp.any(dim=1).all()
-        # e.g. num_attr_idxs_pinverses = [2, 1, 0, 1, 2]
-        # (batch)
-        num_attr_idxs_pinverses = temp.nonzero()[:,1]
-        # Apply (pseudo)-inverse to find real value again.
-        # That is for an attribute with d dimension and embedding size k, d <= k
-        # we have:
-        #     V: k X d basis
-        #     z: k X 1 zero vector
-        #     r: d X 1 d-dimensional real value
-        # We map r into a k-dimensional vector c by
-        #     Vr + z = c
-        # Now that we have c our k-dimensional context vector projected onto the span
-        # of V, we recover r by:
-        #     r = V^{-1}(c - z)
-        # where V^{-1} is the pseudo-inverse.
-        # (batch, max_num_dim, embed size)
-        batch_pinverses = pinverse_num_bases.index_select(0, num_attr_idxs_pinverses)
-
-        # (batch, embed size, 1)
-        out_num_zero_vecs = self.out_num_zero_vecs.index_select(0, num_attr_idxs.view(-1)).unsqueeze(-1)
-
-        # (batch, max_num_dim)
-        pred_numvals = batch_pinverses.matmul(projected_inits - out_num_zero_vecs).squeeze(-1)
-
-        # 0 out extraneous dimensions since extraneous targets are 0
-        # (batch, max_num_dim)
-        pred_numvals.mul_(out_num_masks)
-
-        return pred_numvals
+    def set_mode(self, inference_mode):
+        self.inference_mode = inference_mode
+        self._dataset.set_mode(inference_mode)
 
     def forward(self, is_categorical, attr_idxs,
                 init_cat_idxs, init_numvals, init_nummasks,
@@ -1221,116 +1167,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         return batch_losses
 
-    def _get_dataset_vecs(self, vids):
-        """
-        Returns the vectors from Dataset for the given VIDs that has been
-        reshaped to be in the proper format for forward.
-
-        Returns (vids,
-            is_categorical,
-            attr_idxs,
-            init_cat_idxs,
-            init_numvals,
-            init_nummasks,
-            domain_idxs,
-            domain_masks,
-            target_numvals,
-            cat_targets,
-        )
-        """
-        self._dataset.set_mode(inference_mode=True)
-        ds_tuples = [self._dataset[vid] for vid in vids]
-        self._dataset.set_mode(inference_mode=False)
-
-        return tuple(map(torch.stack, list(zip(*ds_tuples))))
-
-    def get_context_vecs(self, vids):
-        """
-        Returns (# of vids, embed_size) context DETACHED pytorch tensors for
-        the given VIDs.
-        """
-        _, _, attr_idxs, init_cat_idxs, init_numvals, init_nummasks, \
-                _, _, _, _ = self._get_dataset_vecs(vids)
-
-        # (# of vids, embed_size, 1)
-        context_vec = self._get_combined_init_vec(init_cat_idxs, init_numvals, init_nummasks, attr_idxs)
-        # (# of vids, embed_size)
-        return context_vec.squeeze(-1).detach()
-
-    def get_target_vecs(self, vids):
-        """
-        Returns ((1), (2), (3)) DETACHED pytorch vectors.
-
-
-        (1): (# of vids, max domain values, embed_size) the target
-            tensors for each domain value for each VID (CATEGORICAL cells).
-
-        (2): (# of vids, max domain values, 1) the bias for the target vector
-            (CATEGORICAL cells).
-
-        (3): (# of cats) indices of categorical cells.
-
-        Note for each VID the domain target vectors are padded up to the maximum
-        domain size.
-        """
-        _, is_categorical, attr_idxs, _, _, _, \
-                domain_idxs, _, target_numvals, _ = self._get_dataset_vecs(vids)
-
-        # (# of cats), (# of num)
-        cat_masks, num_masks = self._cat_num_masks(is_categorical)
-
-        # (# of cats, max_cat_domain, embed_size)
-        target_vecs = self.out_W.index_select(0, domain_idxs.view(-1))\
-                .view(*domain_idxs.shape, self._embed_size)
-        # (# of cats, max_cat_domain, 1)
-        target_bias = self.out_B.index_select(0, domain_idxs.view(-1))\
-            .view(*domain_idxs.shape, 1)
-
-        # Zero out target vectors for numerical values for now since
-        # there is no concept of target vectors for numerical cells.
-        target_vecs[num_masks] = 0.
-        target_bias[num_masks] = 0.
-
-        return target_vecs.detach(), target_bias.detach(), cat_masks.detach()
-
-        # # Select target vector and bias for CATEGORICAL cells
-        # cat_vecs = torch.FloatTensor(0, self.max_cat_domain, self._embed_size)
-        # cat_bias = torch.FloatTensor(0, self.max_cat_domain, 1)
-        # if len(cat_masks):
-        #     # (# of cats, max_cat_domain)
-        #     domain_idxs = domain_idxs.index_select(0, cat_masks)
-        #     # (# of cats, max_cat_domain, embed_size)
-        #     cat_vecs = self.out_W.index_select(0, domain_idxs.view(-1))\
-        #             .view(*domain_idxs.shape, self._embed_size)
-        #     # (# of cats, max_cat_domain, 1)
-        #     cat_bias = self.out_B.index_select(0, domain_idxs.view(-1))\
-        #         .view(*domain_idxs.shape, 1)
-        # There is no "target vector" for NUMERICAL cells since we do
-        # pseudo-regression with the context vector. Ignore for now.
-        # # Select target vector and bias for NUMERICAL cells
-        # num_vecs = torch.FloatTensor(0, 1, self._embed_size)
-        # if len(num_masks):
-        #     # (# of num, max num dim)
-        #     target_numvals = target_numvals.index_select(0, num_masks)
-
-        #     # (# of num, 1)
-        #     num_attr_idxs = self._num_attr_idxs(is_categorical, attr_idxs)
-
-        #     # (# of num, embed_size, max num dim)
-        #     out_num_bases = self.out_num_bases.index_select(0, num_attr_idxs.view(-1))
-        #     # (# of num, max num dim)
-        #     out_num_masks = self.out_num_masks.index_select(0, num_attr_idxs.view(-1))
-        #     # (# of num, embed_size, max num dim)
-        #     out_num_bases.mul_(out_num_masks.unsqueeze(1))
-
-        #     # (# of num, embed_size, 1)
-        #     num_vecs = out_num_bases.matmul(target_numvals.unsqueeze(-1))
-        #     # (# of num, 1, embed_size)
-        #     num_vecs = num_vecs.view(-1, 1, self._embed_size)
-        # return cat_vecs.detach(), \
-        #         cat_bias.detach(), \
-        #         num_vecs.detach()
-
     def get_features(self, vids):
         """
         Returns three tensors:
@@ -1351,7 +1187,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
             mask_offset = 0
 
-            self._dataset.set_mode(inference_mode=True)
+            self.set_mode(inference_mode=True)
             for vids, is_categorical, attr_idxs, \
                 init_cat_idxs, init_numvals, init_nummasks, \
                 domain_idxs, domain_masks, \
@@ -1386,7 +1222,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
                 del cat_probas, num_predvals_masked
 
-            self._dataset.set_mode(inference_mode=False)
+            self.set_mode(inference_mode=False)
 
             return ret_cat_probas.detach(), ret_num_predvals.detach(), ret_is_categorical.detach()
 
@@ -1642,7 +1478,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         num_batches = math.ceil(df.shape[0] / batch_sz)
         logging.debug('%s: starting batched (# batches = %d, size = %d) prediction...',
                 type(self).__name__, num_batches, batch_sz)
-        self._dataset.set_mode(inference_mode=True)
+        self.set_mode(inference_mode=True)
 
         # No gradients required.
         with torch.no_grad():
@@ -1682,6 +1518,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                     n_nums += 1
                     yield vid, False, pred_num
 
-        self._dataset.set_mode(inference_mode=False)
+        self.set_mode(inference_mode=False)
         logging.debug('%s: done batch prediction on %d categorical and %d numerical VIDs.',
                 type(self).__name__, n_cats, n_nums)
