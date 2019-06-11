@@ -25,6 +25,7 @@ class EmbeddingFeaturizer(Featurizer):
     """
     DEFAULT_EPOCHS = 10
     DEFAULT_BATCH_SIZE = 32
+    DEFAULT_DROPOUT = 0.
     DEFAULT_LR = 0.05
     DEFAULT_WEIGHT_LAMBDA = 0.
 
@@ -37,6 +38,7 @@ class EmbeddingFeaturizer(Featurizer):
 
             epochs = self.addn_kwargs.get('epochs', self.DEFAULT_EPOCHS)
             batch_size = self.addn_kwargs.get('batch_size', self.DEFAULT_BATCH_SIZE)
+            dropout_pct = self.addn_kwargs.get('dropout_pct', self.DEFAULT_DROPOUT)
             weight_lambda = self.addn_kwargs.get('weight_lambda', self.DEFAULT_WEIGHT_LAMBDA)
             learning_rate = self.addn_kwargs.get('learning_rate', self.DEFAULT_LR)
             numerical_attr_groups = self.addn_kwargs.get('numerical_attr_groups', None)
@@ -54,6 +56,7 @@ class EmbeddingFeaturizer(Featurizer):
             domain_df = self.ds.aux_table[AuxTables.cell_domain].df.sort_values('_vid_')
             self.embedding_model = TupleEmbedding(self.env, self.ds, domain_df,
                     numerical_attr_groups=numerical_attr_groups,
+                    dropout_pct=dropout_pct,
                     learning_rate=learning_rate,
                     validate_fpath=validate_fpath,
                     validate_tid_col=validate_tid_col,
