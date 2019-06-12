@@ -143,7 +143,7 @@ class RepairModel:
         epochs = self.env['epochs']
         for epoch_idx in tqdm(range(1, epochs + 1)):
             cost = 0.
-            num_batches = X_train.shape[0] // batch_size
+            num_batches = (X_train.shape[0] + batch_size - 1) // batch_size
             for k in range(num_batches):
                 start, end = k * batch_size, (k + 1) * batch_size
                 cost += self.__train__(loss, optimizer, X_train[start:end],
