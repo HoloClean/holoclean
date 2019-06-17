@@ -208,8 +208,6 @@ class DomainEngine:
                 if len(dom) <= 1:
                     # Initial  value is NULL and we cannot come up with
                     # a domain (note that NULL is not included in the domain);
-                    # a random domain probably won't help us so
-                    # completely ignore this cell and continue.
                     # Note if len(dom) == 1, then we generated a single correct
                     # value (since NULL is not included in the domain).
                     # This would be a "SINGLE_VALUE" example and we'd still
