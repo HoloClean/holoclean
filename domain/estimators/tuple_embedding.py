@@ -1202,7 +1202,10 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                         domain_idxs,
                         domain_masks)
 
-                cat_probas = Softmax(dim=1)(cat_logits)
+                if cat_logits.nelement():
+                    cat_probas = Softmax(dim=1)(cat_logits)
+                else:
+                    cat_probas = cat_logits
 
                 # (# of cats), (# of num)
                 cat_masks, num_masks = self._cat_num_masks(is_categorical)
