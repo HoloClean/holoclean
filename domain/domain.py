@@ -210,8 +210,8 @@ class DomainEngine:
                     # a domain (note that NULL is not included in the domain);
                     # a random domain probably won't help us so
                     # completely ignore this cell and continue.
-                    if init_value == NULL_REPR:
-                        continue
+                    # if init_value == NULL_REPR:
+                    #    continue
 
                     # Not enough domain values, we need to get some random
                     # values (other than 'init_value') for training. However,
