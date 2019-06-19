@@ -18,7 +18,7 @@ from dataset import AuxTables
 from ..estimator import Estimator
 from utils import NULL_REPR
 
-NONNUMERICS = "[^0-9+-.]"
+NONNUMERICS = "[^0-9+-.e]"
 
 def verify_numerical_attr_groups(dataset, numerical_attr_groups):
     """
@@ -141,7 +141,7 @@ class LookupDataset(Dataset):
             self._num_attrs_std[num_attr] = temp[fil_notnull].astype(np.float).std(axis=0)
             temp[fil_notnull] = ((temp[fil_notnull].astype(np.float) \
                     - self._num_attrs_mean[num_attr]) \
-                    / self._num_attrs_std[num_attr]).astype(str)
+                    / (self._num_attrs_std[num_attr] or 1.)).astype(str)
             self._raw_data[num_attr] = temp
 
         # Indexes assigned to attributes: first categorical then numerical.
@@ -643,17 +643,17 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                     self._embed_size)
             raise Exception()
         # Convert non numerical init values in numerical attributes with _nan_.
-        if self._numerical_attrs is not None:
-            fil_attr = self.domain_df['attribute'].isin(self._numerical_attrs)
-            fil_notnull = self.domain_df['weak_label'] != NULL_REPR
-            fil_notnumeric = self.domain_df['weak_label'].str.contains(NONNUMERICS)
-            bad_numerics = fil_attr & fil_notnull & fil_notnumeric
-            if bad_numerics.sum():
-                self.domain_df.loc[bad_numerics, 'weak_label'] = NULL_REPR
-                logging.warning('%s: replaced %d non-numerical values in DOMAIN as "%s" (NULL)',
-                        type(self).__name__,
-                        bad_numerics.sum(),
-                        NULL_REPR)
+        # if self._numerical_attrs is not None:
+        #     fil_attr = self.domain_df['attribute'].isin(self._numerical_attrs)
+        #     fil_notnull = self.domain_df['weak_label'] != NULL_REPR
+        #     fil_notnumeric = self.domain_df['weak_label'].str.contains(NONNUMERICS)
+        #     bad_numerics = fil_attr & fil_notnull & fil_notnumeric
+        #     if bad_numerics.sum():
+        #         self.domain_df.loc[bad_numerics, 'weak_label'] = NULL_REPR
+        #         logging.warning('%s: replaced %d non-numerical values in DOMAIN as "%s" (NULL)',
+        #                 type(self).__name__,
+        #                 bad_numerics.sum(),
+        #                 NULL_REPR)
         # Remove domain for numerical attributes.
         fil_numattr = self.domain_df['attribute'].isin(self._numerical_attrs)
 
