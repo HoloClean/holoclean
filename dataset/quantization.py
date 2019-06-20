@@ -32,9 +32,11 @@ def quantize_km(env, df_raw, num_attr_groups_bins):
         # Matrix of possibly n-dimension values
         X_attrs = df_group.values.astype(np.float)
 
-        n_clusters = min(bins, np.unique(X_attrs, axis=0).shape[0])
+        if bins >= np.unique(X_attrs, axis=0).shape[0]:
+            # No need to quantize since more bins than unique values.
+            continue
 
-        km = KMeans(n_clusters=n_clusters)
+        km = KMeans(n_clusters=bins)
         km.fit(X_attrs)
 
         label_pred = km.labels_
