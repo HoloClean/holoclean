@@ -86,36 +86,7 @@ class EmbeddingFeaturizer(Featurizer):
         That is returns a (batch, max domain, 1) tensor.
         """
         domain_df = self.ds.aux_table[AuxTables.cell_domain].df.sort_values('_vid_').reset_index(drop=True)
-
         vids = domain_df['_vid_']
-
-        # # (# of vids, embed_size)
-        # context_vecs = self.embedding_model.get_context_vecs(vids)
-        # # (# of vids, max_cat_domain, embed_size), (# of vids, max_cat_domain, 1), (# of cats)
-        # target_vecs, target_bias, cat_masks = self.embedding_model.get_target_vecs(vids)
-        # # (# of vids, max_cat_domain, embed_size)
-        # context_vecs = context_vecs.unsqueeze(1).expand(-1, target_vecs.shape[1], -1)
-
-        # # Verify the non-zero target_vectors correspond to the # of domain
-        # # values actually in each VID.
-        # # Note we omit the bias since the bias is 0 for numerical values.
-        # assert ((target_vecs.index_select(0, cat_masks) != 0).all(dim=2).sum(dim=1).detach().numpy()
-        #         == domain_df.iloc[cat_masks.numpy()]['domain_size'].values).all()
-
-        # # (# of vids, max_cat_domain, 1)
-        # logits = (target_vecs * context_vecs).sum(dim=-1, keepdim=True) + target_bias
-        # # Logits without an actual domain value needs to be negative large number
-        # logits[(target_vecs == 0.).all(dim=-1, keepdim=True)] = -1e9
-
-        # # (# of vids, max_cat_domain, 1)
-        # probs = Softmax(dim=1)(logits)
-
-        # # (# of vids, max domain, 1)
-        # pad_len = self.embedding_model.max_domain - self.embedding_model.max_cat_domain
-        # if pad_len:
-        #       # do not pad the last dimension but pad 2nd last diemsnion
-        #     probs = F.pad(probs, pad=(0,0,0,pad_len), mode='constant', value=0.)
-        # return probs
 
         # (# of vids, max_cat_domain), (# of vids, 1), (# of vids, 1)
         cat_probas, num_predvals, is_categorical = self.embedding_model.get_features(vids)
