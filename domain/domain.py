@@ -206,12 +206,10 @@ class DomainEngine:
                 cell_status = CellStatus.NOT_SET.value
 
                 if len(dom) <= 1:
-                    # Initial  value is NULL and we cannot come up with
-                    # a domain (note that NULL is not included in the domain);
-                    # a random domain probably won't help us so
-                    # completely ignore this cell and continue.
-                    # if init_value == NULL_REPR:
-                    #    continue
+                    # Initial value is NULL and we cannot come up with
+                    # a domain (note that NULL is not included in the domain)
+                    if init_value == NULL_REPR and len(dom) == 0:
+                       continue
 
                     # Not enough domain values, we need to get some random
                     # values (other than 'init_value') for training. However,
@@ -224,8 +222,10 @@ class DomainEngine:
                     # point to run inference on it since we cannot even generate
                     # a random domain. Therefore, we just ignore it from the
                     # final tensor.
-                    # if len(rand_dom_values) == 0:
-                    #     continue
+                    # We do not drop NULL cells since we stil have to repair them
+                    # with their 1 domain value.
+                    if init_value != NULL_REPR and len(rand_dom_values) == 0:
+                        continue
 
                     # Otherwise, just add the random domain values to the domain
                     # and set the cell status accordingly.
