@@ -5,4 +5,4 @@ source ../set_env.sh
 
 # Launch tests.
 echo "Launching tests..."
-pytest -n 1
+pytest

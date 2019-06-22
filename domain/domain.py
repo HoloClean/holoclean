@@ -226,8 +226,10 @@ class DomainEngine:
                     # point to run inference on it since we cannot even generate
                     # a random domain. Therefore, we just ignore it from the
                     # final tensor.
-                    # if len(rand_dom_values) == 0:
-                    #     continue
+                    # We do not drop NULL cells since we stil have to repair them
+                    # with their 1 domain value.
+                    if init_value != NULL_REPR and len(rand_dom_values) == 0:
+                        continue
 
                     # Otherwise, just add the random domain values to the domain
                     # and set the cell status accordingly.
