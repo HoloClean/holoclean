@@ -120,33 +120,32 @@ class RepairModel:
                                 bias=bias, layer_sizes=layer_sizes)
         self.featurizer_weights = {}
 
-    def fit_model(self, X_train, Y_train, mask_train):
+        self.loss = torch.nn.CrossEntropyLoss()
+        trainable_parameters = filter(lambda p: p.requires_grad,
+                                      self.model.parameters())
+        if self.env['optimizer'] == 'sgd':
+            self.optimizer = optim.SGD(trainable_parameters,
+                                  lr=self.env['learning_rate'],
+                                  momentum=self.env['momentum'],
+                                  weight_decay=self.env['weight_decay'])
+        else:
+            self.optimizer = optim.Adam(trainable_parameters,
+                                   lr=self.env['learning_rate'],
+                                   weight_decay=self.env['weight_decay'])
+
+    def fit_model(self, X_train, Y_train, mask_train, epochs):
         """
         X_train: (batch, # of classes (domain size), total # of features)
         Y_train: (batch, 1)
         mask_train: (batch, # of classes)
         """
-        loss = torch.nn.CrossEntropyLoss()
-        trainable_parameters = filter(lambda p: p.requires_grad,
-                                      self.model.parameters())
-        if self.env['optimizer'] == 'sgd':
-            optimizer = optim.SGD(trainable_parameters,
-                                  lr=self.env['learning_rate'],
-                                  momentum=self.env['momentum'],
-                                  weight_decay=self.env['weight_decay'])
-        else:
-            optimizer = optim.Adam(trainable_parameters,
-                                   lr=self.env['learning_rate'],
-                                   weight_decay=self.env['weight_decay'])
-
         batch_size = self.env['batch_size']
-        epochs = self.env['epochs']
         for epoch_idx in tqdm(range(1, epochs + 1)):
             cost = 0.
             num_batches = (X_train.shape[0] + batch_size - 1) // batch_size
             for k in range(num_batches):
                 start, end = k * batch_size, (k + 1) * batch_size
-                cost += self.__train__(loss, optimizer, X_train[start:end],
+                cost += self.__train__(X_train[start:end],
                                        Y_train[start:end],
                                        mask_train[start:end])
 
@@ -164,7 +163,7 @@ class RepairModel:
         output = self.__predict__(X_pred, mask_pred)
         return output
 
-    def __train__(self, loss, optimizer, X_train, Y_train, mask_train):
+    def __train__(self, X_train, Y_train, mask_train):
         """
         X_train: (batch, # of classes (domain size), total # of features)
         Y_train: (batch, 1)
@@ -183,11 +182,11 @@ class RepairModel:
         # index of the correct class ('class' = max domain)
         # fx is a tensor of length 'class' the linear activation going in the
         # softmax.
-        output = loss.forward(fx, Y_train.squeeze(1))
+        output = self.loss.forward(fx, Y_train.squeeze(1))
 
-        optimizer.zero_grad()
+        self.optimizer.zero_grad()
         output.backward()
-        optimizer.step()
+        self.optimizer.step()
 
         cost = output.item()
         return cost

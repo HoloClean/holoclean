@@ -1375,7 +1375,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         def calc_rmse(df_filter):
             if df_filter.sum() == 0:
                 return 0
-            X_cor = df_res.loc[df_filter, '_value_'].apply(lambda arr: arr[0]).values.astype(np.float)
+            X_cor = df_res.loc[df_filter, '_value_'].apply(lambda arr: arr[0] if arr[0] != '_nan_' else 0.).values.astype(np.float)
             X_inferred = df_res.loc[df_filter, 'inferred_val'].values.astype(np.float)
             assert X_cor.shape == X_inferred.shape
             return np.sqrt(np.mean((X_cor - X_inferred) ** 2))

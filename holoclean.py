@@ -405,13 +405,50 @@ class Session:
         self.domain_engine.run_estimator()
 
     def repair_errors(self, featurizers):
+        return self._repair_errors(featurizers)
+
+    def repair_validate_errors(self, featurizers, fpath, tid_col, attr_col,
+            val_col, validate_period, na_values=None):
+        return self._repair_errors(featurizers, fpath, tid_col, attr_col,
+                val_col, na_values, validate_period)
+
+    def _repair_errors(self, featurizers, fpath=None,
+            tid_col=None, attr_col=None, val_col=None, na_values=None,
+            validate_period=None):
+        """
+        Repair errors and optionally runs validation set per epoch.
+
+        Must specify the following parameters if validation required:
+
+        :param fpath: (str) filepath to test set (ground truth) CSV file.
+        :param tid_col: (str) column in CSV that corresponds to the TID.
+        :param attr_col: (str) column in CSV that corresponds to the attribute.
+        :param val_col: (str) column in CSV that corresponds to correct value
+            for the current TID and attribute (i.e. cell).
+        :param na_values: (Any) how na_values are represented in the data.
+        :param validate_period: (int) perform validation every nth epoch.
+        """
         status, feat_time = self.repair_engine.setup_featurized_ds(featurizers)
         logging.info(status)
         logging.debug('Time to featurize data: %.2f secs', feat_time)
         status, setup_time = self.repair_engine.setup_repair_model()
         logging.info(status)
         logging.debug('Time to setup repair model: %.2f secs', feat_time)
-        status, fit_time = self.repair_engine.fit_repair_model()
+
+        # If validation fpath provided, fit and validate
+        if fpath is None:
+            status, fit_time = self.repair_engine.fit_repair_model()
+        else:
+            # Set up validation set
+            name = self.ds.raw_data.name + '_clean'
+            status, load_time = self.eval_engine.load_data(name, fpath,
+                    tid_col, attr_col, val_col, na_values=na_values)
+            logging.info(status)
+            logging.debug('Time to evaluate repairs: %.2f secs', load_time)
+
+            status, fit_time = self.repair_engine.fit_validate_repair_model(self.eval_engine,
+                    validate_period)
+
         logging.info(status)
         logging.debug('Time to fit repair model: %.2f secs', fit_time)
         status, infer_time = self.repair_engine.infer_repairs()
