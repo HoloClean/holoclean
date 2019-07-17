@@ -1077,7 +1077,9 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                       self._n_train_num_attrs,
                       self._train_num_attrs)
 
-        num_batches = len(DataLoader(self._dataset, batch_size=batch_size, sampler=sampler))
+        trainDataGenerator = DataLoader(self._dataset, batch_size=batch_size, sampler=sampler)
+
+        num_batches = len(trainDataGenerator)
         num_steps = num_epochs * num_batches
         # scheduler = CosineAnnealingLR(self._optimizer, num_steps)
         # logging.debug('%s: using cosine LR scheduler with %d steps', type(self).__name__, num_steps)
@@ -1094,7 +1096,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                 init_cat_idxs, init_numvals, init_nummasks, \
                 domain_idxs, domain_masks, \
                 target_numvals, cat_targets \
-                in tqdm(DataLoader(self._dataset, batch_size=batch_size, sampler=sampler)):
+                in tqdm(trainDataGenerator):
 
                 cat_preds, numval_preds = self.forward(is_categorical, attr_idxs,
                         init_cat_idxs, init_numvals, init_nummasks,
