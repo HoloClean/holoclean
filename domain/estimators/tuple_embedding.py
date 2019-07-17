@@ -781,6 +781,9 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         self._optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=self.WEIGHT_DECAY)
 
         # Validation stuff
+        self._init_validation_df(validate_fpath, validate_tid_col, validate_attr_col, validate_val_col)
+
+    def _init_validation_df(self, validate_fpath, validate_tid_col, validate_attr_col, validate_val_col):
         self._do_validation = False
         if validate_fpath is not None \
             and validate_tid_col is not None \
