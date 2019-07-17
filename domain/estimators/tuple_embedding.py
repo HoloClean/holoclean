@@ -685,7 +685,13 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         self._train_num_attrs = self._dataset._train_num_attrs
 
         # word2vec-like model.
+        self._init_word2vec_model(learning_rate)
 
+        # Validation stuff
+        self._init_validation_df(validate_fpath, validate_tid_col, validate_attr_col, validate_val_col)
+
+
+    def _init_word2vec_model(self, learning_rate):
         self._n_init_vals = self._dataset.n_init_vals
         self._n_train_vals = self._dataset.n_train_vals
 
@@ -779,9 +785,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # Allow user to pass in their desired loss.
         self._num_loss = MSELoss(reduction='mean')
         self._optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=self.WEIGHT_DECAY)
-
-        # Validation stuff
-        self._init_validation_df(validate_fpath, validate_tid_col, validate_attr_col, validate_val_col)
 
     def _init_validation_df(self, validate_fpath, validate_tid_col, validate_attr_col, validate_val_col):
         self._do_validation = False
