@@ -79,7 +79,7 @@ class FeaturizedDataset:
                    cell_status=CellStatus.NOT_SET.value)
         res = self.ds.engine.execute_query(query)
         if len(res) == 0:
-            raise Exception("No weak labels available. Reduce pruning threshold.")
+            logging.warning("No weak labels available. Reduce pruning threshold.")
         labels = -1 * torch.ones(self.total_vars, 1).type(torch.LongTensor)
         is_clean = torch.zeros(self.total_vars, 1).type(torch.LongTensor)
         for tuple in tqdm(res):

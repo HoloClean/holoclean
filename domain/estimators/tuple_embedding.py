@@ -537,10 +537,10 @@ class IterSampler(Sampler):
         return len(self.iter)
 
 class VidSampler(Sampler):
-    def __init__(self, domain_df, raw_df, numerical_attr_groups,
+    def __init__(self, domain_df, raw_df, num_attrs, numerical_attr_groups,
             shuffle=True, train_only_clean=False):
-        # No NULL targets
-        domain_df = domain_df[domain_df['weak_label'] != NULL_REPR]
+        # No NULL categorical targets
+        domain_df = domain_df[domain_df['attribute'].isin(num_attrs) | (domain_df['weak_label'] != NULL_REPR)]
 
         # No NULL values in each cell's numerical group (all must be non-null
         # since target_numvals requires all numerical values.
@@ -557,7 +557,7 @@ class VidSampler(Sampler):
                 return all(raw_data_dict[tid][attr] != NULL_REPR
                         for attr in attr_to_group[cur_attr])
             fil_notnull = domain_df.apply(group_notnull, axis=1)
-            if sum(fil_notnull) < domain_df.shape[0]:
+            if domain_df.shape[0] and sum(fil_notnull) < domain_df.shape[0]:
                 logging.warning('dropping %d targets where target\'s numerical group contain NULLs',
                         domain_df.shape[0] - sum(fil_notnull))
                 domain_df = domain_df[fil_notnull]
@@ -646,7 +646,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         fil_numattr = self.domain_df['attribute'].isin(self._numerical_attrs)
 
         # Memoize max domain size for numerical attribue for padding later.
-        self.max_domain = self.domain_df['domain_size'].max()
+        self.max_domain = int(self.domain_df['domain_size'].max())
         self.domain_df.loc[fil_numattr, 'domain'] = ''
         self.domain_df.loc[fil_numattr, 'domain_size'] = 0
         # Remove categorical domain/training cells without a domain
@@ -1064,7 +1064,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         # Returns VIDs to train on.
         sampler = VidSampler(self.domain_df, self.ds.get_raw_data(),
-                self._numerical_attr_groups,
+                self._numerical_attrs, self._numerical_attr_groups,
                 shuffle=shuffle, train_only_clean=train_only_clean)
 
         logging.debug("%s: training (lambda = %f) on %d cells (%d cells in total) in:\n1) %d categorical columns: %s\n2) %d numerical columns: %s",

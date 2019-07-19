@@ -80,6 +80,10 @@ class TiedLinear(torch.nn.Module):
         index: (batch)
         mask: (batch, # of classes)
         """
+        if X.shape[0] == 0:
+            logging.warning("performing forward pass with no samples")
+            return torch.zeros(0, X.shape[1])
+
         # Multiply through the first layer.
         # (batch, # of classes, layers_size[0])
         output = X.matmul(torch.cat([t for t in self.first_layer_weights],
@@ -155,7 +159,7 @@ class RepairModel:
                 Y_pred = self.__predict__(X_train, mask_train)
                 Y_assign = Y_pred.data.numpy().argmax(axis=1)
                 logging.debug("Epoch %d, cost = %f, acc = %.2f%%",
-                              epoch_idx, cost / num_batches,
+                              epoch_idx, cost / max(num_batches, 1),
                               100. * np.mean(Y_assign == grdt))
 
     def infer_values(self, X_pred, mask_pred):
