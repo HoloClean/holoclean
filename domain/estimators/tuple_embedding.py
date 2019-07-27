@@ -134,7 +134,6 @@ class LookupDataset(Dataset):
         # for categorical targets.
         self._raw_data = self.ds.get_raw_data().copy()
         self._qtized_raw_data = self.ds.get_quantized_data() if self.ds.do_quantization else self._raw_data
-        self._raw_data_dict = self._raw_data.set_index('_tid_').to_dict('index')
         self._qtized_raw_data_dict = self._qtized_raw_data.set_index('_tid_').to_dict('index')
 
         # Statistics for cooccurrences.
@@ -153,6 +152,9 @@ class LookupDataset(Dataset):
                     - self._num_attrs_mean[num_attr]) \
                     / (self._num_attrs_std[num_attr] or 1.)).astype(str)
             self._raw_data[num_attr] = temp
+        # This MUST go after the mean-0 variance 1 normalization above since
+        # this is looked up subsequently during training.
+        self._raw_data_dict = self._raw_data.set_index('_tid_').to_dict('index')
 
         # Indexes assigned to attributes: FIRST categorical THEN numerical.
         # (this order is important since we shift the numerical idxs).
@@ -517,7 +519,6 @@ class LookupDataset(Dataset):
             domain_idxs, domain_mask, target = self._get_cat_domain_target(idx)
             # TODO(richardwu): decide if we care about co-occurrence probabilities or not.
             # domain_cooccur = self._get_domain_cooccur_probs(idx)
-            domain_cooccur = self._dummy_domain_cooccur
             return vid, \
                 is_categorical, \
                 attr_idx, \
@@ -526,7 +527,6 @@ class LookupDataset(Dataset):
                 init_nummask, \
                 domain_idxs, \
                 domain_mask, \
-                domain_cooccur, \
                 self._dummy_target_numvals, \
                 target
 
@@ -540,7 +540,6 @@ class LookupDataset(Dataset):
             init_nummask, \
             self._dummy_domain_idxs, \
             self._dummy_domain_mask, \
-            self._dummy_domain_cooccur, \
             target_numvals, \
             self._dummy_cat_target
 
@@ -558,7 +557,9 @@ class LookupDataset(Dataset):
         return ['_vid_to_idx',
                 '_train_records',
                 '_raw_data_dict',
-                '_qtized_raw_data_dict',
+                # '_qtized_raw_data_dict',
+                # '_single_stats',
+                # '_pair_stats',
                 'max_cat_domain',
                 '_max_num_dim',
                 '_init_val_idxs',
@@ -978,7 +979,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         # (batch, embed size, 1)
         return combined_init
 
-    def _cat_forward(self, combined_init, cat_attr_idxs, domain_idxs, domain_masks, domain_cooccur):
+    def _cat_forward(self, combined_init, domain_idxs, domain_masks):
         """
         combined_init: (batch, embed size, 1)
         cat_attr_idxs: (batch, 1)
@@ -1064,7 +1065,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
     def forward(self, is_categorical, attr_idxs,
                 init_cat_idxs, init_numvals, init_nummasks,
-                domain_idxs, domain_masks, domain_cooccur):
+                domain_idxs, domain_masks):
         """
         Performs one forward pass.
         """
@@ -1077,15 +1078,13 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         cat_logits = torch.empty(0, self.max_cat_domain)
         if len(cat_mask):
-            cat_combined_init, cat_attr_idxs, domain_idxs, domain_masks, domain_cooccur = \
+            cat_combined_init, domain_idxs, domain_masks = \
                     combined_init[cat_mask], \
-                    attr_idxs[cat_mask], \
                     domain_idxs[cat_mask], \
-                    domain_masks[cat_mask], \
-                    domain_cooccur[cat_mask]
+                    domain_masks[cat_mask]
             # (# of cat VIDs, max_cat_domain)
-            cat_logits = self._cat_forward(cat_combined_init, cat_attr_idxs, domain_idxs,
-                    domain_masks, domain_cooccur)
+            cat_logits = self._cat_forward(cat_combined_init, domain_idxs,
+                    domain_masks)
 
         pred_numvals = torch.empty(0, self._max_num_dim)
         if len(num_mask):
@@ -1167,13 +1166,13 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
             for vids, is_categorical, attr_idxs, \
                 init_cat_idxs, init_numvals, init_nummasks, \
-                domain_idxs, domain_masks, domain_cooccur, \
+                domain_idxs, domain_masks, \
                 target_numvals, cat_targets \
                 in tqdm(DataLoader(self._dataset, batch_size=batch_size, sampler=sampler)):
 
                 cat_preds, numval_preds = self.forward(is_categorical, attr_idxs,
                         init_cat_idxs, init_numvals, init_nummasks,
-                        domain_idxs, domain_masks, domain_cooccur)
+                        domain_idxs, domain_masks)
 
                 # Select out the appropriate targets
                 cat_mask, num_mask = self._cat_num_masks(is_categorical)
@@ -1249,7 +1248,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             self.set_mode(inference_mode=True)
             for vids, is_categorical, attr_idxs, \
                 init_cat_idxs, init_numvals, init_nummasks, \
-                domain_idxs, domain_masks, domain_cooccur, \
+                domain_idxs, domain_masks, \
                 target_numvals, cat_targets in tqdm(DataLoader(self._dataset, batch_size=batch_sz, sampler=IterSampler(vids))):
 
                 # (# of cats, max cat domain), (# of num, max_num_dim)
@@ -1259,8 +1258,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                         init_numvals,
                         init_nummasks,
                         domain_idxs,
-                        domain_masks,
-                        domain_cooccur)
+                        domain_masks)
 
                 if cat_logits.nelement():
                     cat_probas = Softmax(dim=1)(cat_logits)
@@ -1547,7 +1545,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         with torch.no_grad():
             for vids, is_categorical, attr_idxs, \
                 init_cat_idxs, init_numvals, init_nummasks, \
-                domain_idxs, domain_masks, domain_cooccur, \
+                domain_idxs, domain_masks, \
                 target_numvals, cat_targets in tqdm(DataLoader(self._dataset, batch_size=batch_sz, sampler=IterSampler(df['_vid_'].values))):
                 pred_cats, pred_nums = self.forward(is_categorical,
                         attr_idxs,
@@ -1555,8 +1553,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                         init_numvals,
                         init_nummasks,
                         domain_idxs,
-                        domain_masks,
-                        domain_cooccur)
+                        domain_masks)
 
                 pred_cat_idx = 0
                 pred_num_idx = 0
