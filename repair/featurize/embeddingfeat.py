@@ -12,7 +12,6 @@ from .featurizer import Featurizer
 from dataset import AuxTables
 from domain.estimators import TupleEmbedding
 
-
 class EmbeddingFeaturizer(Featurizer):
     """
     Featurizer that wraps the learned vectors from a TupleEmbedding model
@@ -66,11 +65,11 @@ class EmbeddingFeaturizer(Featurizer):
 
             dump_prefix = self.addn_kwargs.get('dump_prefix', None)
             if dump_prefix is None \
-                    or not self.embedding_model.load_model(dump_prefix):
+                    or not self.embedding_model.model.load_model(dump_prefix):
                 self.embedding_model.train(epochs, batch_size, weight_entropy_lambda=weight_lambda)
 
                 if dump_prefix is not None:
-                    self.embedding_model.dump_model(dump_prefix)
+                    self.embedding_model.model.dump_model(dump_prefix)
 
             logging.debug('%s: done training TupleEmbedding model.', self.name)
         else:
@@ -89,27 +88,27 @@ class EmbeddingFeaturizer(Featurizer):
         vids = domain_df['_vid_']
 
         # (# of vids, max_cat_domain), (# of vids, 1), (# of vids, 1)
-        cat_probas, num_predvals, is_categorical = self.embedding_model.get_features(vids)
+        cat_probas, num_predvals, is_categorical = self.embedding_model.predictor.get_features(vids)
 
         # (# of vids, max domain)
-        pad_len = self.embedding_model.max_domain - self.embedding_model.max_cat_domain
+        pad_len = self.embedding_model.model.max_domain - self.embedding_model.model.max_cat_domain
         if pad_len:
             # Pad last dimension on the right side with pad_len
             cat_probas = F.pad(cat_probas, pad=(0,pad_len), mode='constant', value=0.)
 
         # Create tensor for z-scored domain values
-        num_attrs_idx = {attr: idx for idx, attr in enumerate(self.embedding_model._train_num_attrs)}
-        domain_numvals = torch.zeros(len(vids), self.embedding_model.max_domain, len(num_attrs_idx))
+        num_attrs_idx = {attr: idx for idx, attr in enumerate(self.embedding_model.model._train_num_attrs)}
+        domain_numvals = torch.zeros(len(vids), self.embedding_model.model.max_domain, len(num_attrs_idx))
         # Mask to mask out RMSE computed on padding outside of cell's domain.
-        domain_mask = torch.zeros(len(vids), self.embedding_model.max_domain)
+        domain_mask = torch.zeros(len(vids), self.embedding_model.model.max_domain)
         for idx, (_, attr, domain, domain_sz) in enumerate(domain_df[['attribute', 'domain', 'domain_size']].to_records()):
             if domain_sz == 0:
                 continue
             if is_categorical[idx,0] == 1.:
                 continue
             dom_arr = np.array(domain.split('|||'), dtype=np.float32)
-            mean = self.embedding_model._dataset._num_attrs_mean[attr]
-            std = self.embedding_model._dataset._num_attrs_std[attr]
+            mean = self.embedding_model.dataset._num_attrs_mean[attr]
+            std = self.embedding_model.dataset._num_attrs_std[attr]
             dom_arr = (dom_arr - mean) / std
             domain_numvals[idx,:domain_sz, num_attrs_idx[attr]] = torch.FloatTensor(dom_arr)
             domain_mask[idx,:domain_sz] = 1.
@@ -117,13 +116,11 @@ class EmbeddingFeaturizer(Featurizer):
         # (# of vids, max domain, # of num attrs)
         # This RMSE is between z-scored values. This is equivalent to dividing
         # the RMSE by std^2.
-        num_rmse = torch.abs(num_predvals.unsqueeze(-1).expand(-1, self.embedding_model.max_domain, len(num_attrs_idx)) - domain_numvals)
+        num_rmse = torch.abs(num_predvals.unsqueeze(-1).expand(-1, self.embedding_model.model.max_domain, len(num_attrs_idx)) - domain_numvals)
         num_rmse.mul_(domain_mask.unsqueeze(-1).expand(-1, -1, len(num_attrs_idx)))
 
         # (# of vids, max domain, 1 + # num attrs)
         return torch.cat([cat_probas.unsqueeze(-1), num_rmse], dim=-1)
 
-
-
     def feature_names(self):
-        return ["Embedding Cat Proba"]  + ["Embedding Num RMSE (%s)" % attr for attr in self.embedding_model._train_num_attrs]
+        return ["Embedding Cat Proba"]  + ["Embedding Num RMSE (%s)" % attr for attr in self.embedding_model.model._train_num_attrs]
