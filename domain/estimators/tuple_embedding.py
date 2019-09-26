@@ -110,6 +110,7 @@ class LookupDataset(Dataset):
         self._init_cat_attrs, self._init_num_attrs = self._split_cat_num_attrs(self._all_attrs)
         self._n_init_cat_attrs, self._n_init_num_attrs = len(self._init_cat_attrs), len(self._init_num_attrs)
         self._n_init_attrs = len(self._all_attrs)
+
         logging.debug('%s: init categorical attributes: %s',
                 type(self).__name__,
                 self._init_cat_attrs)
@@ -152,12 +153,14 @@ class LookupDataset(Dataset):
                     - self._num_attrs_mean[num_attr]) \
                     / (self._num_attrs_std[num_attr] or 1.)).astype(str)
             self._raw_data[num_attr] = temp
+
         # This MUST go after the mean-0 variance 1 normalization above since
         # this is looked up subsequently during training.
         self._raw_data_dict = self._raw_data.set_index('_tid_').to_dict('index')
 
         # Indexes assigned to attributes: FIRST categorical THEN numerical.
         # (this order is important since we shift the numerical idxs).
+
         self._init_attr_idxs = {attr: idx for idx, attr in enumerate(self._init_cat_attrs + self._init_num_attrs)}
         self._train_attr_idxs = {attr: idx for idx, attr in enumerate(self._train_cat_attrs + self._train_num_attrs)}
 
@@ -399,6 +402,7 @@ class LookupDataset(Dataset):
                 init_cat_idxs.append(self._init_val_idxs[attr][ctx_val])
             init_cat_idxs = torch.LongTensor(init_cat_idxs)
 
+
             if not self.memoize:
                 return init_cat_idxs
             self._init_cat_idxs[idx] = init_cat_idxs
@@ -604,6 +608,7 @@ class VidSampler(Sampler):
         # No NULL categorical targets
         domain_df = domain_df[domain_df['attribute'].isin(num_attrs) | (domain_df['weak_label'] != NULL_REPR)]
 
+
         # No NULL values in each cell's numerical group (all must be non-null
         # since target_numvals requires all numerical values.
         if numerical_attr_groups:
@@ -619,6 +624,7 @@ class VidSampler(Sampler):
                 return all(raw_data_dict[tid][attr] != NULL_REPR
                         for attr in attr_to_group[cur_attr])
             fil_notnull = domain_df.apply(group_notnull, axis=1)
+
             if domain_df.shape[0] and sum(fil_notnull) < domain_df.shape[0]:
                 logging.warning('dropping %d targets where target\'s numerical group contain NULLs',
                         domain_df.shape[0] - sum(fil_notnull))
@@ -709,6 +715,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         # Memoize max domain size for numerical attribue for padding later.
         self.max_domain = int(self.domain_df['domain_size'].max())
+
         self.domain_df.loc[fil_numattr, 'domain'] = ''
         self.domain_df.loc[fil_numattr, 'domain_size'] = 0
         # Remove categorical domain/training cells without a domain
@@ -753,6 +760,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
 
         self._n_init_cat_attrs = self._dataset._n_init_cat_attrs
         self._n_init_num_attrs = self._dataset._n_init_num_attrs
+
         self._n_init_attrs = self._dataset._n_init_attrs
 
         self._n_train_cat_attrs = self._dataset._n_train_cat_attrs
@@ -985,8 +993,6 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         cat_attr_idxs: (batch, 1)
         domain_idxs: (batch, max domain)
         domain_masks: (batch, max domain)
-        domain_cooccur: (batch, max domain, # of init attrs)
-
         Returns logits: (batch, max domain)
         """
         # (batch, max domain, embed size)

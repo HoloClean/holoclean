@@ -22,7 +22,7 @@ errors_template = Template('SELECT count(*) ' \
                            'FROM  "$init_table" as t1, "$grdt_table" as t2 ' \
                            'WHERE t1._tid_ = t2._tid_ ' \
                            '  AND t2._attribute_ = \'$attr\' ' \
-                           '  AND t1."$attr" != t2._value_')
+                           '  AND NOT t1."$attr" = ANY(string_to_array(regexp_replace(t2._value_,\'[{\"\"}]\',\'\',\'gi\'),\'|\'))')
 
 """
 The 'errors' aliased subquery returns the (_tid_, _attribute_, _value_)
@@ -39,10 +39,10 @@ correct_repairs_template = Template('SELECT COUNT(*) FROM '
                                     '     FROM "$init_table" as t1, "$grdt_table" as t2 '
                                     '    WHERE t1._tid_ = t2._tid_ '
                                     '      AND t2._attribute_ = \'$attr\' '
-                                    '      AND t1."$attr" != t2._value_) as errors, "$inf_dom" as repairs '
+                                    '      AND NOT t1."$attr" = ANY(string_to_array(regexp_replace(t2._value_,\'[{\"\"}]\',\'\',\'gi\'),\'|\'))) as errors, "$inf_dom" as repairs '
                                     'WHERE errors._tid_ = repairs._tid_ '
                                     '  AND errors._attribute_ = repairs.attribute '
-                                    '  AND repairs.rv_value = errors._value_')
+                                    '  AND repairs.rv_value = ANY(string_to_array(regexp_replace(errors._value_,\'[{\"\"}]\',\'\',\'gi\'),\'|\'))')
 
 
 """
@@ -219,7 +219,7 @@ class EvalEngine:
 
         query = """
             SELECT
-                t1.init_value = t3._value_ AS is_correct,
+                (t1.init_value = ANY(string_to_array(regexp_replace(t3._value_,\'[{{\"\"}}]\',\'\',\'gi\'),\'|\'))) AS is_correct,
                 count(*)
             FROM   "{}" as t1, "{}" as t2, "{}" as t3
             WHERE  t1._tid_ = t2._tid_
@@ -304,7 +304,7 @@ class EvalEngine:
                 "   WHERE t1._tid_ = t2._tid_ " \
                 "     AND t1._cid_ = t3._cid_ " \
                 "     AND t1.attribute = t2._attribute_ " \
-                "     AND t1.init_value != t2._value_" \
+                "     AND NOT t1.init_value = ANY(string_to_array(regexp_replace(t2._value_,\'[{{\"\"}}]\',\'\',\'gi\'),\'|\')) " \
                 "     AND {}) AS t".format(AuxTables.cell_domain.name,
                                            self.clean_data.name,
                                            AuxTables.dk_cells.name,
@@ -415,10 +415,10 @@ class EvalEngine:
         select
             (t3._tid_ is NULL) as clean,
             (t1.fixed) as status,
-            (t1.init_value =  t2._value_) as init_eq_grdth,
-            (t1.weak_label = t2._value_) as wl_eq_grdth,
+            (t1.init_value =  ANY(string_to_array(regexp_replace(t2._value_,\'[{{\"\"}}]\',\'\',\'gi\'),\'|\'))) as init_eq_grdth,
+            (t1.weak_label = ANY(string_to_array(regexp_replace(t2._value_,\'[{{\"\"}}]\',\'\',\'gi\'),\'|\'))) as wl_eq_grdth,
             (t1.weak_label = t4.rv_value) as wl_eq_infer,
-            (t4.rv_value = t2._value_) as infer_eq_grdth,
+            (t4.rv_value = ANY(string_to_array(regexp_replace(t2._value_,\'[{{\"\"}}]\',\'\',\'gi\'),\'|\'))) as infer_eq_grdth,
             count(*) as count
         from
             "{cell_domain}" as t1,

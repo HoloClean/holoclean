@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from .featurizer import Featurizer
 from dataset import AuxTables
-from dcparser.constraint import is_symmetric
+from dcparser.constraint import is_symmetric, get_flip_operation
 
 # unary_template is used for constraints where the current predicate
 # used for detecting violations in pos_values have a reference to only
@@ -114,6 +114,10 @@ class ConstraintFeaturizer(Featurizer):
         """
         attr = predicate.components[rel_idx][1]
         op = predicate.operation
+        # the latter one should flip the operation,
+        # if t3.rv_val is always on the left side in query template
+        if rel_idx == 1:
+            op = get_flip_operation(op)
         const = '{}."{}"'.format(
                 predicate.components[1-rel_idx][0],
                 predicate.components[1-rel_idx][1])

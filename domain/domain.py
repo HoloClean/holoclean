@@ -206,8 +206,12 @@ class DomainEngine:
                 cell_status = CellStatus.NOT_SET.value
 
                 if len(dom) <= 1:
-                    # Initial value is NULL and we cannot come up with
-                    # a domain (note that NULL is not included in the domain)
+                    # Initial  value is NULL and we cannot come up with
+                    # a domain (note that NULL is not included in the domain);
+                    # Note if len(dom) == 1, then we generated a single correct
+                    # value (since NULL is not included in the domain).
+                    # This would be a "SINGLE_VALUE" example and we'd still
+                    # like to generate a random domain for it.
                     if init_value == NULL_REPR and len(dom) == 0:
                        continue
 

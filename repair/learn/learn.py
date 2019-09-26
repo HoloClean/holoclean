@@ -144,6 +144,7 @@ class RepairModel:
         mask_train: (batch, # of classes)
         """
         batch_size = self.env['batch_size']
+
         for epoch_idx in tqdm(range(1, epochs + 1)):
             cost = 0.
             num_batches = (X_train.shape[0] + batch_size - 1) // batch_size
