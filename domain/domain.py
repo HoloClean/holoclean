@@ -151,7 +151,7 @@ class DomainEngine:
         attr_correlations = self.correlations[attr]
         return sorted([corr_attr
             for corr_attr, corr_strength in attr_correlations.items()
-            if corr_attr != attr and corr_strength > thres])
+            if corr_attr != attr and corr_strength >= thres])
 
     def generate_domain(self):
         """
@@ -213,23 +213,15 @@ class DomainEngine:
                     # This would be a "SINGLE_VALUE" example and we'd still
                     # like to generate a random domain for it.
                     if init_value == NULL_REPR and len(dom) == 0:
-                        continue
+                       continue
 
                     # Not enough domain values, we need to get some random
                     # values (other than 'init_value') for training. However,
                     # this might still get us zero domain values.
-                    rand_dom_values = self.get_random_domain(attr, init_value)
+                    rand_dom_values = self.get_random_domain(attr, dom)
 
-                    # rand_dom_values might still be empty. In this case,
-                    # there are no other possible values for this cell. There
-                    # is not point to use this cell for training and there is no
-                    # point to run inference on it since we cannot even generate
-                    # a random domain. Therefore, we just ignore it from the
-                    # final tensor.
-                    # We do not drop NULL cells since we stil have to repair them
-                    # with their 1 domain value.
-                    if init_value != NULL_REPR and len(rand_dom_values) == 0:
-                        continue
+                    # We still want to add cells with only 1 single value and no
+                    # additional random domain # they are required in the output.
 
                     # Otherwise, just add the random domain values to the domain
                     # and set the cell status accordingly.
@@ -334,16 +326,16 @@ class DomainEngine:
 
         return init_value, init_value_idx, domain_lst
 
-    def get_random_domain(self, attr, cur_value):
+    def get_random_domain(self, attr, cur_dom):
         """
         get_random_domain returns a random sample of at most size
-        'self.max_sample' of domain values for 'attr' that is NOT 'cur_value'.
+        'self.max_sample' of domain values for 'attr' that is NOT in 'cur_dom'.
         """
         domain_pool = set(self.single_stats[attr].keys())
         # We should not have any NULLs since we do not keep track of their
         # counts.
         assert NULL_REPR not in domain_pool
-        domain_pool.discard(cur_value)
+        domain_pool = domain_pool.difference(cur_dom)
         domain_pool = sorted(list(domain_pool))
         size = len(domain_pool)
         if size > 0:

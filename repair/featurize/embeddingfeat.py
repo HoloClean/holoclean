@@ -86,6 +86,7 @@ class EmbeddingFeaturizer(Featurizer):
         That is returns a (batch, max domain, 1) tensor.
         """
         domain_df = self.ds.aux_table[AuxTables.cell_domain].df.sort_values('_vid_').reset_index(drop=True)
+
         vids = domain_df['_vid_']
 
         # (# of vids, max_cat_domain), (# of vids, 1), (# of vids, 1)

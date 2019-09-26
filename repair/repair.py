@@ -37,7 +37,31 @@ class RepairEngine:
         tic = time.clock()
         X_train, Y_train, mask_train = self.feat_dataset.get_training_data()
         logging.info('training with %d training examples (cells)', X_train.shape[0])
-        self.repair_model.fit_model(X_train, Y_train, mask_train)
+        self.repair_model.fit_model(X_train, Y_train, mask_train, self.env['epochs'])
+        toc = time.clock()
+        status = "DONE training repair model."
+        train_time = toc - tic
+        return status, train_time
+
+    def fit_validate_repair_model(self, eval_engine, validate_period):
+        tic = time.clock()
+        X_train, Y_train, mask_train = self.feat_dataset.get_training_data()
+        logging.info('training with %d training examples (cells)', X_train.shape[0])
+
+        # Training loop
+        for epoch_idx in range(1, self.env['epochs']+1):
+            logging.info("Repair and validate epoch %d of %d", epoch_idx, self.env['epochs'])
+            self.repair_model.fit_model(X_train, Y_train, mask_train, 1)
+
+            if epoch_idx % validate_period == 0:
+                logging.info("Running validation")
+                self.infer_repairs()
+                report, _, _ = eval_engine.eval_report()
+                logging.info(report)
+                logging.info("Feature weights:")
+                weights, _ = self.get_featurizer_weights()
+                logging.info(weights)
+
         toc = time.clock()
         status = "DONE training repair model."
         train_time = toc - tic
