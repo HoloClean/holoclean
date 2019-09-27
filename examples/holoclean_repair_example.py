@@ -38,7 +38,6 @@ hc.detect_errors(detectors)
 # 4. Repair errors utilizing the defined features.
 hc.setup_domain()
 featurizers = [
-    InitAttrFeaturizer(),
     OccurAttrFeaturizer(),
     FreqFeaturizer(),
     ConstraintFeaturizer(),
