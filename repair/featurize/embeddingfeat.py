@@ -101,6 +101,8 @@ class EmbeddingFeaturizer(Featurizer):
         # Create tensor for z-scored domain values
         num_attrs_idx = {attr: idx for idx, attr in enumerate(self.embedding_model._train_num_attrs)}
         domain_numvals = torch.zeros(len(vids), self.embedding_model.max_domain, len(num_attrs_idx))
+        # only num_attrs_idx[attr] makes sense, others should not count into num_rmse
+        pred_numvals = torch.zeros(len(vids), self.embedding_model.max_domain, len(num_attrs_idx))
         # Mask to mask out RMSE computed on padding outside of cell's domain.
         domain_mask = torch.zeros(len(vids), self.embedding_model.max_domain)
         for idx, (_, attr, domain, domain_sz) in enumerate(domain_df[['attribute', 'domain', 'domain_size']].to_records()):
@@ -115,16 +117,18 @@ class EmbeddingFeaturizer(Featurizer):
             domain_numvals[idx,:domain_sz, num_attrs_idx[attr]] = torch.FloatTensor(dom_arr)
             domain_mask[idx,:domain_sz] = 1.
 
+            num_pred = num_predvals[idx]
+            pred_numvals[idx, :domain_sz, num_attrs_idx[attr]] = torch.FloatTensor(num_pred)
+
         # (# of vids, max domain, # of num attrs)
         # This RMSE is between z-scored values. This is equivalent to dividing
         # the RMSE by std^2.
-        num_rmse = torch.abs(num_predvals.unsqueeze(-1).expand(-1, self.embedding_model.max_domain, len(num_attrs_idx)) - domain_numvals)
+        # num_rmse = torch.abs(num_predvals.unsqueeze(-1).expand(-1, self.embedding_model.max_domain, len(num_attrs_idx)) - domain_numvals)
+        num_rmse = torch.abs(pred_numvals - domain_numvals)
         num_rmse.mul_(domain_mask.unsqueeze(-1).expand(-1, -1, len(num_attrs_idx)))
 
         # (# of vids, max domain, 1 + # num attrs)
         return torch.cat([cat_probas.unsqueeze(-1), num_rmse], dim=-1)
-
-
 
     def feature_names(self):
         return ["Embedding Cat Proba"]  + ["Embedding Num RMSE (%s)" % attr for attr in self.embedding_model._train_num_attrs]
