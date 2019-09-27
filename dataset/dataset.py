@@ -3,6 +3,7 @@ import logging
 import os
 import time
 
+import numpy as np
 import pandas as pd
 
 from .dbengine import DBengine
@@ -25,12 +26,12 @@ class CellStatus(Enum):
     WEAK_LABEL     = 1
     SINGLE_VALUE   = 2
 
-
 class Dataset:
     """
     This class keeps all dataframes and tables for a HC session.
     """
     def __init__(self, name, env):
+        self.env = env
         self.id = name
         self.raw_data = None
         self.repaired_data = None
@@ -58,9 +59,25 @@ class Dataset:
         self.single_attr_stats = {}
         # Domain stats for attribute pairs
         self.pair_attr_stats = {}
+        # Active attributes (attributes with errors)
+        self._active_attributes = None
+        # Attributes to train on
+        self.train_attrs = env["train_attrs"]
+
+        # Embedding model for learned embedding vectors of domain values and
+        # tuple context
+        self._embedding_model = None
+
+        # Numerical attribute list, all strings
+        self.numerical_attrs = None
+        self.categorical_attrs = None
+
+        self.quantized_data = None
+        self.do_quantization = False
 
     # TODO(richardwu): load more than just CSV files
-    def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None):
+    def load_data(self, name, fpath, na_values=None, entity_col=None, src_col=None,
+                  exclude_attr_cols=None, numerical_attrs=None, store_to_db=True):
         """
         load_data takes a CSV file of the initial data, adds tuple IDs (_tid_)
         to each row to uniquely identify an 'entity', and generates unique
@@ -78,16 +95,22 @@ class Dataset:
         :param src_col: (str) if not None, for fusion tasks
             specifies the column containing the source for each "mention" of an
             entity.
+        :param exclude_attr_cols:
+        :param numerical_attrs:
         """
         tic = time.clock()
         try:
             # Do not include TID and source column as trainable attributes
-            exclude_attr_cols = ['_tid_']
+            if exclude_attr_cols is None:
+                exclude_attr_cols = ['_tid_']
+            else:
+                exclude_attr_cols.append('_tid_')
             if src_col is not None:
                 exclude_attr_cols.append(src_col)
 
             # Load raw CSV file/data into a Postgres table 'name' (param).
-            self.raw_data = Table(name, Source.FILE, na_values=na_values, exclude_attr_cols=exclude_attr_cols, fpath=fpath)
+            self.raw_data = Table(name, Source.FILE, na_values=na_values,
+                                  exclude_attr_cols=exclude_attr_cols, fpath=fpath)
 
             df = self.raw_data.df
             # Add _tid_ column to dataset that uniquely identifies an entity.
@@ -100,19 +123,40 @@ class Dataset:
                 # use entity IDs as _tid_'s directly
                 df.rename({entity_col: '_tid_'}, axis='columns', inplace=True)
 
+            self.numerical_attrs = numerical_attrs or []
+            all_attrs = self.raw_data.get_attributes()
+            self.categorical_attrs = [attr for attr in all_attrs if attr not in self.numerical_attrs]
+
+            if store_to_db:
+                # Now df is all in str type, make a copy of df and then
+                # 1. replace the null values in categorical data
+                # 2. make the numerical attrs as float
+                # 3. store the correct type into db (categorical->str, numerical->float)
+                df_correct_type = df.copy()
+                for attr in self.categorical_attrs:
+                    df_correct_type.loc[df_correct_type[attr].isnull(), attr] = NULL_REPR
+                for attr in self.numerical_attrs:
+                    df_correct_type[attr] =  df_correct_type[attr].astype(float)
+
+                df_correct_type.to_sql(self.raw_data.name, self.engine.engine, if_exists='replace', index=False,
+                                       index_label=None)
+
+            # for df, which is all str
             # Use NULL_REPR to represent NULL values
+            df.replace('', NULL_REPR, inplace=True)
             df.fillna(NULL_REPR, inplace=True)
 
-            logging.info("Loaded %d rows with %d cells", self.raw_data.df.shape[0], self.raw_data.df.shape[0] * self.raw_data.df.shape[1])
+            logging.info("Loaded %d rows with %d cells", self.raw_data.df.shape[0],
+                         self.raw_data.df.shape[0] * self.raw_data.df.shape[1])
 
             # Call to store to database
-            self.raw_data.store_to_db(self.engine.engine)
             status = 'DONE Loading {fname}'.format(fname=os.path.basename(fpath))
 
-            # Generate indexes on attribute columns for faster queries
-            for attr in self.raw_data.get_attributes():
-                # Generate index on attribute
-                self.raw_data.create_db_index(self.engine,[attr])
+            if store_to_db:
+                # Generate indexes on attribute columns for faster queries
+                for attr in self.raw_data.get_attributes():
+                    # Generate index on attribute
+                    self.raw_data.create_db_index(self.engine,[attr])
 
             # Create attr_to_idx dictionary (assign unique index for each attribute)
             # and attr_count (total # of attributes)
@@ -178,6 +222,15 @@ class Dataset:
             raise Exception('ERROR No dataset loaded')
         return self.raw_data.df
 
+    def get_quantized_data(self):
+        """
+        get_quantized_data returns a pandas.DataFrame containing the data after quantization
+        :return: the data after quantization in pandas.DataFrame
+        """
+        if self.quantized_data is None:
+            raise Exception('ERROR No dataset quantized')
+        return self.quantized_data.df
+
     def get_attributes(self):
         """
         get_attributes return the trainable/learnable attributes (i.e. exclude meta
@@ -186,6 +239,29 @@ class Dataset:
         if self.raw_data is None:
             raise Exception('ERROR No dataset loaded')
         return self.raw_data.get_attributes()
+
+    def get_active_attributes(self):
+        """
+        get_active_attributes returns the attributes to be modeled.
+
+        If infer_mode = 'dk', these attributes correspond only to attributes that contain at least
+        one potentially erroneous cell. Otherwise all attributes are returned.
+
+        If applicable, in the provided :param:`train_attrs` variable.
+        """
+        if self.train_attrs is None:
+            self.train_attrs = self.get_attributes()
+
+        if self.env['infer_mode'] == 'dk':
+            if self._active_attributes is None:
+                raise Exception('ERROR no active attributes loaded. Run error detection first.')
+            attrs = self._active_attributes
+        elif self.env['infer_mode'] == 'all':
+            attrs = self.get_attributes()
+        else:
+            raise Exception('infer mode must be one of {dk, all}')
+
+        return sorted([attr for attr in attrs if attr in self.train_attrs])
 
     def get_cell_id(self, tuple_id, attr_name):
         """
@@ -257,7 +333,7 @@ class Dataset:
         """
         # need to decode values into unicode strings since we do lookups via
         # unicode strings from Postgres
-        data_df = self.get_raw_data()
+        data_df = self.get_quantized_data() if self.do_quantization else self.get_raw_data()
         return data_df[[attr]].loc[data_df[attr] != NULL_REPR].groupby([attr]).size().to_dict()
 
     def get_stats_pair(self, first_attr, second_attr):
@@ -268,7 +344,7 @@ class Dataset:
             <count>: frequency (# of entities) where first_attr=<first_val> AND second_attr=<second_val>
         Filters out NULL values so no entries in the dictionary would have NULLs.
         """
-        data_df = self.get_raw_data()
+        data_df = self.get_quantized_data() if self.do_quantization else self.get_raw_data()
         tmp_df = data_df[[first_attr, second_attr]]\
             .loc[(data_df[first_attr] != NULL_REPR) & (data_df[second_attr] != NULL_REPR)]\
             .groupby([first_attr, second_attr])\
@@ -318,3 +394,19 @@ class Dataset:
         toc = time.clock()
         total_time = toc - tic
         return status, total_time
+
+    def load_embedding_model(self, model):
+        """
+        Memoize the TupleEmbedding model for retrieving learned embeddings
+        later (e.g. in EmbeddingFeaturizer).
+        """
+        self._embedding_model = model
+
+    def get_embedding_model(self):
+        """
+        Retrieve the memoized embedding model.
+        """
+        if self._embedding_model is None:
+            raise Exception("cannot retrieve embedding model: it was never trained and loaded!")
+        return self._embedding_model
+

@@ -5,7 +5,8 @@ import pandas as pd
 from .detector import Detector
 
 unary_template = Template('SELECT t1._tid_ FROM "$table" as t1 WHERE $cond')
-multi_template = Template('SELECT t1._tid_ FROM "$table" as t1 WHERE $cond1 $c EXISTS (SELECT t2._tid_ FROM "$table" as t2 WHERE $cond2)')
+multi_template = Template('SELECT t1._tid_ FROM "$table" as t1 WHERE $cond1 $c EXISTS ('
+                          'SELECT t2._tid_ FROM "$table" as t2 WHERE $cond2 AND $cond3)')
 
 
 class ViolationDetector(Detector):
@@ -45,10 +46,17 @@ class ViolationDetector(Detector):
         errors = []
         for i in range(len(attrs)):
             res = results[i]
+            if not res:
+                continue
             attr_list = attrs[i]
             tmp_df = self.gen_tid_attr_output(res, attr_list)
             errors.append(tmp_df)
-        errors_df = pd.concat(errors, ignore_index=True).drop_duplicates().reset_index(drop=True)
+
+        errors_df = None
+        if errors:
+            errors_df = pd.concat(errors, ignore_index=True)
+            if errors_df.shape[0]:
+                errors_df = errors_df.drop_duplicates().reset_index(drop=True)
         return errors_df
 
     def to_sql(self, tbl, c):
@@ -80,15 +88,25 @@ class ViolationDetector(Detector):
                 raise Exception("ERROR in violation detector. Cannot ground mult-tuple template.")
         cond1 = " AND ".join(cond1_preds)
         cond2 = " AND ".join(cond2_preds)
-        a = ','.join(c.components)
-        a = []
-        for b in c.components:
-            a.append("'"+b+"'")
-        a = ','.join(a)
+
+        """
+        if a = '_nan_' then it should not violate the DC: A->B
+        """
+        categorical_attrs = [comp for comp in c.components if comp in self.ds.categorical_attrs]
+        cond3_preds = []
+        for t_name in c.tuple_names:
+            for attr in categorical_attrs:
+                cond3_preds.append('{alias}."{attr}"!=\'_nan_\''.format(alias=t_name, attr=attr))
+        cond3 = "TRUE"
+        if cond3_preds:
+            cond3 = " AND ".join(cond3_preds)
+
         if cond1 != '':
-            query = multi_template.substitute(table=tbl, cond1=cond1, c='AND', cond2=cond2)
+            query = multi_template.substitute(table=tbl, cond1=cond1, c='AND',
+                                              cond2=cond2, cond3=cond3)
         else:
-            query = multi_template.substitute(table=tbl, cond1=cond1, c='', cond2=cond2)
+            query = multi_template.substitute(table=tbl, cond1=cond1, c='',
+                                              cond2=cond2, cond3=cond3)
         return query
 
     def gen_tid_attr_output(self, res, attr_list):
@@ -97,5 +115,6 @@ class ViolationDetector(Detector):
             tid = int(tuple[0])
             for attr in attr_list:
                 errors.append({'_tid_': tid, 'attribute': attr})
-        error_df  = pd.DataFrame(data=errors)
+
+        error_df = pd.DataFrame(data=errors)
         return error_df

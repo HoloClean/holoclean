@@ -16,7 +16,7 @@ class Table:
     A wrapper class for Dataset Tables.
     """
     def __init__(self, name, src, na_values=None, exclude_attr_cols=['_tid_'],
-            fpath=None, df=None, schema_name=None, table_query=None, db_engine=None):
+                 fpath=None, df=None, schema_name=None, table_query=None, db_engine=None):
         """
         :param name: (str) name to assign to dataset.
         :param na_values: (str or list[str]) values to interpret as NULL.
@@ -46,16 +46,18 @@ class Table:
             if fpath is None:
                 raise Exception("ERROR while loading table. File path for CSV file name expected. Please provide <fpath> param.")
             # TODO(richardwu): use COPY FROM instead of loading this into memory
-            # TODO(richardwu): No support for numerical values. To be added.
             self.df = pd.read_csv(fpath, dtype=str, na_values=na_values, encoding='utf-8')
+
             # Normalize the dataframe: drop null columns, convert to lowercase strings, and strip whitespaces.
             for attr in self.df.columns.values:
                 if self.df[attr].isnull().all():
                     logging.warning("Dropping the following null column from the dataset: '%s'", attr)
                     self.df.drop(labels=[attr], axis=1, inplace=True)
                     continue
-                if attr not in exclude_attr_cols:
-                    self.df[attr] = self.df[attr].str.strip().str.lower()
+                if attr in exclude_attr_cols:
+                    continue
+
+                self.df[attr] = self.df[attr].str.strip().str.lower()
         elif src == Source.DF:
             if df is None:
                 raise Exception("ERROR while loading table. Dataframe expected. Please provide <df> param.")

@@ -23,21 +23,18 @@ class Logistic(Estimator, torch.nn.Module):
     # This is fine since we take only samples with high predicted probabilities.
     WEIGHT_DECAY = 0
 
-    def __init__(self, env, dataset, domain_df, active_attrs):
+    def __init__(self, env, dataset, domain_df):
         """
         :param dataset: (Dataset) original dataset
         :param domain_df: (DataFrame) currently populated domain dataframe.
             Required columns are: _vid_, _tid_, attribute, domain, domain_size, init_value
-        :param active_attrs: (list[str]) attributes that have random values
         """
         torch.nn.Module.__init__(self)
-        Estimator.__init__(self, env, dataset)
-
-        self.active_attrs = active_attrs
+        Estimator.__init__(self, env, dataset, domain_df)
 
         # Sorted records of the currently populated domain. This helps us
         # align the final predicted probabilities.
-        self.domain_records = domain_df.sort_values('_vid_')[['_vid_', '_tid_', 'attribute', 'domain', 'init_value']].to_records()
+        self.domain_records = self.domain_df[['_vid_', '_tid_', 'attribute', 'domain', 'init_value']].to_records()
 
         # self.dom maps tid --> attr --> list of domain values
         # we need to find the number of domain values we will be generating
@@ -85,7 +82,9 @@ class Logistic(Estimator, torch.nn.Module):
         to use in training. We assign Y as 1 if the value is the initial value.
         """
         sample_idx = 0
-        raw_data_dict = self.ds.raw_data.df.set_index('_tid_').to_dict('index')
+        data_df = self.ds.get_quantized_data() if self.ds.do_quantization \
+            else self.ds.get_raw_data()
+        raw_data_dict = data_df.set_index('_tid_').to_dict('index')
         # Keep track of which indices correspond to a VID so we can re-use
         # self._X in prediction.
         self.vid_to_idxs = {}
@@ -141,7 +140,7 @@ class Logistic(Estimator, torch.nn.Module):
         linear = X.matmul(self._W) + self._B
         return torch.sigmoid(linear)
 
-    def train(self, num_epochs=3, batch_size=32):
+    def train(self, num_epochs=10, batch_size=32):
         """
         Trains the LR model.
 
@@ -167,24 +166,6 @@ class Logistic(Estimator, torch.nn.Module):
             logging.debug('Logistic: average batch loss: %f', sum(batch_losses[-1 * batch_cnt:]) / batch_cnt)
         return batch_losses
 
-    def predict_pp(self, row, attr=None, values=None):
-        """
-        predict_pp generates posterior probabilities for the domain values
-        corresponding to the cell/random variable row['_vid_'].
-
-        That is: :param`attr` and :param`values` are ignored.
-
-        predict_pp_batch is much faster for Logistic since it simply does
-        a one-pass of the batch feature tensor.
-
-        :return: (list[2-tuple]) 2-tuples corresponding to (value, proba)
-        """
-        start_idx, end_idx = self.vid_to_idxs[row['_vid_']]
-        pred_X = self._X[start_idx:end_idx]
-        pred_Y = self.forward(pred_X)
-        values = self.domain_records[row['_vid_']]['domain'].split('|||')
-        return zip(values, map(float, pred_Y))
-
     def predict_pp_batch(self):
         """
         Performs batch prediction.
@@ -193,7 +174,7 @@ class Logistic(Estimator, torch.nn.Module):
         for rec in self.domain_records:
             values = rec['domain'].split('|||')
             start_idx, end_idx = self.vid_to_idxs[rec['_vid_']]
-            yield zip(values, map(float, pred_Y[start_idx:end_idx]))
+            yield rec['_vid_'], True, zip(values, map(float, pred_Y[start_idx:end_idx]))
 
 class Featurizer:
     """
@@ -235,12 +216,12 @@ class CooccurAttrFeaturizer(Featurizer):
             computing it from data_df.
         """
         self.ds = dataset
+        self.active_attrs = self.ds.get_active_attributes()
         self.attrs = self.ds.get_attributes()
-        self.attr_to_idx = {attr: idx for idx, attr in enumerate(self.attrs)}
-        self.n_attrs = len(self.attrs)
+        self.active_attr_to_idx = {attr: idx for idx, attr in enumerate(self.active_attrs)}
 
     def num_features(self):
-        return len(self.attrs) * len(self.attrs)
+        return  len(self.active_attrs) * len(self.attrs)
 
     def setup(self):
         _, self.freq, self.cooccur_freq = self.ds.get_statistics()
@@ -273,6 +254,6 @@ class CooccurAttrFeaturizer(Featurizer):
                     freq = self.freq[other_attr][row[other_attr]]
                     fv = float(cooccur) / float(freq)
 
-                feat_idx = self.attr_to_idx[attr] * self.n_attrs + other_attr_idx
+                feat_idx = self.active_attr_to_idx[attr] * len(self.active_attrs) + other_attr_idx
                 tensor[val_idx, feat_idx] = fv
         return tensor
