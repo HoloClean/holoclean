@@ -14,6 +14,9 @@ _templates
 *.pyc
 .cache/
 
+# venv
+*_venv
+
 # pip package metadata
 *egg-info/
 

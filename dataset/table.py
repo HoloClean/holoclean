@@ -1,5 +1,6 @@
 from enum import Enum
 import logging
+import io
 
 import pandas as pd
 
@@ -74,7 +75,26 @@ class Table:
 
     def store_to_db(self, db_conn, if_exists='replace', index=False, index_label=None):
         # TODO: This version supports single session, single worker.
-        self.df.to_sql(self.name, db_conn, if_exists=if_exists, index=index, index_label=index_label)
+        # self.df.to_sql(self.name, db_conn, if_exists=if_exists, index=index, index_label=index_label)
+        print("started")
+        sep = ","
+        quotechar = "\""
+        
+        # Create Table
+        self.df[:0].to_sql(self.name, db_conn, if_exists=if_exists, index=index, index_label=index_label)
+        
+        # Prepare data
+        output = io.StringIO()
+        self.df.to_csv(output, sep=sep, quotechar=quotechar, header=False, index=index)
+        output.seek(0)
+        
+        # Insert data
+        connection = db_conn.raw_connection()
+        cursor = connection.cursor()
+        cursor.copy_expert("copy {} from stdin (format csv)".format(self.name), output)
+        cursor.connection.commit()
+        cursor.close()
+        connection.close()
 
     def get_attributes(self):
         """
