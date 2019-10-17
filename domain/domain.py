@@ -68,7 +68,7 @@ class DomainEngine:
             else self.ds.get_raw_data()
         self.correlations = compute_norm_cond_entropy_corr(data_df,
                                                            self.ds.get_attributes(),
-                                                           self.ds.get_attributes())
+                                                           self.ds.get_attributes(), self.env['threads'])
         corrs_df = pd.DataFrame.from_dict(self.correlations, orient='columns')
         corrs_df.index.name = 'cond_attr'
         corrs_df.columns.name = 'attr'
