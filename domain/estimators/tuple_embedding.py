@@ -133,28 +133,13 @@ class LookupDataset(Dataset):
         # Quantized data is used for co-occurrence statistics in the last layer
         # for categorical targets.
         self._raw_data = self.ds.get_raw_data().copy()
-        self._qtized_raw_data = self.ds.get_quantized_data() if self.ds.do_quantization else self._raw_data
-        self._qtized_raw_data_dict = self._qtized_raw_data.set_index('_tid_').to_dict('index')
+        # self._qtized_raw_data = self.ds.get_quantized_data() if self.ds.do_quantization else self._raw_data
+        # self._qtized_raw_data_dict = self._qtized_raw_data.set_index('_tid_').to_dict('index')
 
         # Statistics for cooccurrences.
-        _, self._single_stats, self._pair_stats = self.ds.get_statistics()
+        # _, self._single_stats, self._pair_stats = self.ds.get_statistics()
 
-        # Keep track of mean + std to un-normalize during prediction
-        self._num_attrs_mean = {}
-        self._num_attrs_std = {}
-        # Mean-0 variance 1 normalize all numerical attributes in the raw data
-        for num_attr in self._init_num_attrs:
-            temp = self._raw_data[num_attr].copy()
-            fil_notnull = temp != NULL_REPR
-            self._num_attrs_mean[num_attr] = temp[fil_notnull].astype(np.float).mean(axis=0)
-            self._num_attrs_std[num_attr] = temp[fil_notnull].astype(np.float).std(axis=0)
-            temp[fil_notnull] = ((temp[fil_notnull].astype(np.float) \
-                    - self._num_attrs_mean[num_attr]) \
-                    / (self._num_attrs_std[num_attr] or 1.)).astype(str)
-            self._raw_data[num_attr] = temp
-        # This MUST go after the mean-0 variance 1 normalization above since
-        # this is looked up subsequently during training.
-        self._raw_data_dict = self._raw_data.set_index('_tid_').to_dict('index')
+        self.load_raw_data(self.ds.get_raw_data())
 
         # Indexes assigned to attributes: FIRST categorical THEN numerical.
         # (this order is important since we shift the numerical idxs).
@@ -228,23 +213,62 @@ class LookupDataset(Dataset):
         self.n_init_vals = cur_init_idx
         self.n_train_vals = cur_train_idx
 
+        self.load_domain_df(domain_df)
+
+        # Maximum dimension across all numerical attributes.
+        self._max_num_dim = max(list(map(len, self._numerical_attr_groups)) or [0])
+
+        self._init_dummies()
+        self._init_memoize_vecs()
+
+    def load_raw_data(self, df_raw):
+        self._raw_data = df_raw.copy()
+
+        # Keep track of mean + std to un-normalize during prediction
+        self._num_attrs_mean = {}
+        self._num_attrs_std = {}
+        # Mean-0 variance 1 normalize all numerical attributes in the raw data
+        for num_attr in self._init_num_attrs:
+            temp = self._raw_data[num_attr].copy()
+            fil_notnull = temp != NULL_REPR
+            self._num_attrs_mean[num_attr] = temp[fil_notnull].astype(np.float).mean(axis=0)
+            self._num_attrs_std[num_attr] = temp[fil_notnull].astype(np.float).std(axis=0)
+            temp[fil_notnull] = ((temp[fil_notnull].astype(np.float) \
+                    - self._num_attrs_mean[num_attr]) \
+                    / (self._num_attrs_std[num_attr] or 1.)).astype(str)
+            self._raw_data[num_attr] = temp
+        # This MUST go after the mean-0 variance 1 normalization above since
+        # this is looked up subsequently during training.
+        self._raw_data_dict = self._raw_data.set_index('_tid_').to_dict('index')
+
+    def load_domain_df(self, domain_df):
+        """
+        Loads a new domain_df such that __getitem__ and other methods work with
+        the new cells.
+        """
+        if not np.isin(domain_df['attribute'].unique(), self._train_cat_attrs).all():
+            logging.error("not all cat. target attributes of new domain DF has "
+                          "been used to train model before."
+                          "\nDomain target attrs: %s\nTrained target attrs: %s",
+                    sorted(domain_df['attribute'].unique()),
+                    self._train_cat_attrs)
+            raise Exception()
+
         self._vid_to_idx = {vid: idx for idx, vid in enumerate(domain_df['_vid_'].values)}
-        self._train_records = domain_df[['_vid_', '_tid_', 'attribute', 'init_value',
-                                         'init_index',
-                                         'weak_label',
-                                         'weak_label_idx', 'fixed',
-                                         'domain', 'domain_size', 'is_clean']].to_records()
+        # LookupDataset always gets its information on the domain_df from this
+        # list of records.
+        # To modify what stuff the dataset looks up, one needs to modify this
+        # along with the set of VIDs passed to DataLoader.
+        train_record_cols = ['_vid_', '_tid_', 'attribute',
+                                   'weak_label', 'weak_label_idx', 'fixed',
+                                   'domain', 'domain_size', 'is_clean']
+        self._train_records = domain_df[train_record_cols].to_records()
 
         # Maximum domain size: we don't use the domain of numerical attributes
         # so we can discard them.
         self.max_cat_domain = domain_df.loc[domain_df['attribute'].isin(self._train_cat_attrs), 'domain_size'].max()
         if pd.isna(self.max_cat_domain):
             self.max_cat_domain = 0
-        # Maximum dimension across all numerical attributes.
-        self._max_num_dim = max(list(map(len, self._numerical_attr_groups)) or [0])
-
-        self._init_dummies()
-        self._init_memoize_vecs()
 
     def _init_dummies(self):
         # Dummy vectors
@@ -316,32 +340,32 @@ class LookupDataset(Dataset):
 
         return self._domain_idxs[idx]
 
-    def _get_domain_cooccur_probs(self, idx):
-        """
-        Returns co-occurrence probability for every domain value with every
-        initial context value (categorical and numerical (quantized)).
+    # def _get_domain_cooccur_probs(self, idx):
+    #     """
+    #     Returns co-occurrence probability for every domain value with every
+    #     initial context value (categorical and numerical (quantized)).
 
-        Returns (max_cat_domain, # of init attrs) tensor.
-        """
-        cur = self._train_records[idx]
+    #     Returns (max_cat_domain, # of init attrs) tensor.
+    #     """
+    #     cur = self._train_records[idx]
 
-        cooccur_probs = torch.zeros(self.max_cat_domain,
-                self._n_init_attrs,
-                dtype=torch.float)
+    #     cooccur_probs = torch.zeros(self.max_cat_domain,
+    #             self._n_init_attrs,
+    #             dtype=torch.float)
 
-        # Compute co-occurrence statistics.
-        for attr_idx, attr in enumerate(self._all_attrs):
-            ctx_val = self._qtized_raw_data_dict[cur['_tid_']][attr]
-            if attr == cur['attribute'] or ctx_val == NULL_REPR or \
-                    ctx_val not in self._pair_stats[attr][cur['attribute']]:
-                continue
+    #     # Compute co-occurrence statistics.
+    #     for attr_idx, attr in enumerate(self._all_attrs):
+    #         ctx_val = self._qtized_raw_data_dict[cur['_tid_']][attr]
+    #         if attr == cur['attribute'] or ctx_val == NULL_REPR or \
+    #                 ctx_val not in self._pair_stats[attr][cur['attribute']]:
+    #             continue
 
-            denom = self._single_stats[attr][ctx_val]
-            for dom_idx, dom_val in enumerate(cur['domain']):
-                numer = self._pair_stats[attr][cur['attribute']][ctx_val].get(dom_val, 0.)
-                cooccur_probs[dom_idx,attr_idx] = numer / denom
+    #         denom = self._single_stats[attr][ctx_val]
+    #         for dom_idx, dom_val in enumerate(cur['domain']):
+    #             numer = self._pair_stats[attr][cur['attribute']][ctx_val].get(dom_val, 0.)
+    #             cooccur_probs[dom_idx,attr_idx] = numer / denom
 
-        return cooccur_probs
+    #     return cooccur_probs
 
     def _get_target_numvals(self, idx):
         if not self.memoize or idx not in self._target_numvals:
@@ -704,34 +728,8 @@ class TupleEmbedding(Estimator, torch.nn.Module):
                     max(list(map(len, numerical_attr_groups)) or [0]),
                     self._embed_size)
             raise Exception()
-        # Remove domain for numerical attributes.
-        fil_numattr = self.domain_df['attribute'].isin(self._numerical_attrs)
 
-        # Memoize max domain size for numerical attribue for padding later.
-        self.max_domain = int(self.domain_df['domain_size'].max())
-        self.domain_df.loc[fil_numattr, 'domain'] = ''
-        self.domain_df.loc[fil_numattr, 'domain_size'] = 0
-        # Remove categorical domain/training cells without a domain
-        filter_empty_domain = (self.domain_df['domain_size'] == 0) & ~fil_numattr
-        if filter_empty_domain.sum():
-            logging.warning('%s: removing %d categorical cells with empty domains',
-                type(self).__name__,
-                filter_empty_domain.sum())
-            self.domain_df = self.domain_df[~filter_empty_domain]
-        # Pre-split domain.
-        self.domain_df['domain'] = self.domain_df['domain'].str.split('\|\|\|')
-
-        # Add DK information to domain dataframe
-        if self.ds.aux_table[AuxTables.dk_cells] is not None:
-            df_dk = self.ds.aux_table[AuxTables.dk_cells].df
-            self.domain_df = self.domain_df.merge(df_dk,
-                    on=['_tid_', 'attribute'], how='left', suffixes=('', '_dk'))
-            self.domain_df['is_clean'] = self.domain_df['_cid__dk'].isnull()
-        else:
-            self.domain_df['is_clean'] = True
-
-            self.domain_df = self.domain_df[self.domain_df['attribute'].isin(train_attrs)]
-        self.domain_recs = self.domain_df.to_records()
+        self.load_domain_df(self.domain_df, load_into_ds=False)
 
         # Dataset
         self._dataset = LookupDataset(env, dataset, self.domain_df,
@@ -894,6 +892,53 @@ class TupleEmbedding(Estimator, torch.nn.Module):
             self._validate_df = self._validate_df[['_vid_', 'attribute', 'init_value', '_value_', 'is_clean']]
             self._validate_epoch = validate_epoch or 1
             self._do_validation = True
+
+    def load_raw_data(self, df_raw):
+        self._dataset.load_raw_data(df_raw)
+
+    def load_domain_df(self, domain_df, load_into_ds=True):
+        """
+        load_domain_df loads a new domain DataFrame to use to output predictions.
+
+        Note an exception will be thrown if there are out-of-vocab words.
+
+        load_into_ds will also load the domain_df into the underlying LookupDataset.
+        One may want this to be false during initialization.
+        """
+        self.domain_df = domain_df
+        # Remove domain for numerical attributes.
+        fil_numattr = self.domain_df['attribute'].isin(self._numerical_attrs)
+
+        # Memoize max domain size for numerical attribue for padding later.
+        self.max_domain = int(self.domain_df['domain_size'].max())
+        self.domain_df.loc[fil_numattr, 'domain'] = ''
+        self.domain_df.loc[fil_numattr, 'domain_size'] = 0
+        # Remove categorical domain/training cells without a domain
+        filter_empty_domain = (self.domain_df['domain_size'] == 0) & ~fil_numattr
+        if filter_empty_domain.sum():
+            logging.warning('%s: removing %d categorical cells with empty domains',
+                type(self).__name__,
+                filter_empty_domain.sum())
+            self.domain_df = self.domain_df[~filter_empty_domain]
+        # Pre-split domain.
+        self.domain_df['domain'] = self.domain_df['domain'].str.split('\|\|\|')
+
+        # Add DK information to domain dataframe
+        if self.ds.aux_table[AuxTables.dk_cells] is not None:
+            df_dk = self.ds.aux_table[AuxTables.dk_cells].df
+            self.domain_df = self.domain_df.merge(df_dk,
+                    on=['_tid_', 'attribute'], how='left', suffixes=('', '_dk'))
+            self.domain_df['is_clean'] = self.domain_df['_cid__dk'].isnull()
+        else:
+            self.domain_df['is_clean'] = True
+            self.domain_df.loc[self.domain_df['weak_label'] == NULL_REPR, 'is_clean'] = False
+        self.domain_df = self.domain_df[self.domain_df['attribute'].isin(self.env['train_attrs'])]
+
+        self.domain_recs = self.domain_df.to_records()
+        if load_into_ds:
+            self._dataset.load_domain_df(domain_df)
+        import pdb; pdb.set_trace()
+
 
     def _get_combined_init_vec(self, init_cat_idxs, init_numvals, init_nummasks, attr_idxs):
         """
@@ -1341,6 +1386,7 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         probabilities for categorical attributes.
         """
         preds = self.predict_pp_batch()
+        import pdb; pdb.set_trace()
 
         logging.debug('%s: constructing and dumping predictions...',
                       type(self).__name__)
