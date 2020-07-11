@@ -4,7 +4,7 @@ import math
 from tqdm import tqdm
 
 from ..estimator import Estimator
-from utils import NULL_REPR
+from ...utils import NULL_REPR
 
 
 class NaiveBayes(Estimator):

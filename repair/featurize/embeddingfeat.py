@@ -9,8 +9,8 @@ from torch.nn import Softmax
 from torch.nn import functional as F
 
 from .featurizer import Featurizer
-from dataset import AuxTables
-from domain.estimators import TupleEmbedding
+from ...dataset import AuxTables
+from ...domain.estimators import TupleEmbedding
 
 
 class EmbeddingFeaturizer(Featurizer):

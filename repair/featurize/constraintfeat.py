@@ -5,8 +5,8 @@ import torch
 import torch.nn.functional as F
 
 from .featurizer import Featurizer
-from dataset import AuxTables
-from dcparser.constraint import is_symmetric
+from ...dataset import AuxTables
+from ...dcparser.constraint import is_symmetric
 
 # unary_template is used for constraints where the current predicate
 # used for detecting violations in pos_values have a reference to only

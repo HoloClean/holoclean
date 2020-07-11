@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 from sklearn.cluster import KMeans
-from utils import NULL_REPR
+from ..utils import NULL_REPR
 
 
 def quantize_km(env, df_raw, num_attr_groups_bins):

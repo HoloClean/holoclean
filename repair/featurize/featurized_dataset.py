@@ -7,8 +7,8 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 
-from dataset import AuxTables, CellStatus
-from utils import NULL_REPR
+from ...dataset import AuxTables, CellStatus
+from ...utils import NULL_REPR
 
 FeatInfo = namedtuple('FeatInfo', ['name', 'size', 'learnable', 'init_weight', 'feature_names'])
 
