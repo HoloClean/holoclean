@@ -5,7 +5,7 @@ import pandas as pd
 
 from .featurize import FeaturizedDataset
 from .learn import RepairModel
-from dataset import AuxTables
+from ..dataset import AuxTables
 
 
 class RepairEngine:
@@ -25,7 +25,9 @@ class RepairEngine:
         tic = time.clock()
         feat_info = self.feat_dataset.featurizer_info
         output_dim = self.feat_dataset.classes
-        self.repair_model = RepairModel(self.env, feat_info, output_dim, bias=self.env['bias'])
+        self.repair_model = RepairModel(self.env, feat_info, output_dim,
+                                        bias=self.env['bias'],
+                                        layer_sizes=self.env['layer_sizes'])
         toc = time.clock()
         status = "DONE setting up repair model."
         setup_time = toc - tic
@@ -35,7 +37,31 @@ class RepairEngine:
         tic = time.clock()
         X_train, Y_train, mask_train = self.feat_dataset.get_training_data()
         logging.info('training with %d training examples (cells)', X_train.shape[0])
-        self.repair_model.fit_model(X_train, Y_train, mask_train)
+        self.repair_model.fit_model(X_train, Y_train, mask_train, self.env['epochs'])
+        toc = time.clock()
+        status = "DONE training repair model."
+        train_time = toc - tic
+        return status, train_time
+
+    def fit_validate_repair_model(self, eval_engine, validate_period):
+        tic = time.clock()
+        X_train, Y_train, mask_train = self.feat_dataset.get_training_data()
+        logging.info('training with %d training examples (cells)', X_train.shape[0])
+
+        # Training loop
+        for epoch_idx in range(1, self.env['epochs']+1):
+            logging.info("Repair and validate epoch %d of %d", epoch_idx, self.env['epochs'])
+            self.repair_model.fit_model(X_train, Y_train, mask_train, 1)
+
+            if epoch_idx % validate_period == 0:
+                logging.info("Running validation")
+                self.infer_repairs()
+                report, _, _ = eval_engine.eval_report()
+                logging.info(report)
+                logging.info("Feature weights:")
+                weights, _ = self.get_featurizer_weights()
+                logging.info(weights)
+
         toc = time.clock()
         status = "DONE training repair model."
         train_time = toc - tic

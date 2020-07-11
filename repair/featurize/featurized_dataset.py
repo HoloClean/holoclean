@@ -7,8 +7,8 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 
-from dataset import AuxTables, CellStatus
-from utils import NULL_REPR
+from ...dataset import AuxTables, CellStatus
+from ...utils import NULL_REPR
 
 FeatInfo = namedtuple('FeatInfo', ['name', 'size', 'learnable', 'init_weight', 'feature_names'])
 
@@ -18,9 +18,8 @@ class FeaturizedDataset:
         self.ds = dataset
         self.env = env
         self.total_vars, self.classes = self.ds.get_domain_info()
-        self.processes = self.env['threads']
         for f in featurizers:
-            f.setup_featurizer(self.ds, self.processes, self.env['batch_size'])
+            f.setup_featurizer(self.env, self.ds)
         logging.debug('featurizing training data...')
         tensors = [f.create_tensor() for f in featurizers]
         self.featurizer_info = [FeatInfo(featurizer.name,
@@ -28,11 +27,12 @@ class FeaturizedDataset:
                                          featurizer.learnable,
                                          featurizer.init_weight,
                                          featurizer.feature_names())
-                                for tensor, featurizer in zip(tensors, featurizers)]
-        tensor = torch.cat(tensors, 2)
+                                for tensor, featurizer in zip(tensors, featurizers)
+                                if tensor is not None]
+        tensor = torch.cat([tens for tens in tensors if tens is not None], 2)
         self.tensor = tensor
 
-        logging.debug('DONE featurization.')
+        logging.debug('DONE featurization. Feature tensor size: %s', self.tensor.shape)
 
         if self.env['debug_mode']:
             weights_df = pd.DataFrame(self.tensor.reshape(-1, self.tensor.shape[-1]).numpy())
@@ -74,12 +74,12 @@ class FeaturizedDataset:
         FROM {cell_domain} AS t1 LEFT JOIN {dk_cells} AS t2 ON t1._cid_ = t2._cid_
         WHERE weak_label != '{null_repr}' AND (t2._cid_ is NULL OR t1.fixed != {cell_status});
         """.format(cell_domain=AuxTables.cell_domain.name,
-                dk_cells=AuxTables.dk_cells.name,
-                null_repr=NULL_REPR,
-                cell_status=CellStatus.NOT_SET.value)
+                   dk_cells=AuxTables.dk_cells.name,
+                   null_repr=NULL_REPR,
+                   cell_status=CellStatus.NOT_SET.value)
         res = self.ds.engine.execute_query(query)
         if len(res) == 0:
-            raise Exception("No weak labels available. Reduce pruning threshold.")
+            logging.warning("No weak labels available. Reduce pruning threshold.")
         labels = -1 * torch.ones(self.total_vars, 1).type(torch.LongTensor)
         is_clean = torch.zeros(self.total_vars, 1).type(torch.LongTensor)
         for tuple in tqdm(res):
@@ -140,8 +140,11 @@ class FeaturizedDataset:
         """
         Retrieves the samples to be inferred i.e. DK cells.
         """
-        # only infer on those that are DK cells
-        infer_idx = (self.is_clean == 0).nonzero()[:, 0]
+        if self.env['infer_mode'] == 'dk':
+            infer_idx = (self.is_clean == 0).nonzero()[:, 0]
+        elif self.env['infer_mode'] == 'all':
+            infer_idx = torch.arange(0, self.tensor.size(0))
+
         X_infer = self.tensor.index_select(0, infer_idx)
         mask_infer = self.var_class_mask.index_select(0, infer_idx)
         return X_infer, mask_infer, infer_idx
