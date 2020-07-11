@@ -114,6 +114,10 @@ class ConstraintFeaturizer(Featurizer):
         """
         attr = predicate.components[rel_idx][1]
         op = predicate.operation
+        # the latter one should flip the operation,
+        # if t3.rv_val is always on the left side in query template
+        if rel_idx == 1:
+            op = get_flip_operation(op)
         const = '{}."{}"'.format(
                 predicate.components[1-rel_idx][0],
                 predicate.components[1-rel_idx][1])
