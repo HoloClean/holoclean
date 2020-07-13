@@ -7,14 +7,14 @@ import torch
 import numpy as np
 import pandas as pd
 
-from .dataset import Dataset, Table, Source, AuxTables
-from .dcparser import Parser
-from .domain import DomainEngine
-from .detect import DetectEngine
-from .repair import RepairEngine
-from .evaluate import EvalEngine
-from .dataset.quantization import quantize_km
-from .utils import NULL_REPR
+from holoclean.dataset import Dataset, Table, Source, AuxTables
+from holoclean.dcparser import Parser
+from holoclean.domain import DomainEngine
+from holoclean.detect import DetectEngine
+from holoclean.repair import RepairEngine
+from holoclean.evaluate import EvalEngine
+from holoclean.dataset.quantization import quantize_km
+from holoclean.utils import NULL_REPR
 
 
 logging.basicConfig(format="%(asctime)s - [%(levelname)5s] - %(message)s", datefmt='%H:%M:%S')
