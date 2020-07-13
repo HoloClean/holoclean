@@ -30,6 +30,7 @@ setup(
     description=("A data imputation lib based on deep learning."),
     version=version_string,
     package_dir={"holoclean": "."},
+    packages=["holoclean"] + ["holoclean." + package for package in find_packages(where=".")],
     include_package_data=True,
     python_requires="~=3.6",
     author="Apache Software Foundation",
