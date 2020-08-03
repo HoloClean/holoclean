@@ -59,7 +59,7 @@ class DenialConstraint:
         # Find all tuple names used in DC
         logging.debug('DONE pre-processing constraint: %s', dc_string)
         for component in split:
-            if contains_operation(component):
+            if contains_operation(component) is not None:
                 break
             else:
                 self.tuple_names.append(component)
