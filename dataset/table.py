@@ -1,6 +1,7 @@
 from enum import Enum
 import logging
 
+from tqdm import tqdm
 import pandas as pd
 
 
@@ -52,6 +53,7 @@ class Table:
         # Copy the list to memoize
         self.exclude_attr_cols = list(exclude_attr_cols)
         self.df = pd.DataFrame()
+        self.df_raw = pd.DataFrame()  # data before normalized - not lower all string
 
         if src == Source.FILE:
             if fpath is None:
@@ -60,6 +62,9 @@ class Table:
                 )
             # TODO(richardwu): use COPY FROM instead of loading this into memory
             self.df = pd.read_csv(
+                fpath, dtype=str, na_values=na_values, encoding="utf-8"
+            )
+            self.df_raw = pd.read_csv(
                 fpath, dtype=str, na_values=na_values, encoding="utf-8"
             )
 
@@ -96,9 +101,42 @@ class Table:
             db_engine.create_db_table_from_query(self.name, table_query)
             self.df = pd.read_sql_table(name, db_engine.conn)
 
-    def store_to_db(self, db_conn, if_exists="replace", index=False, index_label=None):
+    def _revert_normalized_value(self, df_raw: pd.DataFrame) -> pd.DataFrame:
+        if df_raw.empty:
+            return self.df
+
+        self._df_reverted = pd.DataFrame()
+
+        logging.info("Reverting normalized values")
+        r_size, _ = self.df.shape
+
+        for attr in tqdm(self.df.columns.values):
+            if attr in self.exclude_attr_cols:
+                self._df_reverted[attr] = self.df[attr]
+            else:
+                for indx in range(r_size):
+                    raw_value = df_raw[attr].iloc[indx]
+                    repair_value = self.df[attr].iloc[indx]
+                    if (
+                        str(raw_value).strip().lower()
+                        == str(repair_value).strip().lower()
+                    ):
+                        self._df_reverted.at[indx, attr] = raw_value
+                    else:
+                        self._df_reverted.at[indx, attr] = repair_value
+
+        return self._df_reverted
+
+    def store_to_db(
+        self,
+        db_conn,
+        df_raw: pd.DataFrame = pd.DataFrame(),
+        if_exists="replace",
+        index=False,
+        index_label=None,
+    ):
         # TODO: This version supports single session, single worker.
-        self.df.to_sql(
+        self._revert_normalized_value(df_raw).to_sql(
             self.name,
             db_conn,
             if_exists=if_exists,

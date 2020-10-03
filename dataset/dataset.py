@@ -450,7 +450,7 @@ class Dataset:
         repaired_df = pd.DataFrame.from_records(init_records)
         name = self.raw_data.name + "_repaired"
         self.repaired_data = Table(name, Source.DF, df=repaired_df)
-        self.repaired_data.store_to_db(self.engine.engine)
+        self.repaired_data.store_to_db(self.engine.engine, self.raw_data.df_raw)
         status = "DONE generating repaired dataset"
         toc = time.clock()
         total_time = toc - tic
