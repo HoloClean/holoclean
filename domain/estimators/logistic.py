@@ -8,7 +8,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 
 from ..estimator import Estimator
-from utils import NULL_REPR, NA_COOCCUR_FV
+from ...utils import NULL_REPR, NA_COOCCUR_FV
 
 
 class Logistic(Estimator, torch.nn.Module):

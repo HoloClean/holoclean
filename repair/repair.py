@@ -5,7 +5,7 @@ import pandas as pd
 
 from .featurize import FeaturizedDataset
 from .learn import RepairModel
-from dataset import AuxTables
+from ..dataset import AuxTables
 
 
 class RepairEngine:

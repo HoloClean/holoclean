@@ -3,7 +3,7 @@ import time
 
 import pandas as pd
 
-from dataset import AuxTables
+from ..dataset import AuxTables
 
 
 class DetectEngine:

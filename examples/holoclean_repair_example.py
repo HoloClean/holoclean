@@ -1,10 +1,13 @@
 import holoclean
-from detect import *
-from repair.featurize import *
+from holoclean.detect import *
+from holoclean.repair.featurize import *
 
 # 1. Setup a HoloClean session.
 hc = holoclean.HoloClean(
-    db_name='holo',
+    db_name='superset',
+    db_pwd='superset',
+    db_host='localhost',
+    db_user='superset',
     domain_thresh_1=0.0,
     domain_thresh_2=0.0,
     weak_label_thresh=0.99,

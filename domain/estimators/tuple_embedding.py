@@ -14,9 +14,9 @@ from torch.nn import CrossEntropyLoss, Softmax, MSELoss, ReLU
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from dataset import AuxTables
+from ...dataset import AuxTables
 from ..estimator import Estimator
-from utils import NULL_REPR
+from ...utils import NULL_REPR
 
 NONNUMERICS = "[^0-9+-.e]"
 
