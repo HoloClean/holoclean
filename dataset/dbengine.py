@@ -17,16 +17,11 @@ class DBengine:
     A wrapper class for postgresql engine.
     Maintains connections and executes queries.
     """
-    def __init__(self, user, pwd, db, host='localhost', port=5432, pool_size=20, timeout=60000):
+    def __init__(self, sqlalchemy_uri, pool_size=20, timeout=60000):
         self.timeout = timeout
         self._pool = Pool(pool_size) if pool_size > 1 else None
-        url = 'postgresql+psycopg2://{}:{}@{}:{}/{}?client_encoding=utf8'
-        url = url.format(user, pwd, host, port, db)
-        self.conn = url
-        con = 'dbname={} user={} password={} host={} port={}'
-        con = con.format(db, user, pwd, host, port)
-        self.conn_args = con
-        self.engine = sql.create_engine(url, client_encoding='utf8', pool_size=pool_size)
+        self.conn = sqlalchemy_uri
+        self.engine = sql.create_engine(self.conn, client_encoding='utf8', pool_size=pool_size)
 
     def execute_queries(self, queries):
         """
@@ -36,7 +31,7 @@ class DBengine:
         """
         logging.debug('Preparing to execute %d queries.', len(queries))
         tic = time.clock()
-        results = self._apply_func(partial(_execute_query, conn_args=self.conn_args), [(idx, q) for idx, q in enumerate(queries)])
+        results = self._apply_func(partial(_execute_query, conn_args=self.conn), [(idx, q) for idx, q in enumerate(queries)])
         toc = time.clock()
         logging.debug('Time to execute %d queries: %.2f secs', len(queries), toc-tic)
         return results
@@ -50,7 +45,7 @@ class DBengine:
         logging.debug('Preparing to execute %d queries.', len(queries))
         tic = time.clock()
         results = self._apply_func(
-            partial(_execute_query_w_backup, conn_args=self.conn_args, timeout=self.timeout),
+            partial(_execute_query_w_backup, conn_args=self.conn, timeout=self.timeout),
             [(idx, q) for idx, q in enumerate(queries)])
         toc = time.clock()
         logging.debug('Time to execute %d queries: %.2f secs', len(queries), toc-tic)
@@ -114,7 +109,8 @@ def _execute_query(args, conn_args):
     query = args[1]
     logging.debug("Starting to execute query %s with id %s", query, query_id)
     tic = time.clock()
-    con = psycopg2.connect(conn_args)
+    engine = sql.create_engine(conn_args)
+    con = engine.raw_connection()
     cur = con.cursor()
     cur.execute(query)
     res = cur.fetchall()
@@ -130,7 +126,8 @@ def _execute_query_w_backup(args, conn_args, timeout):
     query_backup = args[1][1]
     logging.debug("Starting to execute query %s with id %s", query, query_id)
     tic = time.clock()
-    con = psycopg2.connect(conn_args)
+    engine = sql.create_engine(conn_args)
+    con = engine.raw_connection()
     cur = con.cursor()
     cur.execute("SET statement_timeout to %d;"%timeout)
     try:
@@ -145,12 +142,10 @@ def _execute_query_w_backup(args, conn_args, timeout):
             return []
 
         logging.debug("Starting to execute backup query %s with id %s", query_backup, query_id)
-        con.close()
-        con = psycopg2.connect(conn_args)
         cur = con.cursor()
         cur.execute(query_backup)
         res = cur.fetchall()
-        con.close()
-    toc = time.clock()
-    logging.debug('Time to execute query with id %d: %.2f secs', query_id, toc - tic)
+        toc = time.clock()
+        logging.debug('Time to execute query with id %d: %.2f secs', query_id, toc - tic)
+    con.close()
     return res

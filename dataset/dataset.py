@@ -43,10 +43,9 @@ class Dataset:
             self.aux_table[tab] = None
         # start dbengine
         self.engine = DBengine(
-            env["db_user"],
-            env["db_pwd"],
-            env["db_name"],
-            env["db_host"],
+            env["sqlalchemy_uri"],
+            pool_size=env['threads'],
+            timeout=env['timeout']
             pool_size=env["threads"],
             timeout=env["timeout"],
         )
