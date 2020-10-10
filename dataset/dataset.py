@@ -46,8 +46,6 @@ class Dataset:
             env["sqlalchemy_uri"],
             pool_size=env['threads'],
             timeout=env['timeout']
-            pool_size=env["threads"],
-            timeout=env["timeout"],
         )
         # members to convert (tuple_id, attribute) to cell_id
         self.attr_to_idx = {}
