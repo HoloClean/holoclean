@@ -31,6 +31,9 @@ class DetectEngine:
             logging.debug("DONE with Error Detector: %s in %.2f secs", detector.name, toc-tic)
             errors.append(error_df)
 
+        if len(errors) == 0:
+            return False
+
         # Get unique errors only that might have been detected from multiple detectors.
         self.errors_df = pd.concat(errors, ignore_index=True).drop_duplicates().reset_index(drop=True)
         if self.errors_df.shape[0]:
@@ -42,7 +45,7 @@ class DetectEngine:
         status = "DONE with error detection."
         toc_total = time.clock()
         detect_time = toc_total - tic_total
-        return status, detect_time
+        return True
 
     def store_detected_errors(self, errors_df):
         if errors_df.empty:
