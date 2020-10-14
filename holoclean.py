@@ -320,9 +320,7 @@ class Session:
         return self.dc_parser.get_dcs()
 
     def detect_errors(self, detect_list):
-        status, detect_time = self.detect_engine.detect_errors(detect_list)
-        logging.info(status)
-        logging.debug('Time to detect errors: %.2f secs', detect_time)
+        return self.detect_engine.detect_errors(detect_list)
 
     def disable_quantize(self):
         self.do_quantization = False

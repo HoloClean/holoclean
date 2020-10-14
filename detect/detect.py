@@ -31,7 +31,7 @@ class DetectEngine:
             logging.debug("DONE with Error Detector: %s in %.2f secs", detector.name, toc-tic)
             errors.append(error_df)
 
-        if len(errors) == 0:
+        if len(errors) == 0 or all([df is None for df in errors]):
             return False
 
         # Get unique errors only that might have been detected from multiple detectors.
