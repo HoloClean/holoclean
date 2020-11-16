@@ -74,6 +74,10 @@ class Dataset:
         self.quantized_data = None
         self.do_quantization = False
 
+    @property
+    def columns(self):
+        return [c for c in self.raw_data.df.columns if not c.startswith("_") and not c.endswith("_")]
+
     # TODO(richardwu): load more than just CSV files
     def load_data(
         self,

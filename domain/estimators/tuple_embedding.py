@@ -932,12 +932,12 @@ class TupleEmbedding(Estimator, torch.nn.Module):
         else:
             self.domain_df['is_clean'] = True
             self.domain_df.loc[self.domain_df['weak_label'] == NULL_REPR, 'is_clean'] = False
+
         self.domain_df = self.domain_df[self.domain_df['attribute'].isin(self.env['train_attrs'])]
 
         self.domain_recs = self.domain_df.to_records()
         if load_into_ds:
             self._dataset.load_domain_df(domain_df)
-        import pdb; pdb.set_trace()
 
 
     def _get_combined_init_vec(self, init_cat_idxs, init_numvals, init_nummasks, attr_idxs):

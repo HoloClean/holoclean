@@ -303,6 +303,7 @@ class Session:
                                               src_col=src_col,
                                               exclude_attr_cols=exclude_attr_cols,
                                               numerical_attrs=numerical_attrs)
+        self.env["train_attrs"] = self.env["train_attrs"] or self.ds.columns
         logging.info(status)
         logging.debug('Time to load dataset: %.2f secs', load_time)
 
