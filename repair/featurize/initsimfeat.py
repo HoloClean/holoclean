@@ -3,7 +3,7 @@ from functools import partial
 import torch
 import Levenshtein
 
-from dataset import AuxTables
+from ...dataset import AuxTables
 from .featurizer import Featurizer
 
 

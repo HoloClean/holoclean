@@ -1,6 +1,6 @@
 import torch
 
-from dataset import AuxTables
+from ...dataset import AuxTables
 from .featurizer import Featurizer
 
 

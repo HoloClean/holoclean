@@ -8,10 +8,10 @@ import itertools
 import numpy as np
 from tqdm import tqdm
 
-from dataset import AuxTables, CellStatus
+from ..dataset import AuxTables, CellStatus
 from .estimators import *
 from .correlations import compute_norm_cond_entropy_corr
-from utils import NULL_REPR
+from ..utils import NULL_REPR
 
 
 class DomainEngine:

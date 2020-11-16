@@ -1,6 +1,6 @@
 from pyitlib import discrete_random_variable as drv
 
-from utils import NULL_REPR
+from ..utils import NULL_REPR
 
 def compute_norm_cond_entropy_corr(data_df, attrs_from, attrs_to):
     """

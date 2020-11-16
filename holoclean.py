@@ -7,14 +7,14 @@ import torch
 import numpy as np
 import pandas as pd
 
-from dataset import Dataset, Table, Source, AuxTables
-from dcparser import Parser
-from domain import DomainEngine
-from detect import DetectEngine
-from repair import RepairEngine
-from evaluate import EvalEngine
-from dataset.quantization import quantize_km
-from utils import NULL_REPR
+from .dataset import Dataset, Table, Source, AuxTables
+from .dcparser import Parser
+from .domain import DomainEngine
+from .detect import DetectEngine
+from .repair import RepairEngine
+from .evaluate import EvalEngine
+from .dataset.quantization import quantize_km
+from .utils import NULL_REPR
 
 
 logging.basicConfig(format="%(asctime)s - [%(levelname)5s] - %(message)s", datefmt='%H:%M:%S')
@@ -26,30 +26,6 @@ gensim_logger.setLevel(logging.WARNING)
 
 # Arguments for HoloClean
 arguments = [
-    (('-u', '--db_user'),
-        {'metavar': 'DB_USER',
-         'dest': 'db_user',
-         'default': 'holocleanuser',
-         'type': str,
-         'help': 'User for DB used to persist state.'}),
-    (('-p', '--db-pwd', '--pass'),
-        {'metavar': 'DB_PWD',
-         'dest': 'db_pwd',
-         'default': 'abcd1234',
-         'type': str,
-         'help': 'Password for DB used to persist state.'}),
-    (('-h', '--db-host'),
-        {'metavar': 'DB_HOST',
-         'dest': 'db_host',
-         'default': 'localhost',
-         'type': str,
-         'help': 'Host for DB used to persist state.'}),
-    (('-d', '--db_name'),
-        {'metavar': 'DB_NAME',
-         'dest': 'db_name',
-         'default': 'holo',
-         'type': str,
-         'help': 'Name of DB used to persist state.'}),
     (('-t', '--threads'),
      {'metavar': 'THREADS',
       'dest': 'threads',
@@ -327,6 +303,7 @@ class Session:
                                               src_col=src_col,
                                               exclude_attr_cols=exclude_attr_cols,
                                               numerical_attrs=numerical_attrs)
+        self.env["train_attrs"] = self.env["train_attrs"] or self.ds.columns
         logging.info(status)
         logging.debug('Time to load dataset: %.2f secs', load_time)
 
@@ -344,9 +321,7 @@ class Session:
         return self.dc_parser.get_dcs()
 
     def detect_errors(self, detect_list):
-        status, detect_time = self.detect_engine.detect_errors(detect_list)
-        logging.info(status)
-        logging.debug('Time to detect errors: %.2f secs', detect_time)
+        return self.detect_engine.detect_errors(detect_list)
 
     def disable_quantize(self):
         self.do_quantization = False
