@@ -110,10 +110,8 @@ def _execute_query(args, conn_args):
     logging.debug("Starting to execute query %s with id %s", query, query_id)
     tic = time.clock()
     engine = sql.create_engine(conn_args)
-    con = engine.raw_connection()
-    cur = con.cursor()
-    cur.execute(query)
-    res = cur.fetchall()
+    with engine.connect() as conn:
+        res = conn.execute(query)
     con.close()
     toc = time.clock()
     logging.debug('Time to execute query with id %d: %.2f secs', query_id, (toc - tic))
@@ -127,25 +125,19 @@ def _execute_query_w_backup(args, conn_args, timeout):
     logging.debug("Starting to execute query %s with id %s", query, query_id)
     tic = time.clock()
     engine = sql.create_engine(conn_args)
-    con = engine.raw_connection()
-    cur = con.cursor()
-    cur.execute("SET statement_timeout to %d;"%timeout)
-    try:
-        cur.execute(query)
-        res = cur.fetchall()
-    except psycopg2.extensions.QueryCanceledError as e:
-        logging.debug("Failed to execute query %s with id %s. Timeout reached.", query, query_id)
+    with engine.connect() as conn:
+        try:
+            res = conn.execute("SET statement_timeout to %d;"%timeout)
+        except psycopg2.extensions.QueryCanceledError as e:
+            logging.debug("Failed to execute query %s with id %s. Timeout reached.", query, query_id)
 
-        # No backup query, simply return empty result
-        if not query_backup:
-            logging.warn("no backup query to execute, returning empty query results")
-            return []
+            # No backup query, simply return empty result
+            if not query_backup:
+                logging.warn("no backup query to execute, returning empty query results")
+                return []
 
-        logging.debug("Starting to execute backup query %s with id %s", query_backup, query_id)
-        cur = con.cursor()
-        cur.execute(query_backup)
-        res = cur.fetchall()
-        toc = time.clock()
-        logging.debug('Time to execute query with id %d: %.2f secs', query_id, toc - tic)
-    con.close()
+            logging.debug("Starting to execute backup query %s with id %s", query_backup, query_id)
+            res = conn.execute(query_backup)
+            toc = time.clock()
+            logging.debug('Time to execute query with id %d: %.2f secs', query_id, toc - tic)
     return res
