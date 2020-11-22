@@ -112,7 +112,6 @@ def _execute_query(args, conn_args):
     engine = sql.create_engine(conn_args)
     with engine.connect() as conn:
         res = conn.execute(query)
-    con.close()
     toc = time.clock()
     logging.debug('Time to execute query with id %d: %.2f secs', query_id, (toc - tic))
     return res
