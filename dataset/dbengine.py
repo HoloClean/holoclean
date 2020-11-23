@@ -111,7 +111,7 @@ def _execute_query(args, conn_args):
     tic = time.clock()
     engine = sql.create_engine(conn_args)
     with engine.connect() as conn:
-        res = conn.execute(query)
+        res = conn.execute(query).fetchall()
     toc = time.clock()
     logging.debug('Time to execute query with id %d: %.2f secs', query_id, (toc - tic))
     return res
@@ -125,8 +125,9 @@ def _execute_query_w_backup(args, conn_args, timeout):
     tic = time.clock()
     engine = sql.create_engine(conn_args)
     with engine.connect() as conn:
+        conn.execute("SET statement_timeout to %d;" % timeout)
         try:
-            res = conn.execute("SET statement_timeout to %d;"%timeout)
+            res = conn.execute(query).fetchall()
         except psycopg2.extensions.QueryCanceledError as e:
             logging.debug("Failed to execute query %s with id %s. Timeout reached.", query, query_id)
 
@@ -136,7 +137,7 @@ def _execute_query_w_backup(args, conn_args, timeout):
                 return []
 
             logging.debug("Starting to execute backup query %s with id %s", query_backup, query_id)
-            res = conn.execute(query_backup)
+            res = conn.execute(query_backup).fetchall()
             toc = time.clock()
             logging.debug('Time to execute query with id %d: %.2f secs', query_id, toc - tic)
     return res
