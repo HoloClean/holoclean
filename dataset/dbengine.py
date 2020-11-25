@@ -21,7 +21,10 @@ class DBengine:
         self.timeout = timeout
         self._pool = Pool(pool_size) if pool_size > 1 else None
         self.conn = sqlalchemy_uri
-        self.engine = sql.create_engine(self.conn, client_encoding='utf8', pool_size=pool_size)
+        try:
+            self.engine = sql.create_engine(self.conn, client_encoding='utf8', pool_size=pool_size)
+        except TypeError:
+            self.engine = sql.create_engine(self.conn)
 
     def execute_queries(self, queries):
         """
