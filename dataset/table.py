@@ -25,7 +25,6 @@ class Table:
         exclude_attr_cols=["_tid_"],
         fpath=None,
         df=None,
-        schema_name=None,
         table_query=None,
         db_engine=None,
     ):
@@ -92,14 +91,16 @@ class Table:
                 raise Exception(
                     "ERROR while loading table. DB connection expected. Please provide <db_engine>."
                 )
-            self.df = pd.read_sql_table(name, db_engine.conn, schema=schema_name)
+            with db_engine.engine.connect() as conn:
+                self.df = pd.read_sql_table(name, con=conn, schema=db_engine.dbschema)
         elif src == Source.SQL:
             if table_query is None or db_engine is None:
                 raise Exception(
                     "ERROR while loading table. SQL Query and DB connection expected. Please provide <table_query> and <db_engine>."
                 )
             db_engine.create_db_table_from_query(self.name, table_query)
-            self.df = pd.read_sql_table(name, db_engine.conn)
+            with db_engine.engine.connect() as conn:
+                self.df = pd.read_sql_table(name, con=conn, schema=db_engine.dbschema)
 
     def _revert_normalized_value(self, df_raw: pd.DataFrame) -> pd.DataFrame:
         if df_raw.empty:
@@ -134,6 +135,7 @@ class Table:
         if_exists="replace",
         index=False,
         index_label=None,
+        schema=None,
     ):
         # TODO: This version supports single session, single worker.
         self._revert_normalized_value(df_raw).to_sql(
@@ -142,6 +144,7 @@ class Table:
             if_exists=if_exists,
             index=index,
             index_label=index_label,
+            schema=schema,
         )
 
     def get_attributes(self):

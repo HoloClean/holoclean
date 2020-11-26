@@ -222,7 +222,7 @@ class Dataset:
         try:
             self.aux_table[aux_table] = Table(aux_table.name, Source.DF, df=df)
             if store:
-                self.aux_table[aux_table].store_to_db(self.engine.engine)
+                self.aux_table[aux_table].store_to_db(self.engine.engine, schema=self.engine.dbschema)
             if index_attrs:
                 self.aux_table[aux_table].create_df_index(index_attrs)
             if store and index_attrs:
@@ -451,7 +451,7 @@ class Dataset:
         repaired_df = pd.DataFrame.from_records(init_records)
         name = self.raw_data.name + "_repaired"
         self.repaired_data = Table(name, Source.DF, df=repaired_df)
-        self.repaired_data.store_to_db(self.engine.engine, self.raw_data.df_raw)
+        self.repaired_data.store_to_db(self.engine.engine, self.raw_data.df_raw, schema=self.engine.dbschema)
         status = "DONE generating repaired dataset"
         toc = time.clock()
         total_time = toc - tic

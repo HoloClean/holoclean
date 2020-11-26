@@ -3,14 +3,15 @@ import logging
 from multiprocessing import Pool
 from string import Template
 import time
+import hashlib
 
 import psycopg2
 import sqlalchemy as sql
+from sqlalchemy.schema import CreateSchema, DropSchema
 
 index_template = Template('CREATE INDEX $idx_title ON "$table" ($attrs)')
 drop_table_template = Template('DROP TABLE IF EXISTS "$table"')
 create_table_template = Template('CREATE TABLE "$table" AS ($stmt)')
-
 
 class DBengine:
     """
@@ -21,10 +22,21 @@ class DBengine:
         self.timeout = timeout
         self._pool = Pool(pool_size) if pool_size > 1 else None
         self.conn = sqlalchemy_uri
+        self.dbschema = self.generate_hash()
         try:
-            self.engine = sql.create_engine(self.conn, client_encoding='utf8', pool_size=pool_size)
+            self.engine = sql.create_engine(self.conn, client_encoding='utf8', pool_size=pool_size,
+                                            connect_args={'options': '-csearch_path={}'.format(self.dbschema)})
         except TypeError:
-            self.engine = sql.create_engine(self.conn)
+            self.engine = sql.create_engine(self.conn, connect_args={'options': '-csearch_path={}'.format(self.dbschema)})
+        finally:
+            logging.debug(f'Creating schema: {self.dbschema}')
+            self.engine.execute(CreateSchema(self.dbschema))
+
+    @staticmethod
+    def generate_hash():
+        h = hashlib.sha1()
+        h.update(str(time.time()).encode('utf-8'))
+        return h.hexdigest()[:10]
 
     def execute_queries(self, queries):
         """
@@ -105,6 +117,10 @@ class DBengine:
         if self._pool is None:
             return list(map(func, collection))
         return self._pool.map(func, collection)
+
+    def clean_up(self):
+        logging.debug(f'Dropping schema: {self.dbschema}')
+        self.engine.execute(DropSchema(self.dbschema, cascade=True))
 
 
 def _execute_query(args, conn_args):

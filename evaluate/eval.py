@@ -85,7 +85,7 @@ class EvalEngine:
                     raw_data.loc[cat_cells, '_value_'].astype(str).str.strip().str.lower()
 
             self.clean_data = Table(name, Source.DF, df=raw_data)
-            self.clean_data.store_to_db(self.ds.engine.engine)
+            self.clean_data.store_to_db(self.ds.engine.engine, schema=self.ds.engine.dbschema)
             self.clean_data.create_db_index(self.ds.engine, ['_tid_'])
             self.clean_data.create_db_index(self.ds.engine, ['_attribute_'])
             status = 'DONE Loading {fname}'.format(fname=os.path.basename(fpath))
