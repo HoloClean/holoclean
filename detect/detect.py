@@ -17,7 +17,7 @@ class DetectEngine:
         :param detectors: (list) of ErrorDetector objects
         """
         errors = []
-        tic_total = time.clock()
+        tic_total = time.time()
 
         # Initialize all error detectors.
         for detector in detectors:
@@ -25,9 +25,9 @@ class DetectEngine:
 
         # Run detection using each detector.
         for detector in detectors:
-            tic = time.clock()
+            tic = time.time()
             error_df = detector.detect_noisy_cells()
-            toc = time.clock()
+            toc = time.time()
             logging.debug("DONE with Error Detector: %s in %.2f secs", detector.name, toc-tic)
             errors.append(error_df)
 
@@ -39,7 +39,7 @@ class DetectEngine:
         # Store errors to db.
         self.store_detected_errors(errors_df)
         status = "DONE with error detection."
-        toc_total = time.clock()
+        toc_total = time.time()
         detect_time = toc_total - tic_total
         return status, detect_time
 

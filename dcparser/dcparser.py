@@ -26,10 +26,10 @@ class Parser:
         
         :param fpath: filepath to TXT file containing denial constraints
         """
-        tic = time.clock()
+        tic = time.time()
         if not self.ds.raw_data:
             status = 'No dataset specified'
-            toc = time.clock()
+            toc = time.time()
             return status, toc - tic
         attrs = self.ds.raw_data.get_attributes()
         try:
@@ -47,7 +47,7 @@ class Parser:
         except Exception:
             logging.error('FAILED to load constraints from file %s', os.path.basename(fpath))
             raise
-        toc = time.clock()
+        toc = time.time()
         return status, toc - tic
 
     def get_dcs(self):

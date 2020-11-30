@@ -79,7 +79,7 @@ class Dataset:
             specifies the column containing the source for each "mention" of an
             entity.
         """
-        tic = time.clock()
+        tic = time.time()
         try:
             # Do not include TID and source column as trainable attributes
             exclude_attr_cols = ['_tid_']
@@ -121,7 +121,7 @@ class Dataset:
         except Exception:
             logging.error('loading data for table %s', name)
             raise
-        toc = time.clock()
+        toc = time.time()
         load_time = toc - tic
         return status, load_time
 
@@ -218,9 +218,9 @@ class Dataset:
         """
         if not self.stats_ready:
             logging.debug('computing frequency and co-occurrence statistics from raw data...')
-            tic = time.clock()
+            tic = time.time()
             self.collect_stats()
-            logging.debug('DONE computing statistics in %.2fs', time.clock() - tic)
+            logging.debug('DONE computing statistics in %.2fs', time.time() - tic)
 
         stats = (self.total_tuples, self.single_attr_stats, self.pair_attr_stats)
         self.stats_ready = True
@@ -287,7 +287,7 @@ class Dataset:
         return total_vars, classes
 
     def get_inferred_values(self):
-        tic = time.clock()
+        tic = time.time()
         # index into domain with inferred_val_idx + 1 since SQL arrays begin at index 1.
         query = "SELECT t1._tid_, t1.attribute, domain[inferred_val_idx + 1] as rv_value " \
                 "FROM " \
@@ -298,12 +298,12 @@ class Dataset:
         self.generate_aux_table_sql(AuxTables.inf_values_dom, query, index_attrs=['_tid_'])
         self.aux_table[AuxTables.inf_values_dom].create_db_index(self.engine, ['attribute'])
         status = "DONE collecting the inferred values."
-        toc = time.clock()
+        toc = time.time()
         total_time = toc - tic
         return status, total_time
 
     def get_repaired_dataset(self):
-        tic = time.clock()
+        tic = time.time()
         init_records = self.raw_data.df.sort_values(['_tid_']).to_records(index=False)
         t = self.aux_table[AuxTables.inf_values_dom]
         repaired_vals = dictify_df(t.df.reset_index())
@@ -315,6 +315,6 @@ class Dataset:
         self.repaired_data = Table(name, Source.DF, df=repaired_df)
         self.repaired_data.store_to_db(self.engine.engine)
         status = "DONE generating repaired dataset"
-        toc = time.clock()
+        toc = time.time()
         total_time = toc - tic
         return status, total_time
