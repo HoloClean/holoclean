@@ -71,7 +71,7 @@ class Logistic(Estimator, torch.nn.Module):
         used for training and prediction.
         """
         logging.debug('Logistic: featurizing training data...')
-        tic = time.clock()
+        tic = time.time()
         # Each row corresponds to a possible value for a given attribute
         # and given TID
         self._X = torch.zeros(self.n_samples, self.num_features)
@@ -120,7 +120,7 @@ class Logistic(Estimator, torch.nn.Module):
         # Convert this to a vector of indices rather than a vector mask.
         self._train_idx = (self._train_idx == 1).nonzero()[:,0]
 
-        logging.debug('Logistic: DONE featurization in %.2fs', time.clock() - tic)
+        logging.debug('Logistic: DONE featurization in %.2fs', time.time() - tic)
 
     def _gen_feat_tensor(self, init_row, attr, domain_vals):
         """

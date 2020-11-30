@@ -48,7 +48,7 @@ class EvalEngine:
         self.ds = dataset
 
     def load_data(self, name, fpath, tid_col, attr_col, val_col, na_values=None):
-        tic = time.clock()
+        tic = time.time()
         try:
             raw_data = pd.read_csv(fpath, na_values=na_values, encoding='utf-8')
             # We drop any ground truth values that are NULLs since we follow
@@ -73,7 +73,7 @@ class EvalEngine:
         except Exception:
             logging.error('load_data for table %s', name)
             raise
-        toc = time.clock()
+        toc = time.time()
         load_time = toc - tic
         return status, load_time
 
@@ -98,7 +98,7 @@ class EvalEngine:
         """
         Returns an EvalReport named tuple containing the experiment results.
         """
-        tic = time.clock()
+        tic = time.time()
         try:
             prec, rec, rep_recall, f1, rep_f1 = self.evaluate_repairs()
             report = "Precision = %.2f, Recall = %.2f, Repairing Recall = %.2f, F1 = %.2f, Repairing F1 = %.2f, Detected Errors = %d, Total Errors = %d, Correct Repairs = %d, Total Repairs = %d, Total Repairs on correct cells (Grdth present) = %d, Total Repairs on incorrect cells (Grdth present) = %d" % (
@@ -112,7 +112,7 @@ class EvalEngine:
             logging.error("ERROR generating evaluation report %s" % e)
             raise
 
-        toc = time.clock()
+        toc = time.time()
         report_time = toc - tic
         return report, report_time, eval_report
 
@@ -315,7 +315,7 @@ class EvalEngine:
         logging.debug("weak label statistics:")
         pd.set_option('display.max_columns', None)
         pd.set_option('display.max_rows', len(df_stats))
-        pd.set_option('display.max_colwidth', -1)
+        pd.set_option('display.max_colwidth', None)
         logging.debug("%s", df_stats)
         pd.reset_option('display.max_columns')
         pd.reset_option('display.max_rows')
